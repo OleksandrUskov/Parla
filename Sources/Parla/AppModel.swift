@@ -97,19 +97,34 @@ final class AppModel {
         downloadingModel = nil
     }
 
-    /// Модели в понятном порядке (turbo → … → tiny) для менеджера.
-    var curatedModels: [String] {
-        func rank(_ m: String) -> Int {
-            if m.contains("large-v3-v20240930") { return 0 }   // turbo
-            if m.contains("large-v3") { return 1 }
-            if m.contains("large-v2") { return 2 }
-            if m.contains("medium") { return 3 }
-            if m.contains("small") { return 4 }
-            if m.contains("base") { return 5 }
-            if m.contains("tiny") { return 6 }
-            return 7
+    /// Чистый список из 5 уровней (по одному варианту на уровень), без квантованных клонов.
+    var modelTiers: [ModelTier] {
+        func pick(_ cands: [String]) -> String? {
+            cands.first(where: { availableModels.contains($0) })
+                ?? cands.first(where: { c in availableModels.contains(where: { $0.hasPrefix(c) }) })
         }
-        return availableModels.sorted { (rank($0), $0) < (rank($1), $1) }
+        var tiers: [ModelTier] = []
+        func add(_ title: String, _ hint: String, _ cands: [String], rec: Bool = false) {
+            if let n = pick(cands) {
+                tiers.append(ModelTier(title: title, hint: hint, name: n, recommended: rec))
+            }
+        }
+        add("Tiny", "≈75 МБ · очень быстро, черновик", ["openai_whisper-tiny"])
+        add("Base", "≈150 МБ · быстро, базовое качество", ["openai_whisper-base"])
+        add("Small", "≈500 МБ · хороший баланс", ["openai_whisper-small"])
+        add("Large v3 turbo", "≈630 МБ · быстро + почти максимум. Топ для ru/uk",
+            ["openai_whisper-large-v3-v20240930_626MB",
+             "openai_whisper-large-v3-v20240930",
+             "openai_whisper-large-v3-v20240930_turbo_632MB",
+             "openai_whisper-large-v3-v20240930_turbo"], rec: true)
+        add("Large v3", "≈1 ГБ · максимум точности, медленнее",
+            ["openai_whisper-large-v3", "openai_whisper-large-v3_947MB"])
+        // если текущая выбранная не попала ни в один уровень — покажем её отдельной строкой
+        if !tiers.contains(where: { $0.name == selectedModel }) {
+            tiers.append(ModelTier(title: friendlyModel(selectedModel), hint: "текущая выбранная",
+                                   name: selectedModel, recommended: false))
+        }
+        return tiers
     }
 
     private func progressHandler() -> @Sendable (ModelLoad) -> Void {

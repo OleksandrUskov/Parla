@@ -50,7 +50,7 @@ struct ModelButton: View {
         Button { show.toggle() } label: {
             HStack(spacing: 6) {
                 Image(systemName: "cpu").font(.caption)
-                Text(prettyModel(model.selectedModel)).font(.caption.weight(.medium)).lineLimit(1)
+                Text(friendlyModel(model.selectedModel)).font(.caption.weight(.medium)).lineLimit(1)
                 if !model.isDownloaded(model.selectedModel) {
                     Image(systemName: "arrow.down.circle.fill").font(.caption).foregroundStyle(Brand.accent)
                 }
@@ -74,18 +74,15 @@ struct ModelManagerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Модели распознавания").font(.system(.headline, design: .rounded))
-            Text("Все работают офлайн. Скачиваются один раз и хранятся на диске. Кликни по строке — выбрать, «Скачать» — загрузить заранее.")
+            Text("Все офлайн, качаются один раз. Клик по строке — выбрать, «Скачать» — загрузить заранее.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider()
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(model.curatedModels, id: \.self) { name in
-                        ModelRow(name: name)
-                    }
+            VStack(spacing: 6) {
+                ForEach(model.modelTiers) { tier in
+                    ModelRow(tier: tier)
                 }
             }
-            .frame(maxHeight: 360)
         }
         .padding(16)
         .frame(width: 430)
@@ -94,12 +91,11 @@ struct ModelManagerView: View {
 
 struct ModelRow: View {
     @Environment(AppModel.self) private var model
-    let name: String
+    let tier: ModelTier
 
-    private var isSelected: Bool { model.selectedModel == name }
-    private var isDownloaded: Bool { model.isDownloaded(name) }
-    private var isDownloading: Bool { model.downloadingModel == name }
-    private var isRecommended: Bool { name.contains("large-v3-v20240930") }
+    private var isSelected: Bool { model.selectedModel == tier.name }
+    private var isDownloaded: Bool { model.isDownloaded(tier.name) }
+    private var isDownloading: Bool { model.downloadingModel == tier.name }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -107,14 +103,14 @@ struct ModelRow: View {
                 .foregroundStyle(isSelected ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.tertiary))
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
-                    Text(prettyModel(name))
+                    Text(tier.title)
                         .font(.callout.weight(isSelected ? .semibold : .regular))
                         .lineLimit(1)
-                    if isRecommended {
+                    if tier.recommended {
                         Text("рекомендую").font(.caption2.weight(.bold)).foregroundStyle(Brand.accent)
                     }
                 }
-                Text(hint).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Text(tier.hint).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
             trailing
@@ -125,7 +121,7 @@ struct ModelRow: View {
             in: RoundedRectangle(cornerRadius: 10)
         )
         .contentShape(Rectangle())
-        .onTapGesture { model.selectedModel = name }
+        .onTapGesture { model.selectedModel = tier.name }
     }
 
     @ViewBuilder private var trailing: some View {
@@ -136,11 +132,10 @@ struct ModelRow: View {
             }
         } else if isDownloaded {
             Label("Скачано", systemImage: "checkmark.circle.fill")
-                .labelStyle(.titleAndIcon)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.green)
         } else {
-            Button { Task { await model.downloadModel(name) } } label: {
+            Button { Task { await model.downloadModel(tier.name) } } label: {
                 Label("Скачать", systemImage: "arrow.down.circle")
             }
             .buttonStyle(.bordered)
@@ -148,16 +143,6 @@ struct ModelRow: View {
             .tint(Brand.accent)
             .disabled(model.downloadingModel != nil)
         }
-    }
-
-    private var hint: String {
-        if name.contains("large-v3-v20240930") { return "≈630 МБ · быстро, топ для ru/uk" }
-        if name.contains("large-v3") || name.contains("large-v2") { return "≈1.5 ГБ · максимум точности, медленнее" }
-        if name.contains("medium") { return "≈1.5 ГБ · точно, помедленнее" }
-        if name.contains("small") { return "≈480 МБ · хороший баланс" }
-        if name.contains("base") { return "≈140 МБ · быстро, базово" }
-        if name.contains("tiny") { return "≈75 МБ · очень быстро, черновик" }
-        return ""
     }
 }
 
@@ -284,6 +269,6 @@ struct TranscriptCard: View {
 
     private var meta: String {
         let lang = item.language.isEmpty ? "?" : item.language.uppercased()
-        return "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(prettyModel(item.model)) · \(Int(item.durationSec))s"
+        return "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(friendlyModel(item.model)) · \(Int(item.durationSec))s"
     }
 }

@@ -42,6 +42,28 @@ func prettyModel(_ raw: String) -> String {
     return first.uppercased() + s.dropFirst()
 }
 
+/// Короткое дружелюбное имя варианта для чипа/метаданных.
+func friendlyModel(_ raw: String) -> String {
+    if raw.contains("large-v3-v20240930") { return "Large v3 turbo" }
+    if raw.contains("distil") && raw.contains("large-v3") { return "Distil Large v3" }
+    if raw.contains("large-v3") { return "Large v3" }
+    if raw.contains("large-v2") { return "Large v2" }
+    if raw.contains("medium") { return "Medium" }
+    if raw.contains("small") { return "Small" }
+    if raw.contains("base") { return "Base" }
+    if raw.contains("tiny") { return "Tiny" }
+    return prettyModel(raw)
+}
+
+/// Один «уровень» модели в менеджере (резолвится в реальный вариант).
+struct ModelTier: Identifiable {
+    let title: String
+    let hint: String
+    let name: String
+    let recommended: Bool
+    var id: String { name }
+}
+
 enum EnginePhase: Equatable {
     case idle
     case preparing(String)
