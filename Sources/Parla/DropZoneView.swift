@@ -47,7 +47,7 @@ struct DropZoneView: View {
         }
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.audio, .movie, .data],
+            allowedContentTypes: [.audio, .movie, .folder, .data],
             allowsMultipleSelection: true
         ) { result in
             if case .success(let urls) = result { model.handleDrop(urls: urls) }

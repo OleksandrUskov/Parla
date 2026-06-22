@@ -10,6 +10,8 @@ final class AppModel {
     var selection: TranscriptItem.ID?
     var availableModels: [String] = []
     var lastCopiedID: TranscriptItem.ID?
+    var downloadingModel: String?       // какая модель качается прямо сейчас (в менеджере)
+    var downloadProgress: Double = 0
 
     // Настройки (зеркалятся в UserDefaults).
     var selectedModel: String { didSet { UserDefaults.standard.set(selectedModel, forKey: Keys.model) } }
@@ -79,16 +81,35 @@ final class AppModel {
         HistoryStore.save(history)
     }
 
-    /// Предзагрузка выбранной модели по кнопке (без транскрибации).
-    func downloadSelectedModel() async {
-        guard !isBusy else { return }
-        phase = .loadingModel
+    /// Скачать конкретную модель заранее (без транскрибации, не трогая загруженную).
+    /// Идёт напрямую через WhisperKit.download — НЕ блокирует движок, можно качать в фоне.
+    func downloadModel(_ name: String) async {
+        guard downloadingModel == nil, !TranscriptionEngine.isDownloaded(name) else { return }
+        downloadingModel = name
+        downloadProgress = 0
         do {
-            try await engine.ensureLoaded(model: selectedModel, progress: progressHandler())
-            phase = .idle
+            _ = try await WhisperKit.download(variant: name, progressCallback: { [weak self] p in
+                Task { @MainActor in self?.downloadProgress = p.fractionCompleted }
+            })
         } catch {
-            phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            phase = .failed("Не удалось скачать модель: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
         }
+        downloadingModel = nil
+    }
+
+    /// Модели в понятном порядке (turbo → … → tiny) для менеджера.
+    var curatedModels: [String] {
+        func rank(_ m: String) -> Int {
+            if m.contains("large-v3-v20240930") { return 0 }   // turbo
+            if m.contains("large-v3") { return 1 }
+            if m.contains("large-v2") { return 2 }
+            if m.contains("medium") { return 3 }
+            if m.contains("small") { return 4 }
+            if m.contains("base") { return 5 }
+            if m.contains("tiny") { return 6 }
+            return 7
+        }
+        return availableModels.sorted { (rank($0), $0) < (rank($1), $1) }
     }
 
     private func progressHandler() -> @Sendable (ModelLoad) -> Void {

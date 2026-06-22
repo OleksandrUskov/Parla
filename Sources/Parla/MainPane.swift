@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct MainPane: View {
     @Environment(AppModel.self) private var model
@@ -31,9 +30,7 @@ struct BrandHeader: View {
                 .font(.system(.largeTitle, design: .rounded).weight(.bold))
                 .foregroundStyle(Brand.gradient)
             Spacer()
-            OpenFilesButton()
-            ModelChip()
-            InfoButton()
+            ModelButton()
             SettingsLink {
                 Image(systemName: "gearshape.fill").font(.title3).foregroundStyle(.secondary)
             }
@@ -42,133 +39,129 @@ struct BrandHeader: View {
     }
 }
 
-/// Прямой выбор файлов/папки — альтернатива перетаскиванию.
-struct OpenFilesButton: View {
+// MARK: - Менеджер моделей
+
+/// Чип текущей модели → открывает менеджер моделей (выбор + скачивание).
+struct ModelButton: View {
     @Environment(AppModel.self) private var model
-    @State private var showImporter = false
+    @State private var show = false
 
     var body: some View {
-        Button { showImporter = true } label: {
-            Label("Открыть", systemImage: "folder.badge.plus")
-                .font(.callout.weight(.medium))
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(
-                    model.isBusy ? AnyShapeStyle(Color.gray.opacity(0.3)) : AnyShapeStyle(Brand.gradient),
-                    in: Capsule()
-                )
-                .foregroundStyle(.white)
-        }
-        .buttonStyle(.plain)
-        .disabled(model.isBusy)
-        .help("Открыть файлы или целую папку с голосовыми")
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.audio, .movie, .folder, .data],
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result { model.handleDrop(urls: urls) }
-        }
-    }
-}
-
-struct ModelChip: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        Menu {
-            Picker("Модель", selection: Binding(get: { model.selectedModel }, set: { model.selectedModel = $0 })) {
-                ForEach(model.availableModels, id: \.self) { name in
-                    Text(prettyModel(name) + (model.isDownloaded(name) ? "  ✓" : "")).tag(name)
-                }
-            }
-        } label: {
+        Button { show.toggle() } label: {
             HStack(spacing: 6) {
                 Image(systemName: "cpu").font(.caption)
                 Text(prettyModel(model.selectedModel)).font(.caption.weight(.medium)).lineLimit(1)
+                if !model.isDownloaded(model.selectedModel) {
+                    Image(systemName: "arrow.down.circle.fill").font(.caption).foregroundStyle(Brand.accent)
+                }
+                Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12).padding(.vertical, 7)
             .background(.ultraThinMaterial, in: Capsule())
             .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-}
-
-/// Кнопка-справка (i): краткое описание моделей + статус скачивания.
-struct InfoButton: View {
-    @State private var show = false
-
-    var body: some View {
-        Button { show.toggle() } label: {
-            Image(systemName: "info.circle").font(.title3).foregroundStyle(.secondary)
-        }
         .buttonStyle(.plain)
-        .help("Какую модель выбрать")
+        .help("Выбрать и скачать модель")
         .popover(isPresented: $show, arrowEdge: .bottom) {
-            ModelGuideView()
+            ModelManagerView()
         }
     }
 }
 
-struct ModelGuideView: View {
+struct ModelManagerView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Модели распознавания").font(.system(.headline, design: .rounded))
-            Text("Все работают офлайн. Скачиваются один раз, потом хранятся на диске. ✓ — уже скачано.")
+            Text("Все работают офлайн. Скачиваются один раз и хранятся на диске. Кликни по строке — выбрать, «Скачать» — загрузить заранее.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider()
-            row("Tiny", "≈75 МБ", "Очень быстро, черновое качество — для теста.", best: false)
-            row("Base", "≈140 МБ", "Быстро, базовое качество.", best: false)
-            row("Small", "≈480 МБ", "Хороший баланс скорость / точность.", best: false)
-            row("Large v3", "≈1.5 ГБ", "Максимум точности, но медленнее.", best: false)
-            row("Large v3 turbo", "≈630 МБ", "Почти как Large v3, но в разы быстрее. Лучший выбор для русского / украинского.", best: true)
-            Divider()
-            HStack(spacing: 8) {
-                if model.isDownloaded(model.selectedModel) {
-                    Label("Текущая модель скачана", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Spacer()
-                } else {
-                    Label("Текущая не скачана", systemImage: "arrow.down.circle")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Скачать сейчас") { Task { await model.downloadSelectedModel() } }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Brand.accent)
-                        .disabled(model.isBusy)
+            ScrollView {
+                VStack(spacing: 6) {
+                    ForEach(model.curatedModels, id: \.self) { name in
+                        ModelRow(name: name)
+                    }
                 }
             }
-            .font(.callout)
+            .frame(maxHeight: 360)
         }
         .padding(16)
-        .frame(width: 380)
+        .frame(width: 430)
     }
+}
 
-    private func row(_ name: String, _ size: String, _ desc: String, best: Bool) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: best ? "star.fill" : "circle.fill")
-                .font(best ? .caption : .system(size: 5))
-                .foregroundStyle(best ? AnyShapeStyle(Brand.gradient) : AnyShapeStyle(.tertiary))
-                .frame(width: 14)
-                .padding(.top, best ? 2 : 6)
+struct ModelRow: View {
+    @Environment(AppModel.self) private var model
+    let name: String
+
+    private var isSelected: Bool { model.selectedModel == name }
+    private var isDownloaded: Bool { model.isDownloaded(name) }
+    private var isDownloading: Bool { model.downloadingModel == name }
+    private var isRecommended: Bool { name.contains("large-v3-v20240930") }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                .foregroundStyle(isSelected ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.tertiary))
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
-                    Text(name).font(.callout.weight(best ? .semibold : .regular))
-                    Text(size).font(.caption2).foregroundStyle(.secondary)
-                    if best {
+                    Text(prettyModel(name))
+                        .font(.callout.weight(isSelected ? .semibold : .regular))
+                        .lineLimit(1)
+                    if isRecommended {
                         Text("рекомендую").font(.caption2.weight(.bold)).foregroundStyle(Brand.accent)
                     }
                 }
-                Text(desc).font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(hint).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
+            Spacer(minLength: 8)
+            trailing
+        }
+        .padding(8)
+        .background(
+            isSelected ? AnyShapeStyle(Brand.gradient.opacity(0.18)) : AnyShapeStyle(Color.white.opacity(0.04)),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { model.selectedModel = name }
+    }
+
+    @ViewBuilder private var trailing: some View {
+        if isDownloading {
+            HStack(spacing: 6) {
+                ProgressView(value: model.downloadProgress).frame(width: 64)
+                Text("\(Int(model.downloadProgress * 100))%").font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+            }
+        } else if isDownloaded {
+            Label("Скачано", systemImage: "checkmark.circle.fill")
+                .labelStyle(.titleAndIcon)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.green)
+        } else {
+            Button { Task { await model.downloadModel(name) } } label: {
+                Label("Скачать", systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(Brand.accent)
+            .disabled(model.downloadingModel != nil)
         }
     }
+
+    private var hint: String {
+        if name.contains("large-v3-v20240930") { return "≈630 МБ · быстро, топ для ru/uk" }
+        if name.contains("large-v3") || name.contains("large-v2") { return "≈1.5 ГБ · максимум точности, медленнее" }
+        if name.contains("medium") { return "≈1.5 ГБ · точно, помедленнее" }
+        if name.contains("small") { return "≈480 МБ · хороший баланс" }
+        if name.contains("base") { return "≈140 МБ · быстро, базово" }
+        if name.contains("tiny") { return "≈75 МБ · очень быстро, черновик" }
+        return ""
+    }
 }
+
+// MARK: - Статус / прогресс
 
 struct StatusBar: View {
     @Environment(AppModel.self) private var model
@@ -231,7 +224,7 @@ struct EmptyState: View {
                 .opacity(0.85)
             Text("Готов к работе")
                 .font(.system(.title3, design: .rounded).weight(.semibold))
-            Text("Перетащи голосовое из Telegram или нажми «Открыть» — получишь текст за пару секунд")
+            Text("Перетащи голосовое из Telegram (или «выбери файл») — получишь текст за пару секунд")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
