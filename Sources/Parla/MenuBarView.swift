@@ -8,8 +8,8 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Image(systemName: "waveform")
-                Text("Murmur").fontWeight(.semibold)
+                Image(systemName: "waveform").foregroundStyle(Brand.gradient)
+                Text(Brand.name).font(.system(.headline, design: .rounded)).foregroundStyle(Brand.gradient)
                 Spacer()
                 if model.isBusy { ProgressView().controlSize(.small) }
             }
@@ -17,13 +17,9 @@ struct MenuBarView: View {
             Divider()
 
             if model.history.isEmpty {
-                Text("Пока нет расшифровок")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Пока нет расшифровок").font(.caption).foregroundStyle(.secondary)
             } else {
-                Text("Недавние (клик — скопировать)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Недавние (клик — скопировать)").font(.caption).foregroundStyle(.secondary)
                 ForEach(model.history.prefix(6)) { item in
                     Button { model.copyItem(item) } label: {
                         VStack(alignment: .leading, spacing: 1) {

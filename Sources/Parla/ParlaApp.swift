@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct MurmurApp: App {
+struct ParlaApp: App {
     @State private var model = AppModel()
 
     var body: some Scene {
@@ -9,10 +9,11 @@ struct MurmurApp: App {
             ContentView()
                 .environment(model)
                 .task { await model.refreshModels() }
+                .preferredColorScheme(.dark)
         }
-        .defaultSize(width: 940, height: 620)
+        .defaultSize(width: 980, height: 660)
 
-        MenuBarExtra("Murmur", systemImage: model.isBusy ? "waveform.circle.fill" : "waveform") {
+        MenuBarExtra("Parla", systemImage: model.isBusy ? "waveform.circle.fill" : "waveform") {
             MenuBarView().environment(model)
         }
         .menuBarExtraStyle(.window)
@@ -20,7 +21,8 @@ struct MurmurApp: App {
         Settings {
             SettingsView()
                 .environment(model)
-                .frame(width: 480)
+                .frame(width: 500)
+                .preferredColorScheme(.dark)
         }
     }
 }

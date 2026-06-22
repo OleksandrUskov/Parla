@@ -50,12 +50,12 @@ enum EnginePhase: Equatable {
     case failed(String)
 }
 
-/// Хранилище истории в ~/Library/Application Support/Murmur/history.json
+/// Хранилище истории в ~/Library/Application Support/Parla/history.json
 enum HistoryStore {
     static let fileURL: URL = {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Murmur", isDirectory: true)
+            .appendingPathComponent("Parla", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("history.json")
     }()

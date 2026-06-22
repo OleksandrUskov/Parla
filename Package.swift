@@ -2,30 +2,28 @@
 import PackageDescription
 
 let package = Package(
-    name: "Murmur",
+    name: "Parla",
+    // Пол = macOS 14: его требует WhisperKit (on-device CoreML). Дизайн НЕ поднимает
+    // эту планку — только API, доступные с 14 (материалы, градиенты), без Liquid Glass.
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
     ],
     targets: [
         .executableTarget(
-            name: "Murmur",
+            name: "Parla",
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
-            path: "Sources/Murmur",
-            swiftSettings: [
-                // v1: ленивый Swift 5 режим — без боя со строгой concurrency Swift 6.
-                .swiftLanguageMode(.v5),
-            ]
+            path: "Sources/Parla",
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        // Технический таргет: headless-прогон WhisperKit для проверки движка.
         .executableTarget(
-            name: "MurmurSmoke",
+            name: "ParlaSmoke",
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
-            path: "Sources/MurmurSmoke",
+            path: "Sources/ParlaSmoke",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

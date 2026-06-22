@@ -12,7 +12,7 @@ struct SettingsView: View {
                         Text(prettyModel(name)).tag(name)
                     }
                 }
-                Text("Крупнее — точнее, но дольше и больше скачивать. Для русского рекомендую large-v3 turbo.")
+                Text("Крупнее — точнее, но дольше и больше скачивать. Для русского/украинского рекомендую large-v3 turbo.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -21,12 +21,15 @@ struct SettingsView: View {
                 Picker("Язык", selection: $model.language) {
                     Text("Авто").tag("")
                     Text("Русский").tag("ru")
+                    Text("Українська").tag("uk")
                     Text("English").tag("en")
                     Text("Deutsch").tag("de")
                     Text("Español").tag("es")
                     Text("Français").tag("fr")
-                    Text("Українська").tag("uk")
                 }
+                Text("Для русского, украинского и суржика держи «Авто» — модель сама ловит язык и пишет слова как слышит.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Поведение") {
@@ -47,6 +50,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(minHeight: 440)
+        .frame(minHeight: 480)
     }
 }

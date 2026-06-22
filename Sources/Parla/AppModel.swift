@@ -68,16 +68,24 @@ final class AppModel {
     }
 
     func handleDrop(urls: [URL]) {
+        guard !isBusy else { return }   // не запускаем второй прогон поверх текущего
         Task { await transcribe(urls: urls) }
     }
 
+    func delete(_ item: TranscriptItem) {
+        history.removeAll { $0.id == item.id }
+        if selection == item.id { selection = nil }
+        HistoryStore.save(history)
+    }
+
     func transcribe(urls: [URL]) async {
-        let audio = urls.filter { Self.isAudio($0) }
-        guard !audio.isEmpty else {
-            phase = .failed("Похоже, это не аудиофайл")
+        // Не фильтруем по расширению — пусть ffmpeg сам решит, аудио это или нет.
+        let files = urls.filter { !$0.hasDirectoryPath }
+        guard !files.isEmpty else {
+            phase = .failed("Не получилось взять файл из перетаскивания")
             return
         }
-        for url in audio {
+        for url in files {
             do {
                 phase = .preparing(url.lastPathComponent)
                 let wav = try await Task.detached(priority: .userInitiated) {
@@ -140,10 +148,4 @@ final class AppModel {
         if let base = models.first(where: { $0.contains("base") && !$0.contains(".en") }) { return base }
         return models.first ?? "openai_whisper-base"
     }
-
-    static let audioExts: Set<String> = [
-        "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac",
-        "mp4", "mov", "m4v", "webm", "3gp", "amr", "wma", "aiff", "aif", "caf",
-    ]
-    static func isAudio(_ url: URL) -> Bool { audioExts.contains(url.pathExtension.lowercased()) }
 }

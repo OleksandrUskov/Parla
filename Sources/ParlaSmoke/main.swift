@@ -1,10 +1,10 @@
 import Foundation
 import WhisperKit
 
-// Headless-прогон: MurmurSmoke <wav> [model]
+// Headless-прогон: ParlaSmoke <wav> [model]
 let args = CommandLine.arguments
 guard args.count >= 2 else {
-    print("usage: MurmurSmoke <wav-path> [model]")
+    print("usage: ParlaSmoke <wav-path> [model]")
     exit(1)
 }
 let wavPath = args[1]

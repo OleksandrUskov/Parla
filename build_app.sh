@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Собирает Murmur.app: release-бинарь + бандл + Info.plist + иконка + ad-hoc подпись.
+# Собирает Parla.app: release-бинарь + бандл + Info.plist + иконка + ad-hoc подпись.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="Murmur"
-BUNDLE_ID="com.murmur.app"
+APP="Parla"
+BUNDLE_ID="com.parla.app"
 VERSION="1.0.0"
 
 # Сгенерить иконку, если её ещё нет (нужны swift + sips + iconutil — есть на любом маке с Xcode).
