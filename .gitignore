@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+Murmur.app/
+Resources/AppIcon.icns
+*.png
+.DS_Store
