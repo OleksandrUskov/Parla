@@ -45,7 +45,8 @@ func prettyModel(_ raw: String) -> String {
 enum EnginePhase: Equatable {
     case idle
     case preparing(String)
-    case loadingModel
+    case downloadingModel(Double)   // 0...1, реальное скачивание (один раз)
+    case loadingModel               // загрузка в память (быстро, каждый запуск)
     case transcribing(String)
     case failed(String)
 }

@@ -32,7 +32,6 @@ final class AppModel {
         language = d.string(forKey: Keys.language) ?? ""
         autoCopy = (d.object(forKey: Keys.autoCopy) as? Bool) ?? true
         showTimestamps = d.bool(forKey: Keys.timestamps)
-        // Стартовый список — чтобы пикер не был пустым до похода в сеть.
         availableModels = [
             "openai_whisper-tiny",
             "openai_whisper-base",
@@ -56,7 +55,9 @@ final class AppModel {
         return history.first
     }
 
-    /// Подтягивает реальный список моделей из репозитория WhisperKit на HF.
+    /// Модель уже скачана на диск (для галочек в UI).
+    func isDownloaded(_ model: String) -> Bool { TranscriptionEngine.isDownloaded(model) }
+
     func refreshModels() async {
         let support = await WhisperKit.recommendedRemoteModels()
         let models = support.supported.sorted()
@@ -68,7 +69,7 @@ final class AppModel {
     }
 
     func handleDrop(urls: [URL]) {
-        guard !isBusy else { return }   // не запускаем второй прогон поверх текущего
+        guard !isBusy else { return }
         Task { await transcribe(urls: urls) }
     }
 
@@ -78,11 +79,39 @@ final class AppModel {
         HistoryStore.save(history)
     }
 
+    /// Предзагрузка выбранной модели по кнопке (без транскрибации).
+    func downloadSelectedModel() async {
+        guard !isBusy else { return }
+        phase = .loadingModel
+        do {
+            try await engine.ensureLoaded(model: selectedModel, progress: progressHandler())
+            phase = .idle
+        } catch {
+            phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+    }
+
+    private func progressHandler() -> @Sendable (ModelLoad) -> Void {
+        { [weak self] load in
+            Task { @MainActor in
+                guard let self else { return }
+                switch load {
+                case .downloading(let p): self.phase = .downloadingModel(p)
+                case .loading: self.phase = .loadingModel
+                }
+            }
+        }
+    }
+
     func transcribe(urls: [URL]) async {
-        // Не фильтруем по расширению — пусть ffmpeg сам решит, аудио это или нет.
-        let files = urls.filter { !$0.hasDirectoryPath }
+        // Папку разворачиваем в её аудиофайлы; одиночные файлы отдаём ffmpeg как есть.
+        var files: [URL] = []
+        for url in urls {
+            if url.hasDirectoryPath { files.append(contentsOf: Self.audioFiles(in: url)) }
+            else { files.append(url) }
+        }
         guard !files.isEmpty else {
-            phase = .failed("Не получилось взять файл из перетаскивания")
+            phase = .failed("Не нашёл аудиофайлов")
             return
         }
         for url in files {
@@ -94,7 +123,7 @@ final class AppModel {
                 defer { try? FileManager.default.removeItem(at: wav) }
 
                 phase = .loadingModel
-                try await engine.ensureLoaded(model: selectedModel)
+                try await engine.ensureLoaded(model: selectedModel, progress: progressHandler())
 
                 phase = .transcribing(url.lastPathComponent)
                 let lang = language.isEmpty ? nil : language
@@ -130,11 +159,6 @@ final class AppModel {
         lastCopiedID = item.id
     }
 
-    func deleteHistory(at offsets: IndexSet) {
-        history.remove(atOffsets: offsets)
-        HistoryStore.save(history)
-    }
-
     func clearHistory() {
         history.removeAll()
         selection = nil
@@ -147,5 +171,17 @@ final class AppModel {
         if let v3 = models.first(where: { $0.contains("large-v3") }) { return v3 }
         if let base = models.first(where: { $0.contains("base") && !$0.contains(".en") }) { return base }
         return models.first ?? "openai_whisper-base"
+    }
+
+    static let audioExts: Set<String> = [
+        "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac",
+        "mp4", "mov", "m4v", "webm", "3gp", "amr", "wma", "aiff", "aif", "caf",
+    ]
+    static func audioFiles(in dir: URL) -> [URL] {
+        let fm = FileManager.default
+        guard let en = fm.enumerator(at: dir, includingPropertiesForKeys: nil) else { return [] }
+        return en.compactMap { $0 as? URL }
+            .filter { audioExts.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 }
