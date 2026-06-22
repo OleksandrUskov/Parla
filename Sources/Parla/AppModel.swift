@@ -129,24 +129,24 @@ final class AppModel {
                 ?? cands.first(where: { c in availableModels.contains(where: { $0.hasPrefix(c) }) })
         }
         var tiers: [ModelTier] = []
-        func add(_ title: String, _ hint: String, _ cands: [String], rec: Bool = false) {
+        func add(_ title: String, _ hint: String, _ estimate: String, _ cands: [String], rec: Bool = false) {
             if let n = pick(cands) {
-                tiers.append(ModelTier(title: title, hint: hint, name: n, recommended: rec))
+                tiers.append(ModelTier(title: title, hint: hint, estimate: estimate, name: n, recommended: rec))
             }
         }
-        add("Tiny", "≈75 МБ · очень быстро, черновик", ["openai_whisper-tiny"])
-        add("Base", "≈150 МБ · быстро, базовое качество", ["openai_whisper-base"])
-        add("Small", "≈500 МБ · хороший баланс", ["openai_whisper-small"])
-        add("Large v3 turbo", "≈630 МБ · быстро + почти максимум. Топ для ru/uk",
+        add("Tiny", "очень быстро · черновик", "~75 МБ", ["openai_whisper-tiny"])
+        add("Base", "быстро · базовое качество", "~150 МБ", ["openai_whisper-base"])
+        add("Small", "баланс скорость / точность", "~500 МБ", ["openai_whisper-small"])
+        add("Large v3 turbo", "быстро, почти максимум · топ для ru/uk", "~630 МБ",
             ["openai_whisper-large-v3-v20240930_626MB",
              "openai_whisper-large-v3-v20240930",
              "openai_whisper-large-v3-v20240930_turbo_632MB",
              "openai_whisper-large-v3-v20240930_turbo"], rec: true)
-        add("Large v3", "≈1 ГБ · максимум точности, медленнее",
+        add("Large v3", "максимум точности · медленнее", "~1 ГБ",
             ["openai_whisper-large-v3", "openai_whisper-large-v3_947MB"])
         if !tiers.contains(where: { $0.name == selectedModel }) {
             tiers.append(ModelTier(title: friendlyModel(selectedModel), hint: "текущая выбранная",
-                                   name: selectedModel, recommended: false))
+                                   estimate: "", name: selectedModel, recommended: false))
         }
         return tiers
     }

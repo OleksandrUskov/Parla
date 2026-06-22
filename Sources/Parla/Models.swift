@@ -62,7 +62,8 @@ func friendlyModel(_ raw: String) -> String {
 /// Один «уровень» модели в менеджере (резолвится в реальный вариант).
 struct ModelTier: Identifiable {
     let title: String
-    let hint: String
+    let hint: String          // только качество/скорость, без размера
+    let estimate: String      // примерный размер до скачивания, напр. "~630 МБ" ("" — неизвестно)
     let name: String
     let recommended: Bool
     var id: String { name }

@@ -125,7 +125,8 @@ struct ModelRow: View {
                         Text("рекомендую").font(.caption2.weight(.bold)).foregroundStyle(Brand.accent)
                     }
                 }
-                Text(tier.hint).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Text(tier.hint).font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             trailing
@@ -160,13 +161,18 @@ struct ModelRow: View {
                 .disabled(model.downloadingModel != nil || model.isBusy)
             }
         } else {
-            Button { Task { await model.downloadModel(tier.name) } } label: {
-                Label("Скачать", systemImage: "arrow.down.circle")
+            HStack(spacing: 8) {
+                if !tier.estimate.isEmpty {
+                    Text(tier.estimate).font(.caption2).foregroundStyle(.secondary)
+                }
+                Button { Task { await model.downloadModel(tier.name) } } label: {
+                    Label("Скачать", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(Brand.accent)
+                .disabled(model.downloadingModel != nil || model.isBusy)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .tint(Brand.accent)
-            .disabled(model.downloadingModel != nil || model.isBusy)
         }
     }
 }
