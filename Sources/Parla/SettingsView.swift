@@ -6,35 +6,42 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var model = model
         Form {
-            Section("Модель распознавания") {
+            Section("Модель") {
                 Picker("Модель", selection: $model.selectedModel) {
                     ForEach(model.availableModels, id: \.self) { name in
-                        Text(prettyModel(name)).tag(name)
+                        Text(friendlyModel(name)).tag(name)
                     }
                 }
-                Text("Крупнее — точнее, но дольше и больше скачивать. Для русского/украинского рекомендую large-v3 turbo.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Качать и удалять модели удобнее через чип модели в шапке окна.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Язык") {
                 Picker("Язык", selection: $model.language) {
-                    Text("Авто").tag("")
-                    Text("Русский").tag("ru")
-                    Text("Українська").tag("uk")
-                    Text("English").tag("en")
-                    Text("Deutsch").tag("de")
-                    Text("Español").tag("es")
-                    Text("Français").tag("fr")
+                    ForEach(whisperLanguages, id: \.code) { lang in
+                        Text(lang.name).tag(lang.code)
+                    }
                 }
-                Text("Для русского, украинского и суржика держи «Авто» — модель сама ловит язык и пишет слова как слышит.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Whisper мультиязычный (~99 языков). На «Авто» язык определяется сам — английский и любой другой работают сходу, доскачивать ничего не нужно. Для русского / украинского / суржика «Авто» — лучший выбор.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Перевод") {
+                Toggle("Переводить результат в английский", isOn: $model.translateToEnglish)
+                Text("Whisper умеет не только расшифровывать, но и переводить речь любого языка сразу в английский текст.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Поведение") {
                 Toggle("Копировать результат в буфер автоматически", isOn: $model.autoCopy)
                 Toggle("Показывать таймкоды", isOn: $model.showTimestamps)
+            }
+
+            Section("История") {
+                Button("Экспортировать историю…") { model.exportHistory() }
+                    .disabled(model.history.isEmpty)
+                Button("Очистить историю", role: .destructive) { model.clearHistory() }
+                    .disabled(model.history.isEmpty)
             }
 
             Section("Система") {
@@ -46,10 +53,12 @@ struct SettingsView: View {
                             .foregroundStyle(.orange).font(.caption)
                     }
                 }
-                Button("Очистить историю", role: .destructive) { model.clearHistory() }
+                LabeledContent("Модели на диске") {
+                    Text(formatBytes(model.totalModelsBytes)).foregroundStyle(.secondary).font(.caption)
+                }
             }
         }
         .formStyle(.grouped)
-        .frame(minHeight: 480)
+        .frame(minHeight: 560)
     }
 }

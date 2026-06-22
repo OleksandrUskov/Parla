@@ -19,13 +19,32 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        @Bindable var model = model
         VStack(alignment: .leading, spacing: 0) {
-            Text("История")
-                .font(.system(.headline, design: .rounded))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 10)
+            HStack {
+                Text("История")
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if !model.history.isEmpty {
+                    Button { model.exportHistory() } label: {
+                        Image(systemName: "square.and.arrow.up").font(.callout)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Экспортировать историю в файл")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 8)
+
+            if !model.history.isEmpty {
+                TextField("Поиск…", text: $model.searchQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+            }
 
             if model.history.isEmpty {
                 Spacer()
@@ -35,10 +54,15 @@ struct SidebarView: View {
                 }
                 .frame(maxWidth: .infinity)
                 Spacer()
+            } else if model.filteredHistory.isEmpty {
+                Spacer()
+                Text("Ничего не найдено").foregroundStyle(.secondary).font(.callout)
+                    .frame(maxWidth: .infinity)
+                Spacer()
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
-                        ForEach(model.history) { item in
+                        ForEach(model.filteredHistory) { item in
                             SidebarRow(item: item, selected: model.selection == item.id)
                                 .onTapGesture { model.selection = item.id }
                                 .contextMenu {

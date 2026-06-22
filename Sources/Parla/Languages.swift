@@ -1,0 +1,37 @@
+import Foundation
+
+/// Языки для ручного выбора. Whisper мультиязычный (~99 языков); «Авто» (пустой код)
+/// определяет язык сам — английский и любой другой работают без доскачивания.
+let whisperLanguages: [(code: String, name: String)] = [
+    ("",   "Авто (определять)"),
+    ("ru", "Русский"),
+    ("uk", "Українська"),
+    ("en", "English"),
+    ("de", "Deutsch"),
+    ("fr", "Français"),
+    ("es", "Español"),
+    ("it", "Italiano"),
+    ("pt", "Português"),
+    ("pl", "Polski"),
+    ("nl", "Nederlands"),
+    ("tr", "Türkçe"),
+    ("cs", "Čeština"),
+    ("sv", "Svenska"),
+    ("ro", "Română"),
+    ("el", "Ελληνικά"),
+    ("hu", "Magyar"),
+    ("ar", "العربية"),
+    ("he", "עברית"),
+    ("hi", "हिन्दी"),
+    ("ja", "日本語"),
+    ("ko", "한국어"),
+    ("zh", "中文"),
+    ("id", "Bahasa Indonesia"),
+    ("vi", "Tiếng Việt"),
+    ("th", "ไทย"),
+    ("ka", "ქართული"),
+    ("kk", "Қазақша"),
+    ("be", "Беларуская"),
+    ("az", "Azərbaycanca"),
+    ("hy", "Հայերէն"),
+]

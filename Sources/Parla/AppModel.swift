@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 import WhisperKit
 
 @MainActor
@@ -10,14 +11,18 @@ final class AppModel {
     var selection: TranscriptItem.ID?
     var availableModels: [String] = []
     var lastCopiedID: TranscriptItem.ID?
-    var downloadingModel: String?       // какая модель качается прямо сейчас (в менеджере)
+    var downloadingModel: String?
     var downloadProgress: Double = 0
+    var searchQuery: String = ""
+    var downloadedSet: Set<String> = []        // какие модели на диске (реактивно)
+    var modelSizes: [String: Int64] = [:]      // размер каждой скачанной модели
 
     // Настройки (зеркалятся в UserDefaults).
     var selectedModel: String { didSet { UserDefaults.standard.set(selectedModel, forKey: Keys.model) } }
     var language: String { didSet { UserDefaults.standard.set(language, forKey: Keys.language) } }
     var autoCopy: Bool { didSet { UserDefaults.standard.set(autoCopy, forKey: Keys.autoCopy) } }
     var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Keys.timestamps) } }
+    var translateToEnglish: Bool { didSet { UserDefaults.standard.set(translateToEnglish, forKey: Keys.translate) } }
 
     private let engine = TranscriptionEngine()
 
@@ -26,6 +31,7 @@ final class AppModel {
         static let language = "language"
         static let autoCopy = "autoCopy"
         static let timestamps = "timestamps"
+        static let translate = "translateToEnglish"
     }
 
     init() {
@@ -34,57 +40,65 @@ final class AppModel {
         language = d.string(forKey: Keys.language) ?? ""
         autoCopy = (d.object(forKey: Keys.autoCopy) as? Bool) ?? true
         showTimestamps = d.bool(forKey: Keys.timestamps)
+        translateToEnglish = d.bool(forKey: Keys.translate)
         availableModels = [
-            "openai_whisper-tiny",
-            "openai_whisper-base",
-            "openai_whisper-small",
-            "openai_whisper-large-v3",
-            "openai_whisper-large-v3-v20240930",
+            "openai_whisper-tiny", "openai_whisper-base", "openai_whisper-small",
+            "openai_whisper-large-v3", "openai_whisper-large-v3-v20240930",
             "openai_whisper-large-v3-v20240930_turbo_632MB",
         ]
         if !availableModels.contains(selectedModel) { availableModels.insert(selectedModel, at: 0) }
+        refreshDownloaded()
     }
 
     var isBusy: Bool {
-        switch phase {
-        case .idle, .failed: return false
-        default: return true
+        switch phase { case .idle, .failed: return false; default: return true }
+    }
+
+    /// Элемент для правой панели — из ВИДИМОГО (отфильтрованного) списка, чтобы панель и
+    /// сайдбар не расходились при активном поиске.
+    var selectedItem: TranscriptItem? {
+        if let id = selection, let found = filteredHistory.first(where: { $0.id == id }) { return found }
+        return filteredHistory.first
+    }
+
+    var filteredHistory: [TranscriptItem] { filterHistory(history, query: searchQuery) }
+
+    // MARK: Модели — статус/размер на диске
+
+    func isDownloaded(_ model: String) -> Bool { downloadedSet.contains(model) }
+    var totalModelsBytes: Int64 { modelSizes.values.reduce(0, +) }
+
+    /// Дешёвая проверка наличия — на главном потоке; тяжёлый подсчёт размеров — в фоне.
+    func refreshDownloaded() {
+        let models = Set(availableModels + [selectedModel])
+        var set = Set<String>()
+        for m in models where TranscriptionEngine.isDownloaded(m) { set.insert(m) }
+        downloadedSet = set
+        let toSize = set
+        Task {   // @MainActor-задача; тяжёлый walk считаем в detached и присваиваем на main
+            let sizes = await Task.detached { () -> [String: Int64] in
+                var s: [String: Int64] = [:]
+                for m in toSize { s[m] = TranscriptionEngine.modelSize(m) }
+                return s
+            }.value
+            self.modelSizes = sizes
         }
     }
-
-    var selectedItem: TranscriptItem? {
-        if let id = selection, let found = history.first(where: { $0.id == id }) { return found }
-        return history.first
-    }
-
-    /// Модель уже скачана на диск (для галочек в UI).
-    func isDownloaded(_ model: String) -> Bool { TranscriptionEngine.isDownloaded(model) }
 
     func refreshModels() async {
         let support = await WhisperKit.recommendedRemoteModels()
         let models = support.supported.sorted()
         guard !models.isEmpty else { return }
         availableModels = models
-        if !models.contains(selectedModel) {
+        // Не перебиваем выбор пользователя, если модель уже скачана (даже если её нет в рекомендованных).
+        if !models.contains(selectedModel), !TranscriptionEngine.isDownloaded(selectedModel) {
             selectedModel = Self.bestDefault(from: models)
         }
+        refreshDownloaded()
     }
 
-    func handleDrop(urls: [URL]) {
-        guard !isBusy else { return }
-        Task { await transcribe(urls: urls) }
-    }
-
-    func delete(_ item: TranscriptItem) {
-        history.removeAll { $0.id == item.id }
-        if selection == item.id { selection = nil }
-        HistoryStore.save(history)
-    }
-
-    /// Скачать конкретную модель заранее (без транскрибации, не трогая загруженную).
-    /// Идёт напрямую через WhisperKit.download — НЕ блокирует движок, можно качать в фоне.
     func downloadModel(_ name: String) async {
-        guard downloadingModel == nil, !TranscriptionEngine.isDownloaded(name) else { return }
+        guard !isBusy, downloadingModel == nil, !isDownloaded(name) else { return }
         downloadingModel = name
         downloadProgress = 0
         do {
@@ -95,6 +109,17 @@ final class AppModel {
             phase = .failed("Не удалось скачать модель: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
         }
         downloadingModel = nil
+        refreshDownloaded()
+    }
+
+    func deleteModel(_ name: String) async {
+        guard !isBusy, downloadingModel == nil else { return }
+        do {
+            try await engine.deleteModel(name)
+            refreshDownloaded()
+        } catch {
+            phase = .failed("Не удалось удалить модель: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+        }
     }
 
     /// Чистый список из 5 уровней (по одному варианту на уровень), без квантованных клонов.
@@ -119,12 +144,67 @@ final class AppModel {
              "openai_whisper-large-v3-v20240930_turbo"], rec: true)
         add("Large v3", "≈1 ГБ · максимум точности, медленнее",
             ["openai_whisper-large-v3", "openai_whisper-large-v3_947MB"])
-        // если текущая выбранная не попала ни в один уровень — покажем её отдельной строкой
         if !tiers.contains(where: { $0.name == selectedModel }) {
             tiers.append(ModelTier(title: friendlyModel(selectedModel), hint: "текущая выбранная",
                                    name: selectedModel, recommended: false))
         }
         return tiers
+    }
+
+    // MARK: Транскрибация
+
+    func handleDrop(urls: [URL]) {
+        guard !isBusy, downloadingModel == nil else { return }
+        phase = .preparing("…")   // синхронно занимаем фазу — закрываем гонку двойного дропа
+        Task { await transcribe(urls: urls) }
+    }
+
+    func transcribe(urls: [URL]) async {
+        var files: [URL] = []
+        for url in urls {
+            if url.hasDirectoryPath { files.append(contentsOf: Self.audioFiles(in: url)) }
+            else { files.append(url) }
+        }
+        guard !files.isEmpty else {
+            phase = .failed("Не нашёл аудиофайлов")
+            return
+        }
+        var failures: [String] = []
+        for url in files {
+            do {
+                phase = .preparing(url.lastPathComponent)
+                let wav = try await Task.detached(priority: .userInitiated) {
+                    try AudioConverter.toWav16k(url)
+                }.value
+                defer { try? FileManager.default.removeItem(at: wav) }
+
+                phase = .loadingModel
+                try await engine.ensureLoaded(model: selectedModel, progress: progressHandler())
+
+                phase = .transcribing(url.lastPathComponent)
+                let lang = language.isEmpty ? nil : language
+                let r = try await engine.transcribe(wavPath: wav.path, language: lang,
+                                                    model: selectedModel, translate: translateToEnglish)
+
+                let item = TranscriptItem(
+                    sourceName: url.lastPathComponent,
+                    language: r.language,
+                    durationSec: r.duration,
+                    model: selectedModel,
+                    text: r.text.isEmpty ? "(тишина — ничего не распознано)" : r.text,
+                    segments: r.segments
+                )
+                history.insert(item, at: 0)
+                selection = item.id
+                HistoryStore.save(history)
+                if autoCopy, !r.text.isEmpty { copy(item.text) }
+            } catch {
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                failures.append("\(url.lastPathComponent) (\(msg))")
+            }
+        }
+        refreshDownloaded()
+        phase = failures.isEmpty ? .idle : .failed("Не удалось: \(failures.joined(separator: "; "))")
     }
 
     private func progressHandler() -> @Sendable (ModelLoad) -> Void {
@@ -139,51 +219,7 @@ final class AppModel {
         }
     }
 
-    func transcribe(urls: [URL]) async {
-        // Папку разворачиваем в её аудиофайлы; одиночные файлы отдаём ffmpeg как есть.
-        var files: [URL] = []
-        for url in urls {
-            if url.hasDirectoryPath { files.append(contentsOf: Self.audioFiles(in: url)) }
-            else { files.append(url) }
-        }
-        guard !files.isEmpty else {
-            phase = .failed("Не нашёл аудиофайлов")
-            return
-        }
-        for url in files {
-            do {
-                phase = .preparing(url.lastPathComponent)
-                let wav = try await Task.detached(priority: .userInitiated) {
-                    try AudioConverter.toWav16k(url)
-                }.value
-                defer { try? FileManager.default.removeItem(at: wav) }
-
-                phase = .loadingModel
-                try await engine.ensureLoaded(model: selectedModel, progress: progressHandler())
-
-                phase = .transcribing(url.lastPathComponent)
-                let lang = language.isEmpty ? nil : language
-                let r = try await engine.transcribe(wavPath: wav.path, language: lang, model: selectedModel)
-
-                let item = TranscriptItem(
-                    sourceName: url.lastPathComponent,
-                    language: r.language,
-                    durationSec: r.duration,
-                    model: selectedModel,
-                    text: r.text.isEmpty ? "(тишина — ничего не распознано)" : r.text,
-                    segments: r.segments
-                )
-                history.insert(item, at: 0)
-                selection = item.id
-                HistoryStore.save(history)
-                if autoCopy, !r.text.isEmpty { copy(item.text) }
-                phase = .idle
-            } catch {
-                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                phase = .failed(msg)
-            }
-        }
-    }
+    // MARK: История
 
     func copy(_ text: String) {
         NSPasteboard.general.clearContents()
@@ -193,6 +229,18 @@ final class AppModel {
     func copyItem(_ item: TranscriptItem) {
         copy(item.display(timestamps: showTimestamps))
         lastCopiedID = item.id
+        // «Скопировано» — кратковременная подсветка, сбрасываем.
+        let id = item.id
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            if lastCopiedID == id { lastCopiedID = nil }
+        }
+    }
+
+    func delete(_ item: TranscriptItem) {
+        history.removeAll { $0.id == item.id }
+        if selection == item.id { selection = nil }
+        HistoryStore.save(history)
     }
 
     func clearHistory() {
@@ -200,6 +248,23 @@ final class AppModel {
         selection = nil
         HistoryStore.save(history)
     }
+
+    /// Экспорт всей истории в markdown-файл (диалог сохранения).
+    func exportHistory() {
+        guard !history.isEmpty else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "parla-history.md"
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText, .plainText]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try Data(exportText(history).utf8).write(to: url)
+        } catch {
+            phase = .failed("Не удалось сохранить файл: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: Чистые статики
 
     nonisolated static func bestDefault(from models: [String]) -> String {
         if let exact = models.first(where: { $0 == "openai_whisper-large-v3-v20240930" }) { return exact }
@@ -209,11 +274,11 @@ final class AppModel {
         return models.first ?? "openai_whisper-base"
     }
 
-    static let audioExts: Set<String> = [
+    nonisolated static let audioExts: Set<String> = [
         "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac",
         "mp4", "mov", "m4v", "webm", "3gp", "amr", "wma", "aiff", "aif", "caf",
     ]
-    static func audioFiles(in dir: URL) -> [URL] {
+    nonisolated static func audioFiles(in dir: URL) -> [URL] {
         let fm = FileManager.default
         guard let en = fm.enumerator(at: dir, includingPropertiesForKeys: nil) else { return [] }
         return en.compactMap { $0 as? URL }

@@ -26,10 +26,14 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
             .map { "[\(fmtTime($0.start))] \($0.text)" }
             .joined(separator: "\n")
     }
+
+    var wordCount: Int {
+        text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+    }
 }
 
 func fmtTime(_ s: Double) -> String {
-    let t = Int(s.rounded())
+    let t = max(0, Int(s.rounded()))
     return String(format: "%02d:%02d", t / 60, t % 60)
 }
 
@@ -62,6 +66,33 @@ struct ModelTier: Identifiable {
     let name: String
     let recommended: Bool
     var id: String { name }
+}
+
+// MARK: - История: фильтр, экспорт, форматирование размера
+
+/// Поиск по истории (без учёта регистра, по тексту и имени файла).
+func filterHistory(_ items: [TranscriptItem], query: String) -> [TranscriptItem] {
+    let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !q.isEmpty else { return items }
+    return items.filter { $0.text.lowercased().contains(q) || $0.sourceName.lowercased().contains(q) }
+}
+
+/// Вся история в один markdown-текст (для экспорта/бэкапа).
+func exportText(_ items: [TranscriptItem]) -> String {
+    var out = "# Parla — история расшифровок\n\n"
+    for it in items {
+        out += "## \(it.sourceName)\n"
+        out += "_\(it.date.formatted(date: .abbreviated, time: .shortened)) · \(it.language.uppercased()) · \(friendlyModel(it.model))_\n\n"
+        out += it.text + "\n\n---\n\n"
+    }
+    return out
+}
+
+func formatBytes(_ bytes: Int64) -> String {
+    if bytes <= 0 { return "—" }
+    let mb = Double(bytes) / 1_048_576
+    if mb >= 1024 { return String(format: "%.1f ГБ", mb / 1024) }
+    return String(format: "%.0f МБ", mb)
 }
 
 enum EnginePhase: Equatable {

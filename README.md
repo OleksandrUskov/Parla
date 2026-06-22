@@ -12,22 +12,18 @@ running OpenAI Whisper on the Apple Neural Engine. Nothing leaves your machine.
 
 ---
 
-## Screenshot
-
-<!-- Drop a screenshot at docs/screenshot.png and uncomment the line below: -->
-<!-- ![Parla](docs/screenshot.png) -->
-
 ## Features
 
-- 🎙 **Drag & drop** any audio/video — `.ogg` (Telegram), `.m4a`, `.mp3`, `.wav`, `.mp4`, …
+- 🎙 **Drag & drop** any audio/video — `.ogg` (Telegram), `.m4a`, `.mp3`, `.wav`, `.mp4`, … (or pick a file / whole folder)
 - 🧠 **On-device Whisper** via CoreML / Neural Engine — fast, free, private
-- 🌍 **Multilingual** with auto language detection — Russian, Ukrainian (and surzhik), English, …
-- 📋 **Auto-copy** the result to the clipboard
-- 🕘 **History** of every transcription in the sidebar
+- 🌍 **~99 languages** with auto-detect — English and any other work out of the box; great Russian / Ukrainian / surzhik
+- 🔁 **Translate to English** — turn speech in any language straight into English text (Whisper translate task)
+- 🧩 **Model manager** — pick / download / **delete** models with progress, on-disk size, and a recommended pick
+- 🔎 **Searchable history** + 📤 **export** all transcripts to a Markdown file (backup)
+- 📋 **Auto-copy** to the clipboard · ⏱ optional **timestamps** · word count · share sheet
 - 🔝 **Menu-bar companion** — grab recent transcripts without opening the window
-- ⏱ Optional **timestamps**, model picker (tiny → large-v3 turbo), share sheet
 - 🎨 Dark, glassy UI with an indigo aurora background
-- 🔒 **No account, no network** for transcription — model is downloaded once, then offline
+- 🔒 **No account, no network** for transcription — models download once, then fully offline
 
 ## Requirements
 
@@ -78,7 +74,7 @@ audio file ──▶ ffmpeg (→ 16 kHz mono WAV) ──▶ WhisperKit (CoreML /
 
 ## Tech stack
 
-Swift 6 · SwiftUI · [WhisperKit](https://github.com/argmaxinc/WhisperKit) · CoreML · ffmpeg
+Swift 6 toolchain (Swift 5 language mode) · SwiftUI · [WhisperKit](https://github.com/argmaxinc/WhisperKit) · CoreML · ffmpeg
 
 ## Notes
 

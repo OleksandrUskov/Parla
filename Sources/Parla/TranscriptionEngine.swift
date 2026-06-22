@@ -42,6 +42,18 @@ actor TranscriptionEngine {
         return !items.isEmpty
     }
 
+    /// Суммарный размер файлов в папке (рекурсивно).
+    static func folderSize(at url: URL) -> Int64 {
+        let fm = FileManager.default
+        guard let en = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
+        var total: Int64 = 0
+        for case let f as URL in en {
+            total += Int64((try? f.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        return total
+    }
+    static func modelSize(_ model: String) -> Int64 { folderSize(at: localFolder(model)) }
+
     /// Если модель на диске — грузим ЛОКАЛЬНО (download:false, офлайн, без повторного скачивания).
     /// Иначе — качаем с прогрессом. На любой сбой локальной загрузки — фолбэк на докачку.
     func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {
@@ -70,13 +82,24 @@ actor TranscriptionEngine {
         loadedModel = model
     }
 
-    func transcribe(wavPath: String, language: String?, model: String) async throws -> EngineResult {
+    /// Удалить модель с диска. Если она сейчас загружена — выгружаем из памяти.
+    func deleteModel(_ name: String) throws {
+        let folder = Self.localFolder(name)
+        if FileManager.default.fileExists(atPath: folder.path) {
+            try FileManager.default.removeItem(at: folder)
+        }
+        if loadedModel == name { whisperKit = nil; loadedModel = nil }
+    }
+
+    func transcribe(wavPath: String, language: String?, model: String, translate: Bool = false) async throws -> EngineResult {
         if loadedModel != model || whisperKit == nil {
             try await ensureLoaded(model: model, progress: { _ in })
         }
         guard let kit = whisperKit else { throw EngineError.notLoaded }
 
-        let options = DecodingOptions(task: .transcribe, language: language, detectLanguage: language == nil)
+        // task: .translate → Whisper переводит речь любого языка в английский текст.
+        let options = DecodingOptions(task: translate ? .translate : .transcribe,
+                                      language: language, detectLanguage: language == nil)
         let start = Date()
         // Массивная перегрузка + слияние чанков (длинное аудио WhisperKit может бить).
         let results: [TranscriptionResult] = try await kit.transcribe(audioPath: wavPath, decodeOptions: options)

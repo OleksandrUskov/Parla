@@ -21,6 +21,8 @@ struct MainPane: View {
 }
 
 struct BrandHeader: View {
+    @Environment(AppModel.self) private var model
+
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "waveform")
@@ -29,6 +31,14 @@ struct BrandHeader: View {
             Text(Brand.name)
                 .font(.system(.largeTitle, design: .rounded).weight(.bold))
                 .foregroundStyle(Brand.gradient)
+            if model.translateToEnglish {
+                Text("→ EN")
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Brand.accent.opacity(0.25), in: Capsule())
+                    .foregroundStyle(Brand.accent)
+                    .help("Результат переводится в английский")
+            }
             Spacer()
             ModelButton()
             SettingsLink {
@@ -41,7 +51,6 @@ struct BrandHeader: View {
 
 // MARK: - Менеджер моделей
 
-/// Чип текущей модели → открывает менеджер моделей (выбор + скачивание).
 struct ModelButton: View {
     @Environment(AppModel.self) private var model
     @State private var show = false
@@ -61,7 +70,7 @@ struct ModelButton: View {
             .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
         }
         .buttonStyle(.plain)
-        .help("Выбрать и скачать модель")
+        .help("Выбрать, скачать или удалить модель")
         .popover(isPresented: $show, arrowEdge: .bottom) {
             ModelManagerView()
         }
@@ -74,7 +83,7 @@ struct ModelManagerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Модели распознавания").font(.system(.headline, design: .rounded))
-            Text("Все офлайн, качаются один раз. Клик по строке — выбрать, «Скачать» — загрузить заранее.")
+            Text("Все офлайн, качаются один раз. Клик по строке — выбрать, «Скачать» — загрузить заранее, 🗑 — удалить с диска.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider()
@@ -83,9 +92,15 @@ struct ModelManagerView: View {
                     ModelRow(tier: tier)
                 }
             }
+            Divider()
+            HStack {
+                Text("Занято на диске").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Text(formatBytes(model.totalModelsBytes)).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            }
         }
         .padding(16)
-        .frame(width: 430)
+        .frame(width: 440)
     }
 }
 
@@ -131,9 +146,19 @@ struct ModelRow: View {
                 Text("\(Int(model.downloadProgress * 100))%").font(.caption2).monospacedDigit().foregroundStyle(.secondary)
             }
         } else if isDownloaded {
-            Label("Скачано", systemImage: "checkmark.circle.fill")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.green)
+            HStack(spacing: 8) {
+                if let bytes = model.modelSizes[tier.name] {
+                    Text(formatBytes(bytes)).font(.caption2).foregroundStyle(.secondary)
+                }
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Button { Task { await model.deleteModel(tier.name) } } label: {
+                    Image(systemName: "trash").font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .tint(.secondary)
+                .help("Удалить модель с диска")
+                .disabled(model.downloadingModel != nil || model.isBusy)
+            }
         } else {
             Button { Task { await model.downloadModel(tier.name) } } label: {
                 Label("Скачать", systemImage: "arrow.down.circle")
@@ -141,7 +166,7 @@ struct ModelRow: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .tint(Brand.accent)
-            .disabled(model.downloadingModel != nil)
+            .disabled(model.downloadingModel != nil || model.isBusy)
         }
     }
 }
@@ -269,6 +294,6 @@ struct TranscriptCard: View {
 
     private var meta: String {
         let lang = item.language.isEmpty ? "?" : item.language.uppercased()
-        return "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(friendlyModel(item.model)) · \(Int(item.durationSec))s"
+        return "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(friendlyModel(item.model)) · \(Int(item.durationSec))s · \(item.wordCount) сл."
     }
 }
