@@ -91,12 +91,17 @@ enum HistoryStore {
 
     /// Одноразовый перенос истории со старого имени приложения (Murmur → Parla).
     private static func migrateLegacyIfNeeded() {
-        let fm = FileManager.default
-        guard !fm.fileExists(atPath: fileURL.path) else { return }   // у Parla уже есть своя
-        let legacy = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let legacy = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Murmur/history.json")
-        guard fm.fileExists(atPath: legacy.path) else { return }
-        try? fm.copyItem(at: legacy, to: fileURL)
+        migrate(target: fileURL, legacy: legacy)
+    }
+
+    /// Чистая тестируемая логика: скопировать legacy → target, если у target ещё нет файла.
+    static func migrate(target: URL, legacy: URL) {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: target.path), fm.fileExists(atPath: legacy.path) else { return }
+        try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? fm.copyItem(at: legacy, to: target)
     }
 
     static func save(_ items: [TranscriptItem]) {

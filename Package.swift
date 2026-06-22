@@ -26,5 +26,11 @@ let package = Package(
             path: "Sources/ParlaSmoke",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(
+            name: "ParlaTests",
+            dependencies: ["Parla"],
+            path: "Tests/ParlaTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

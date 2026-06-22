@@ -2,5 +2,4 @@
 .swiftpm/
 Parla.app/
 Resources/AppIcon.icns
-*.png
 .DS_Store

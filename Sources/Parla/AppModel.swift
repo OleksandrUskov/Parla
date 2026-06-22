@@ -201,7 +201,7 @@ final class AppModel {
         HistoryStore.save(history)
     }
 
-    static func bestDefault(from models: [String]) -> String {
+    nonisolated static func bestDefault(from models: [String]) -> String {
         if let exact = models.first(where: { $0 == "openai_whisper-large-v3-v20240930" }) { return exact }
         if let turbo = models.first(where: { $0.contains("large-v3-v20240930") }) { return turbo }
         if let v3 = models.first(where: { $0.contains("large-v3") }) { return v3 }

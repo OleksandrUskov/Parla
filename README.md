@@ -12,6 +12,11 @@ running OpenAI Whisper on the Apple Neural Engine. Nothing leaves your machine.
 
 ---
 
+## Screenshot
+
+<!-- Drop a screenshot at docs/screenshot.png and uncomment the line below: -->
+<!-- ![Parla](docs/screenshot.png) -->
+
 ## Features
 
 - 🎙 **Drag & drop** any audio/video — `.ogg` (Telegram), `.m4a`, `.mp3`, `.wav`, `.mp4`, …
