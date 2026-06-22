@@ -84,8 +84,19 @@ enum HistoryStore {
     }()
 
     static func load() -> [TranscriptItem] {
+        migrateLegacyIfNeeded()
         guard let data = try? Data(contentsOf: fileURL) else { return [] }
         return (try? JSONDecoder().decode([TranscriptItem].self, from: data)) ?? []
+    }
+
+    /// Одноразовый перенос истории со старого имени приложения (Murmur → Parla).
+    private static func migrateLegacyIfNeeded() {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: fileURL.path) else { return }   // у Parla уже есть своя
+        let legacy = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Murmur/history.json")
+        guard fm.fileExists(atPath: legacy.path) else { return }
+        try? fm.copyItem(at: legacy, to: fileURL)
     }
 
     static func save(_ items: [TranscriptItem]) {
