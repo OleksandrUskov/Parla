@@ -208,7 +208,7 @@ final class AppModel {
             let batch = total > 1 ? BatchProgress(index: i + 1, total: total, done: i) : nil
             do {
                 let r = try await transcribeOne(url: url, model: selectedModel, batch: batch)
-                var item = TranscriptItem(
+                let item = TranscriptItem(
                     sourceName: url.lastPathComponent,
                     language: r.language,
                     durationSec: r.duration,
@@ -218,16 +218,21 @@ final class AppModel {
                     sourcePath: url.path,                       // запоминаем исходник для «перераспознать»
                     sourceBookmark: makeSourceBookmark(url)
                 )
-                // Сохраняем исходник для плеера (off-main, best-effort; ошибка не валит результат).
-                let kept = await Self.keepAudio(from: url, id: item.id)
-                item.audioFile = kept.file
-                item.audioPlayable = kept.playable
+                // РЕЗУЛЬТАТ ПОКАЗЫВАЕМ СРАЗУ — не ждём копирование/рендишен аудио для плеера.
                 history.insert(item, at: 0)
                 selection = item.id
                 HistoryStore.save(history)
                 if autoCopy, !r.text.isEmpty { copy(item.text) }
                 succeeded += 1
                 rememberSource(url)            // для «повторить последний файл»
+                // Аудио для плеера готовим ПОСЛЕ показа текста; патчим запись по id (плеер появится чуть позже).
+                let kept = await Self.keepAudio(from: url, id: item.id)
+                if (kept.file != nil || kept.playable != nil),
+                   let idx = history.firstIndex(where: { $0.id == item.id }) {
+                    history[idx].audioFile = kept.file
+                    history[idx].audioPlayable = kept.playable
+                    HistoryStore.save(history)
+                }
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 failures.append("\(url.lastPathComponent) (\(msg))")

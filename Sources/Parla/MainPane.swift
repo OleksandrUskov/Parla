@@ -205,7 +205,7 @@ struct StatusBar: View {
         case .downloadingModel(let p):
             downloadChip(p)
         case .loadingModel:
-            chip("Загружаю модель в память…", busy: true)
+            chip("Загружаю модель в память… (первый раз — дольше)", busy: true)
         case .transcribing(let n, let b):
             progressChip("Распознаю \(batchLabel(n, b))…", b)
         case .failed(let m):
