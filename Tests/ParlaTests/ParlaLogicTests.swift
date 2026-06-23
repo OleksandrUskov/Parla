@@ -571,6 +571,93 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(ready2.map { $0.url.lastPathComponent }, ["a.ogg"])
     }
 
+    // MARK: Перераспознать (фича 01)
+
+    /// Ключевая обратная совместимость: старый history.json без sourcePath/sourceBookmark декодится.
+    func testCodableBackwardCompatSourceFields() throws {
+        let legacy = #"[{"id":"\#(UUID().uuidString)","date":740000000,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"openai_whisper-tiny","text":"привет","segments":[]}]"#
+        let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8))
+        XCTAssertNil(items.first?.sourcePath)        // отсутствующий ключ → nil, НЕ throw
+        XCTAssertNil(items.first?.sourceBookmark)
+        XCTAssertFalse(items.first?.hasResolvableSource ?? true)
+    }
+
+    func testCodableRoundtripWithSource() throws {
+        var item = makeItem(text: "txt")
+        item.sourcePath = "/tmp/x.ogg"
+        item.sourceBookmark = Data([1, 2, 3])
+        let data = try JSONEncoder().encode([item])
+        let back = try JSONDecoder().decode([TranscriptItem].self, from: data)
+        XCTAssertEqual(back.first?.sourcePath, "/tmp/x.ogg")
+        XCTAssertEqual(back.first?.sourceBookmark, Data([1, 2, 3]))
+    }
+
+    func testResolveSourceFoundByPath() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).ogg")
+        try Data("x".utf8).write(to: tmp)
+        defer { try? fm.removeItem(at: tmp) }
+        var item = makeItem(text: "t")
+        item.sourcePath = tmp.path
+        XCTAssertEqual(item.resolveSource(), .found(URL(fileURLWithPath: tmp.path), scoped: false))
+        XCTAssertTrue(item.hasResolvableSource)
+    }
+
+    func testResolveSourceMissingWhenPathGone() {
+        var item = makeItem(text: "t")
+        item.sourcePath = "/nope/\(UUID().uuidString).ogg"
+        XCTAssertEqual(item.resolveSource(), .missing)
+        XCTAssertFalse(item.hasResolvableSource)
+    }
+
+    func testResolveSourceMissingWhenNilPath() {
+        let item = makeItem(text: "t")   // sourcePath == nil (как у легаси-записи)
+        XCTAssertEqual(item.resolveSource(), .missing)
+        XCTAssertFalse(item.hasResolvableSource)
+    }
+
+    func testMakeAndResolveBookmarkFallback() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).ogg")
+        try Data("x".utf8).write(to: tmp)
+        defer { try? fm.removeItem(at: tmp) }
+        let bm = makeSourceBookmark(tmp)
+        XCTAssertNotNil(bm)
+        var item = makeItem(text: "t")
+        item.sourcePath = nil            // путь отсутствует — должен найтись по bookmark
+        item.sourceBookmark = bm
+        if case .found(let url, _) = item.resolveSource() {
+            XCTAssertTrue(fm.fileExists(atPath: url.path))
+            XCTAssertEqual(url.lastPathComponent, tmp.lastPathComponent)
+        } else {
+            XCTFail("должен найтись по bookmark")
+        }
+    }
+
+    @MainActor func testRetranscribeSameModelIsNoop() {
+        withTemporaryHistoryStore {
+            let m = AppModel()
+            var item = makeItem(text: "оригинал", model: "openai_whisper-tiny")
+            item.sourcePath = "/tmp/whatever.ogg"
+            m.history = [item]
+            m.retranscribe(item, with: "openai_whisper-tiny")   // та же модель → no-op, ни истории ни фазы
+            XCTAssertEqual(m.history.first?.text, "оригинал")
+            if case .idle = m.phase {} else { XCTFail("phase должна остаться .idle") }
+        }
+    }
+
+    @MainActor func testCanRetranscribe() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).ogg")
+        try Data("x".utf8).write(to: tmp)
+        defer { try? fm.removeItem(at: tmp) }
+        let m = AppModel()
+        XCTAssertFalse(m.canRetranscribe(makeItem(text: "t")))   // нет sourcePath → нельзя
+        var present = makeItem(text: "t")
+        present.sourcePath = tmp.path
+        XCTAssertTrue(m.canRetranscribe(present))                // движок свободен + файл есть
+    }
+
     // MARK: helpers
 
     private func stat(_ name: String, _ size: Int64, _ mtime: TimeInterval) -> WatchedFileStat {

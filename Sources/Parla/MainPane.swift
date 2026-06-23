@@ -338,6 +338,7 @@ struct TranscriptCard: View {
                     .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
+            RetranscribeMenu(item: item)
             ShareLink(item: text) {
                 Image(systemName: "square.and.arrow.up").font(.body)
                     .padding(9).background(.ultraThinMaterial, in: Circle())
@@ -421,5 +422,40 @@ struct TranscriptCard: View {
     private var meta: String {
         let lang = item.language.isEmpty ? "?" : item.language.uppercased()
         return "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(friendlyModel(item.model)) · \(Int(item.durationSec))s · \(item.wordCount) сл."
+    }
+}
+
+/// «Перераспознать» — дропдаун уровней моделей. Перезапускает запись на выбранной модели,
+/// заменяя её содержимое на месте. Выключен, если движок занят или исходник недоступен.
+struct RetranscribeMenu: View {
+    @Environment(AppModel.self) private var model
+    let item: TranscriptItem
+
+    var body: some View {
+        Menu {
+            ForEach(model.modelTiers) { tier in
+                Button { model.retranscribe(item, with: tier.name) } label: {
+                    if tier.name == item.model {
+                        Label("\(tier.title) — текущая", systemImage: "checkmark")
+                    } else if !model.isDownloaded(tier.name) {
+                        Label("\(tier.title) — скачать", systemImage: "arrow.down.circle")
+                    } else {
+                        Text(tier.title)
+                    }
+                }
+                .disabled(tier.name == item.model)   // та же модель — пересчитывать нечего
+            }
+        } label: {
+            Image(systemName: "arrow.triangle.2.circlepath").font(.body)
+                .padding(9).background(.ultraThinMaterial, in: Circle())
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .fixedSize()
+        .disabled(!model.canRetranscribe(item))
+        .help(item.hasResolvableSource
+              ? "Перераспознать другой моделью"
+              : "Исходный файл недоступен — перетащи его заново")
     }
 }

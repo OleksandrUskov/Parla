@@ -201,27 +201,16 @@ final class AppModel {
             // Позицию в очереди показываем только для батча (>1 файла); одиночный дроп выглядит как раньше.
             let batch = total > 1 ? BatchProgress(index: i + 1, total: total, done: i) : nil
             do {
-                phase = .preparing(url.lastPathComponent, batch: batch)
-                let wav = try await Task.detached(priority: .userInitiated) {
-                    try AudioConverter.toWav16k(url)
-                }.value
-                defer { try? FileManager.default.removeItem(at: wav) }
-
-                phase = .loadingModel
-                try await engine.ensureLoaded(model: selectedModel, progress: progressHandler())
-
-                phase = .transcribing(url.lastPathComponent, batch: batch)
-                let lang = language.isEmpty ? nil : language
-                let r = try await engine.transcribe(wavPath: wav.path, language: lang,
-                                                    model: selectedModel, translate: translateToEnglish)
-
+                let r = try await transcribeOne(url: url, model: selectedModel, batch: batch)
                 let item = TranscriptItem(
                     sourceName: url.lastPathComponent,
                     language: r.language,
                     durationSec: r.duration,
                     model: selectedModel,
                     text: r.text.isEmpty ? "(тишина — ничего не распознано)" : r.text,
-                    segments: r.segments
+                    segments: r.segments,
+                    sourcePath: url.path,                       // запоминаем исходник для «перераспознать»
+                    sourceBookmark: makeSourceBookmark(url)
                 )
                 history.insert(item, at: 0)
                 selection = item.id
@@ -242,6 +231,73 @@ final class AppModel {
         if BatchNotifier.shouldNotify(total: total, elapsed: elapsed, frontmost: NSApp.isActive) {
             await BatchNotifier.post(succeeded: succeeded, failed: failures.count)
         }
+    }
+
+    /// Один файл → EngineResult: конвертация → загрузка модели (со скачиванием при надобности) →
+    /// распознавание. Фазы выставляет сам (с учётом позиции в батче). Бросает на ошибке.
+    /// Общий путь для свежего дропа и «перераспознать».
+    private func transcribeOne(url: URL, model: String, batch: BatchProgress? = nil) async throws -> EngineResult {
+        phase = .preparing(url.lastPathComponent, batch: batch)
+        let wav = try await Task.detached(priority: .userInitiated) {
+            try AudioConverter.toWav16k(url)
+        }.value
+        defer { try? FileManager.default.removeItem(at: wav) }
+
+        phase = .loadingModel
+        try await engine.ensureLoaded(model: model, progress: progressHandler())
+
+        phase = .transcribing(url.lastPathComponent, batch: batch)
+        let lang = language.isEmpty ? nil : language
+        return try await engine.transcribe(wavPath: wav.path, language: lang,
+                                           model: model, translate: translateToEnglish)
+    }
+
+    // MARK: Перераспознать (фича 01)
+
+    /// Можно ли перераспознать запись: движок свободен и исходник доступен.
+    func canRetranscribe(_ item: TranscriptItem) -> Bool {
+        !isBusy && downloadingModel == nil && item.hasResolvableSource
+    }
+
+    /// Перезапустить запись на другой модели, заменив её содержимое НА МЕСТЕ (тот же id/позиция).
+    func retranscribe(_ item: TranscriptItem, with model: String) {
+        guard !isBusy, downloadingModel == nil else { return }
+        guard model != item.model else { return }            // та же модель — пересчитывать нечего
+        phase = .preparing(item.sourceName)                   // синхронно занимаем фазу — закрываем гонку (как handleDrop)
+        Task { await runRetranscribe(item, with: model) }
+    }
+
+    private func runRetranscribe(_ item: TranscriptItem, with model: String) async {
+        // Резолвим исходник ВНУТРИ задачи: файл мог исчезнуть между открытием меню и подтверждением.
+        switch item.resolveSource() {
+        case .missing:
+            phase = .failed("Файл-источник «\(item.sourceName)» не найден — перетащи его заново")
+        case .found(let url, let scoped):
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let r = try await transcribeOne(url: url, model: model)
+                if let idx = history.firstIndex(where: { $0.id == item.id }) {
+                    var updated = history[idx]
+                    updated.language    = r.language
+                    updated.durationSec = r.duration
+                    updated.model       = model
+                    updated.text        = r.text.isEmpty ? "(тишина — ничего не распознано)" : r.text
+                    updated.segments    = r.segments
+                    updated.date        = Date()
+                    updated.edited      = nil   // свежее распознавание → сбрасываем флаг ручной правки (таймкоды снова валидны)
+                    updated.editedAt    = nil
+                    history[idx] = updated      // замена НА МЕСТЕ: id/позиция/sourcePath сохранены
+                    selection = updated.id
+                    HistoryStore.save(history)
+                    if autoCopy, !r.text.isEmpty { copy(updated.text) }
+                }
+                phase = .idle
+            } catch {
+                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                phase = .failed("Не удалось перераспознать: \(msg)")
+            }
+        }
+        refreshDownloaded()   // целевая модель могла только что скачаться
     }
 
     private func progressHandler() -> @Sendable (ModelLoad) -> Void {

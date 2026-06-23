@@ -19,6 +19,8 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var segments: [Segment]
     var edited: Bool? = nil           // правился ли текст вручную (Optional — иначе старый history.json не декодится)
     var editedAt: Date? = nil         // когда правился (nil для нетронутых / легаси-записей)
+    var sourcePath: String? = nil     // абсолютный путь к исходнику (для «перераспознать»); nil у старых/легаси
+    var sourceBookmark: Data? = nil   // запасной локатор-bookmark; nil — норм (Optional → легаси-совместимо)
 
     /// Удобный аксессор: nil/false → не редактировалось.
     var isEdited: Bool { edited == true }
@@ -37,6 +39,47 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var wordCount: Int {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
     }
+}
+
+// MARK: - Поиск исходного файла записи (фича 01 «перераспознать»)
+
+/// Результат попытки найти исходник записи.
+enum SourceResolution: Equatable {
+    case found(URL, scoped: Bool)   // scoped == true → надо вызвать stopAccessing… после (на будущее, под sandbox)
+    case missing
+}
+
+extension TranscriptItem {
+    /// Пытается найти исходный файл: сначала по абсолютному пути, затем по bookmark.
+    /// Несендбоксный билд: обычный путь — основной механизм, bookmark — запасной локатор.
+    func resolveSource(fileManager fm: FileManager = .default) -> SourceResolution {
+        if let p = sourcePath, fm.fileExists(atPath: p) {
+            return .found(URL(fileURLWithPath: p), scoped: false)
+        }
+        if let data = sourceBookmark {
+            var stale = false
+            if let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale),
+               fm.fileExists(atPath: url.path) {
+                return .found(url, scoped: false)   // обычный bookmark (не security-scoped — приложение не в песочнице)
+            }
+        }
+        return .missing
+    }
+
+    /// Доступен ли исходник прямо сейчас (для включения/выключения пункта «перераспознать»).
+    var hasResolvableSource: Bool {
+        if case .found(let url, let scoped) = resolveSource() {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            return true
+        }
+        return false
+    }
+}
+
+/// Best-effort bookmark исходника при создании записи. Обычный (не security-scoped) — годится
+/// как запасной локатор в несендбоксном билде. Ошибки игнорируем: основной механизм — путь.
+func makeSourceBookmark(_ url: URL) -> Data? {
+    try? url.bookmarkData()
 }
 
 func fmtTime(_ s: Double) -> String {
