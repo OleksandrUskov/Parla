@@ -18,6 +18,12 @@ running OpenAI Whisper on the Apple Neural Engine. Nothing leaves your machine.
 - 🧠 **On-device Whisper** via CoreML / Neural Engine — fast, free, private
 - 🌍 **~99 languages** with auto-detect — English and any other work out of the box; great Russian / Ukrainian / surzhik
 - 🔁 **Translate to English** — turn speech in any language straight into English text (Whisper translate task)
+- ✏️ **Edit transcripts in place** — fix the odd misheard word; the correction is saved to history
+- ▶️ **Built-in audio player** — listen alongside the text and **click any timestamp to jump** there
+- 🔂 **Re-transcribe** an old entry with a different model (compare Tiny vs large-v3 turbo) — no re-dragging
+- 👁 **Folder watch** — point Parla at a folder and new audio is transcribed automatically, hands-free
+- 📦 **Batch progress** “N of M” + a completion notification when a long job finishes in the background
+- ⌨️ **Quick-transcribe from the menu bar** — “from clipboard”, “repeat last file”, popover drop, or an optional global hotkey ⌃⌥⌘T
 - 🧩 **Model manager** — pick / download / **delete** models with progress, on-disk size, and a recommended pick
 - 🔎 **Searchable history** + 📤 **export** all transcripts to a Markdown file (backup)
 - 📋 **Auto-copy** to the clipboard · ⏱ optional **timestamps** · word count · share sheet
@@ -71,6 +77,25 @@ audio file ──▶ ffmpeg (→ 16 kHz mono WAV) ──▶ WhisperKit (CoreML /
 - The UI is SwiftUI: a custom sidebar + main pane over an aurora gradient, glass cards
   (`.ultraThinMaterial`), plus a `MenuBarExtra`.
 - History is a plain JSON file in `~/Library/Application Support/Parla/`.
+
+## Privacy & permissions
+
+Parla is **100% on-device** — audio is transcribed locally by WhisperKit. Nothing is uploaded;
+there is no account, telemetry, or analytics. The only network use is the **one-time model
+download** (CoreML weights from Hugging Face).
+
+Everything beyond plain transcription is **opt-in** and asks for the minimum macOS permission:
+
+| Feature | Permission | Notes |
+|---|---|---|
+| Transcribe · edit · player · history | **none** | local files only |
+| Menu-bar quick actions (clipboard / last file / popover drop) | **none** | reads a file URL from the clipboard only when you click or drop |
+| Folder watch | folder access (macOS may prompt once for Downloads/Desktop/Documents) | only **new** files that appear *after* you turn it on are processed |
+| Global hotkey ⌃⌥⌘T *(off by default)* | Accessibility | needed only for the **global** combo; the menu-bar buttons work with no permission. The monitor checks for that one combo — **no keystrokes are logged or stored** |
+
+Parla is **not sandboxed** (it shells out to `ffmpeg`), so it ships outside the Mac App Store —
+and it's open source, so you can read exactly what it does. Source audio you transcribe is kept
+in `~/Library/Application Support/Parla/audio/` for the player; clear it anytime in **Settings**.
 
 ## Tech stack
 
