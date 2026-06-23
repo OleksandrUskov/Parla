@@ -46,11 +46,20 @@ running OpenAI Whisper on the Apple Neural Engine. Nothing leaves your machine.
 git clone <your-repo-url> Parla
 cd Parla
 ./build_app.sh          # builds Parla.app (first run compiles WhisperKit, a few minutes)
-open .                  # then drag Parla.app into /Applications
+open Parla.app          # launch it (or double-click Parla.app in Finder; drag into /Applications to keep)
 ```
 
 `build_app.sh` produces a signed (ad-hoc) `Parla.app` with an icon. First transcription with
 a given model downloads its CoreML weights once (large-v3 turbo ≈ 600 MB–1.5 GB).
+
+> **Run it as the built `.app`, not from an IDE.** Parla is a Swift Package, not an Xcode project —
+> pressing **Build & Run** in Xcode/VS Code launches the bare executable, and a SwiftUI windowed app
+> needs a real `.app` bundle to show its window, so nothing appears. Always run via
+> `./build_app.sh && open Parla.app` (or double-click the built `Parla.app`).
+>
+> First launch of a big model shows **"Загружаю модель в память…"** for a while — that's a **one-time**
+> CoreML/Neural-Engine compile (the model is already on disk; it's not re-downloading), cached afterward.
+> Subsequent launches are fast. Want it consistently quick? Pick a smaller model (Base/Small).
 
 ## Usage
 
