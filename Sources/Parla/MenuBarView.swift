@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct MenuBarView: View {
     @Environment(AppModel.self) private var model
@@ -13,6 +14,23 @@ struct MenuBarView: View {
                 Spacer()
                 if model.isBusy { ProgressView().controlSize(.small) }
             }
+
+            Divider()
+
+            // Быстрые действия — без разрешений. Перетащить файл можно в открытый поповер ниже.
+            Button { model.quickTranscribeFromClipboard() } label: {
+                Label("Распознать из буфера", systemImage: "doc.on.clipboard")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isBusy || model.downloadingModel != nil)
+
+            Button { model.transcribeLast() } label: {
+                Label("Повторить последний файл", systemImage: "arrow.clockwise")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isBusy || model.downloadingModel != nil)
 
             Divider()
 
@@ -57,5 +75,14 @@ struct MenuBarView: View {
         }
         .padding(12)
         .frame(width: 300)
+        // Дроп файла в ОТКРЫТЫЙ поповер (дроп на закрытую иконку macOS не поддерживает — см. блупринт).
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            Task { @MainActor in
+                var urls: [URL] = []
+                for p in providers { if let u = await DropZoneView.loadFileURL(p) { urls.append(u) } }
+                if !urls.isEmpty { model.handleDrop(urls: urls) }
+            }
+            return true
+        }
     }
 }

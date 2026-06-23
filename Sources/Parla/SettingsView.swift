@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
@@ -51,6 +52,24 @@ struct SettingsView: View {
                 Toggle("Включая подпапки", isOn: $model.watchRecursive)
                 Toggle("Сохранять .txt рядом с файлом", isOn: $model.watchWriteSidecar)
                 Text("Новые аудиофайлы в папке распознаются сами — как старый скрипт, но локально. Транскрибируются только файлы, появившиеся после включения; уже лежащие игнорируются.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Горячая клавиша") {
+                Toggle("Глобальный хоткей ⌃⌥⌘T — распознать из буфера", isOn: $model.globalHotkeyEnabled)
+                if model.globalHotkeyEnabled && !HotKeyMonitor.isTrusted() {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Нужен «Универсальный доступ»").foregroundStyle(.orange).font(.caption)
+                        Button("Открыть настройки доступа") {
+                            _ = HotKeyMonitor.isTrusted(prompt: true)   // системный запрос
+                            if let u = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                NSWorkspace.shared.open(u)
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                Text("Когда Parla активна, комбинация работает и без доступа. Глобально (из других приложений) — после выдачи «Универсального доступа». После пере-сборки приложения доступ может потребоваться выдать заново.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

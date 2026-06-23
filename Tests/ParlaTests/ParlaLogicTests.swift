@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import Parla
 
 /// Юнит-тесты на чистую логику (без WhisperKit/аудио/UI):
@@ -725,6 +726,51 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(activeSegmentIndex(segs, at: 11), 2)
         XCTAssertEqual(activeSegmentIndex(segs, at: 100), 2)    // за концом → последний
         XCTAssertNil(activeSegmentIndex([], at: 1))             // нет сегментов
+    }
+
+    // MARK: Быстрая расшифровка — буфер + хоткей (фича 03)
+
+    func testPasteboardParseFileScheme() {
+        XCTAssertEqual(PasteboardReader.parse(strings: ["file:///Users/me/v.ogg"]).map(\.path),
+                       ["/Users/me/v.ogg"])
+    }
+    func testPasteboardParsePosixPath() {
+        XCTAssertEqual(PasteboardReader.parse(strings: ["/tmp/a.m4a"]).first?.lastPathComponent, "a.m4a")
+    }
+    func testPasteboardParseTrimsWhitespace() {
+        XCTAssertEqual(PasteboardReader.parse(strings: ["  /tmp/b.wav \n"]).first?.lastPathComponent, "b.wav")
+    }
+    func testPasteboardParseRejectsNonPaths() {
+        XCTAssertTrue(PasteboardReader.parse(strings: ["привет мир", "", "https://x.com/a.ogg"]).isEmpty)
+    }
+    func testPasteboardParseEmpty() {
+        XCTAssertTrue(PasteboardReader.parse(strings: []).isEmpty)
+    }
+
+    func testAudioOnlyKeepsAudioDropsOther() {
+        let urls = [URL(fileURLWithPath: "/t/a.ogg"), URL(fileURLWithPath: "/t/b.pdf"),
+                    URL(fileURLWithPath: "/t/c.M4A"), URL(fileURLWithPath: "/t/d.txt")]
+        XCTAssertEqual(PasteboardReader.audioOnly(urls).map { $0.lastPathComponent }, ["a.ogg", "c.M4A"])  // регистронезависимо, только аудио
+    }
+    func testAudioOnlyEmpty() {
+        XCTAssertTrue(PasteboardReader.audioOnly([]).isEmpty)
+    }
+
+    func testHotKeyMatchesExact() {
+        let mods: NSEvent.ModifierFlags = [.control, .option, .command]
+        XCTAssertTrue(hotKeyMatches(keyCode: 17, flags: mods, wantKey: 17, wantMods: mods))
+    }
+    func testHotKeyMatchesIgnoresExtraFlags() {
+        let mods: NSEvent.ModifierFlags = [.control, .option, .command]
+        XCTAssertTrue(hotKeyMatches(keyCode: 17, flags: mods.union(.capsLock), wantKey: 17, wantMods: mods))  // лишний capslock не мешает
+    }
+    func testHotKeyRejectsMissingModifier() {
+        let mods: NSEvent.ModifierFlags = [.control, .option, .command]
+        XCTAssertFalse(hotKeyMatches(keyCode: 17, flags: [.command], wantKey: 17, wantMods: mods))
+    }
+    func testHotKeyRejectsWrongKey() {
+        let mods: NSEvent.ModifierFlags = [.control, .option, .command]
+        XCTAssertFalse(hotKeyMatches(keyCode: 16, flags: mods, wantKey: 17, wantMods: mods))
     }
 
     // MARK: helpers

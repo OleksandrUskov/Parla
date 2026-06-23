@@ -5,6 +5,7 @@ import UserNotifications
 @main
 struct ParlaApp: App {
     @State private var model = AppModel()
+    @State private var hotkey: HotKeyMonitor?
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -15,6 +16,8 @@ struct ParlaApp: App {
                     model.startWatchingIfEnabled()       // возобновить слежение за папкой, если включено
                     await model.refreshModels()
                 }
+                .onAppear { syncHotkey() }
+                .onChange(of: model.globalHotkeyEnabled) { _, _ in syncHotkey() }
                 .preferredColorScheme(.dark)
         }
         .defaultSize(width: 980, height: 660)
@@ -29,6 +32,17 @@ struct ParlaApp: App {
                 .environment(model)
                 .frame(width: 500)
                 .preferredColorScheme(.dark)
+        }
+    }
+
+    /// Включить/выключить монитор хоткея вслед за настройкой. Монитор живёт на уровне приложения.
+    @MainActor private func syncHotkey() {
+        if model.globalHotkeyEnabled {
+            if hotkey == nil { hotkey = HotKeyMonitor { model.quickTranscribeFromClipboard() } }
+            hotkey?.start()
+        } else {
+            hotkey?.stop()
+            hotkey = nil
         }
     }
 }

@@ -28,6 +28,9 @@ final class AppModel {
     var watchEnabled: Bool      { didSet { UserDefaults.standard.set(watchEnabled, forKey: Keys.watchEnabled); applyWatchToggle() } }
     var watchRecursive: Bool    { didSet { UserDefaults.standard.set(watchRecursive, forKey: Keys.watchRecursive); if watchEnabled { restartWatching() } } }
     var watchWriteSidecar: Bool { didSet { UserDefaults.standard.set(watchWriteSidecar, forKey: Keys.watchSidecar) } }
+    var globalHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(globalHotkeyEnabled, forKey: Keys.hotkey) } }
+
+    private var quickModeRun = false   // запуск инициирован хоткеем/меню-баром → показать тост по завершении
 
     var watchedFolderURL: URL?          // резолвится из bookmark — для отображения пути
     var watchQueueCount: Int = 0        // сколько файлов ждут в очереди (для статус-чипа)
@@ -51,6 +54,8 @@ final class AppModel {
         static let watchRecursive = "watchRecursive"
         static let watchSidecar = "watchWriteSidecar"
         static let watchBookmark = "watchBookmark"
+        static let hotkey = "globalHotkeyEnabled"
+        static let lastBookmark = "lastSourceBookmark"
     }
 
     init() {
@@ -63,6 +68,7 @@ final class AppModel {
         watchEnabled = d.bool(forKey: Keys.watchEnabled)
         watchRecursive = (d.object(forKey: Keys.watchRecursive) as? Bool) ?? true   // подпапки по умолчанию вкл.
         watchWriteSidecar = d.bool(forKey: Keys.watchSidecar)
+        globalHotkeyEnabled = d.bool(forKey: Keys.hotkey)   // opt-in, по умолчанию выкл.
         processedKeys = ProcessedStore.load()
         processedSet = Set(processedKeys)
         availableModels = [
@@ -221,6 +227,7 @@ final class AppModel {
                 HistoryStore.save(history)
                 if autoCopy, !r.text.isEmpty { copy(item.text) }
                 succeeded += 1
+                rememberSource(url)            // для «повторить последний файл»
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 failures.append("\(url.lastPathComponent) (\(msg))")
@@ -234,6 +241,16 @@ final class AppModel {
         let elapsed = Date().timeIntervalSince(jobStart)
         if BatchNotifier.shouldNotify(total: total, elapsed: elapsed, frontmost: NSApp.isActive) {
             await BatchNotifier.post(succeeded: succeeded, failed: failures.count)
+        }
+
+        // Тост для быстрого режима (хоткей/меню-бар) — у пользователя нет открытого окна с чипом.
+        if quickModeRun {
+            quickModeRun = false
+            if !failures.isEmpty {
+                QuickToast.shared.show("Не удалось распознать")
+            } else {
+                QuickToast.shared.show(autoCopy ? "Готово · скопировано в буфер" : "Готово")
+            }
         }
     }
 
@@ -430,6 +447,50 @@ final class AppModel {
                 guard let size = v?.fileSize, let mtime = v?.contentModificationDate else { return nil }
                 return WatchedFileStat(url: url, size: Int64(size), mtime: mtime)
             }
+    }
+
+    // MARK: Быстрая расшифровка — хоткей / меню-бар (фича 03)
+
+    /// Триггер из хоткея или кнопки «Распознать из буфера»: берём аудиофайл из буфера и запускаем.
+    func quickTranscribeFromClipboard() {
+        guard !isBusy, downloadingModel == nil else {
+            QuickToast.shared.show("Подожди — идёт другая задача")
+            return
+        }
+        let urls = PasteboardReader.audioOnly(PasteboardReader.fileURLs())
+        guard let first = urls.first else {
+            QuickToast.shared.show("В буфере нет аудиофайла")
+            return
+        }
+        quickModeRun = true
+        QuickToast.shared.show("Распознаю «\(first.lastPathComponent)»…", sticky: true)
+        handleDrop(urls: urls)   // существующий вход; гонку двойного запуска он уже закрывает
+    }
+
+    /// Повторить последний файл (если он ещё на диске).
+    func transcribeLast() {
+        guard !isBusy, downloadingModel == nil else { return }
+        guard let url = resolveLastSource() else {
+            QuickToast.shared.show("Последний файл недоступен")
+            return
+        }
+        quickModeRun = true
+        QuickToast.shared.show("Повторяю «\(url.lastPathComponent)»…", sticky: true)
+        handleDrop(urls: [url])
+    }
+
+    private func rememberSource(_ url: URL) {
+        if let data = try? url.bookmarkData() {   // обычный bookmark (приложение не в песочнице)
+            UserDefaults.standard.set(data, forKey: Keys.lastBookmark)
+        }
+    }
+
+    private func resolveLastSource() -> URL? {
+        guard let data = UserDefaults.standard.data(forKey: Keys.lastBookmark) else { return nil }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale),
+              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
     }
 
     // MARK: История
