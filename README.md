@@ -23,7 +23,7 @@ running OpenAI Whisper on the Apple Neural Engine. Nothing leaves your machine.
 - 🔂 **Re-transcribe** an old entry with a different model (compare Tiny vs large-v3 turbo) — no re-dragging
 - 👁 **Folder watch** — point Parla at a folder and new audio is transcribed automatically, hands-free
 - 📦 **Batch progress** “N of M” + a completion notification when a long job finishes in the background
-- ⌨️ **Quick-transcribe from the menu bar** — “from clipboard”, “repeat last file”, popover drop, or an optional global hotkey ⌃⌥⌘T
+- ⌨️ **Quick-transcribe from the menu bar** — “from clipboard”, “repeat last file”, popover drop, or an optional **rebindable** global hotkey (default ⌃⌥⌘T, no Accessibility permission)
 - 🧩 **Model manager** — pick / download / **delete** models with progress, on-disk size, and a recommended pick
 - 🔎 **Searchable history** + 📤 **export** all transcripts to a Markdown file (backup)
 - 📋 **Auto-copy** to the clipboard · ⏱ optional **timestamps** · word count · share sheet
@@ -91,7 +91,7 @@ Everything beyond plain transcription is **opt-in** and asks for the minimum mac
 | Transcribe · edit · player · history | **none** | local files only |
 | Menu-bar quick actions (clipboard / last file / popover drop) | **none** | reads a file URL from the clipboard only when you click or drop |
 | Folder watch | folder access (macOS may prompt once for Downloads/Desktop/Documents) | only **new** files that appear *after* you turn it on are processed |
-| Global hotkey ⌃⌥⌘T *(off by default)* | Accessibility | needed only for the **global** combo; the menu-bar buttons work with no permission. The monitor checks for that one combo — **no keystrokes are logged or stored** |
+| Global hotkey *(off by default, rebindable, default ⌃⌥⌘T)* | **none** | uses Carbon `RegisterEventHotKey` (via [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts)) — registers one chosen combo, **no Accessibility, no system prompt, no keystroke logging**. The menu-bar buttons work too |
 
 Parla is **not sandboxed** (it shells out to `ffmpeg`), so it ships outside the Mac App Store —
 and it's open source, so you can read exactly what it does.
@@ -109,7 +109,7 @@ defaults write com.parla.app PARLA_AUDIO_CAP_MB -int 2000   # 2 GB; use 0 for un
 
 ## Tech stack
 
-Swift 6 toolchain (Swift 5 language mode) · SwiftUI · [WhisperKit](https://github.com/argmaxinc/WhisperKit) · CoreML · ffmpeg
+Swift 6 toolchain (Swift 5 language mode) · SwiftUI · [WhisperKit](https://github.com/argmaxinc/WhisperKit) · CoreML · ffmpeg · [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) (MIT, for the rebindable hotkey)
 
 ## Notes
 

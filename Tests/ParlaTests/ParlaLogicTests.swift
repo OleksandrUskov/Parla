@@ -1,5 +1,4 @@
 import XCTest
-import AppKit
 @testable import Parla
 
 /// Юнит-тесты на чистую логику (без WhisperKit/аудио/UI):
@@ -754,23 +753,6 @@ final class ParlaLogicTests: XCTestCase {
     }
     func testAudioOnlyEmpty() {
         XCTAssertTrue(PasteboardReader.audioOnly([]).isEmpty)
-    }
-
-    func testHotKeyMatchesExact() {
-        let mods: NSEvent.ModifierFlags = [.control, .option, .command]
-        XCTAssertTrue(hotKeyMatches(keyCode: 17, flags: mods, wantKey: 17, wantMods: mods))
-    }
-    func testHotKeyMatchesIgnoresExtraFlags() {
-        let mods: NSEvent.ModifierFlags = [.control, .option, .command]
-        XCTAssertTrue(hotKeyMatches(keyCode: 17, flags: mods.union(.capsLock), wantKey: 17, wantMods: mods))  // лишний capslock не мешает
-    }
-    func testHotKeyRejectsMissingModifier() {
-        let mods: NSEvent.ModifierFlags = [.control, .option, .command]
-        XCTAssertFalse(hotKeyMatches(keyCode: 17, flags: [.command], wantKey: 17, wantMods: mods))
-    }
-    func testHotKeyRejectsWrongKey() {
-        let mods: NSEvent.ModifierFlags = [.control, .option, .command]
-        XCTAssertFalse(hotKeyMatches(keyCode: 16, flags: mods, wantKey: 17, wantMods: mods))
     }
 
     // MARK: Авто-уборка аудио-кэша (LRU)

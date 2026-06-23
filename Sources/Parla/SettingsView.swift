@@ -1,5 +1,5 @@
 import SwiftUI
-import AppKit
+import KeyboardShortcuts
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
@@ -56,20 +56,11 @@ struct SettingsView: View {
             }
 
             Section("Горячая клавиша") {
-                Toggle("Глобальный хоткей ⌃⌥⌘T — распознать из буфера", isOn: $model.globalHotkeyEnabled)
-                if model.globalHotkeyEnabled && !HotKeyMonitor.isTrusted() {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Нужен «Универсальный доступ»").foregroundStyle(.orange).font(.caption)
-                        Button("Открыть настройки доступа") {
-                            _ = HotKeyMonitor.isTrusted(prompt: true)   // системный запрос
-                            if let u = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                                NSWorkspace.shared.open(u)
-                            }
-                        }
-                        .controlSize(.small)
-                    }
+                Toggle("Глобальный хоткей — распознать аудио из буфера", isOn: $model.globalHotkeyEnabled)
+                if model.globalHotkeyEnabled {
+                    KeyboardShortcuts.Recorder("Комбинация:", name: .quickTranscribe)
                 }
-                Text("Когда Parla активна, комбинация работает и без доступа. Глобально (из других приложений) — после выдачи «Универсального доступа». После пере-сборки приложения доступ может потребоваться выдать заново.")
+                Text("Работает глобально из любого приложения — без «Универсального доступа» и системных запросов. Кликни по полю, чтобы переназначить. Кнопки «Распознать из буфера» / «Повторить последний файл» в меню-баре работают всегда.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

@@ -8,12 +8,16 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
+        // Глобальный хоткей через Carbon (RegisterEventHotKey) — БЕЗ «Универсального доступа»,
+        // переназначаемый, с готовым SwiftUI-рекордером. MIT. Замена ручному NSEvent-монитору.
+        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
     ],
     targets: [
         .executableTarget(
             name: "Parla",
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
             ],
             path: "Sources/Parla",
             swiftSettings: [.swiftLanguageMode(.v5)]

@@ -1,11 +1,12 @@
 import SwiftUI
 import AppKit
 import UserNotifications
+import KeyboardShortcuts
 
 @main
 struct ParlaApp: App {
     @State private var model = AppModel()
-    @State private var hotkey: HotKeyMonitor?
+    @State private var hotkeyInstalled = false
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -13,11 +14,11 @@ struct ParlaApp: App {
                 .environment(model)
                 .task {
                     NotificationClickHandler.install()   // клик по уведомлению о завершении → окно вперёд
+                    installHotkeyOnce()                  // обработчик хоткея + привести вкл/выкл к настройке
                     model.startWatchingIfEnabled()       // возобновить слежение за папкой, если включено
                     await model.pruneAudioCache()        // убрать сирот + старое аудио сверх лимита
                     await model.refreshModels()
                 }
-                .onAppear { syncHotkey() }
                 .onChange(of: model.globalHotkeyEnabled) { _, _ in syncHotkey() }
                 .preferredColorScheme(.dark)
         }
@@ -36,15 +37,20 @@ struct ParlaApp: App {
         }
     }
 
-    /// Включить/выключить монитор хоткея вслед за настройкой. Монитор живёт на уровне приложения.
-    @MainActor private func syncHotkey() {
-        if model.globalHotkeyEnabled {
-            if hotkey == nil { hotkey = HotKeyMonitor { model.quickTranscribeFromClipboard() } }
-            hotkey?.start()
-        } else {
-            hotkey?.stop()
-            hotkey = nil
+    /// Один раз: зарегистрировать обработчик глобальной комбинации + привести вкл/выкл к настройке.
+    /// Регистрация только в реальном приложении (через `.task`), не в `swift test`.
+    @MainActor private func installHotkeyOnce() {
+        if !hotkeyInstalled {
+            hotkeyInstalled = true
+            KeyboardShortcuts.onKeyUp(for: .quickTranscribe) { model.quickTranscribeFromClipboard() }
         }
+        syncHotkey()
+    }
+
+    /// Вкл/выкл глобальной комбинации вслед за тоглом (Carbon, без «Универсального доступа»).
+    @MainActor private func syncHotkey() {
+        if model.globalHotkeyEnabled { KeyboardShortcuts.enable(.quickTranscribe) }
+        else { KeyboardShortcuts.disable(.quickTranscribe) }
     }
 }
 
