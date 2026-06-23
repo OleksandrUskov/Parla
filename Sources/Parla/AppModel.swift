@@ -237,6 +237,22 @@ final class AppModel {
         }
     }
 
+    /// Сохранить отредактированный текст карточки в историю.
+    /// Резолвит запись по `id` (а не по копии), штампует `edited`/`editedAt`, пишет на диск.
+    /// Возвращает true, если текст реально изменился (для UI-фидбэка); no-op правка → false.
+    @discardableResult
+    func saveEdit(_ rawText: String, for id: TranscriptItem.ID) -> Bool {
+        guard let idx = history.firstIndex(where: { $0.id == id }) else { return false }
+        let (newText, changed) = normalizedEdit(rawText, from: history[idx].text)
+        guard changed else { return false }   // ничего по сути не поменялось → не пишем и не штампуем
+        history[idx].text = newText
+        history[idx].edited = true
+        history[idx].editedAt = Date()
+        HistoryStore.save(history)
+        selection = id                        // держим выделение на отредактированной записи
+        return true
+    }
+
     func delete(_ item: TranscriptItem) {
         history.removeAll { $0.id == item.id }
         if selection == item.id { selection = nil }

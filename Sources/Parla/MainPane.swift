@@ -254,35 +254,117 @@ struct TranscriptCard: View {
     @Environment(AppModel.self) private var model
     let item: TranscriptItem
 
+    @State private var isEditing = false
+    @State private var draft = ""
+    @FocusState private var editorFocused: Bool
+
     private var text: String { item.display(timestamps: model.showTimestamps) }
     private var justCopied: Bool { model.lastCopiedID == item.id }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.sourceName).font(.system(.headline, design: .rounded)).lineLimit(1)
+            header
+            content
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Смена выделения (или новая расшифровка) → сбрасываем незавершённую правку, чтобы
+        // не записать её в чужую запись.
+        .onChange(of: item.id) { _, _ in if isEditing { cancelEdit() } }
+    }
+
+    // MARK: Шапка — мета + действия (разные в режиме чтения и правки)
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.sourceName).font(.system(.headline, design: .rounded)).lineLimit(1)
+                HStack(spacing: 6) {
                     Text(meta).font(.caption).foregroundStyle(.secondary)
+                    if item.isEdited { editedChip }
                 }
-                Spacer()
-                Button { model.copyItem(item) } label: {
-                    Label(justCopied ? "Скопировано" : "Копировать",
-                          systemImage: justCopied ? "checkmark" : "doc.on.doc")
-                        .font(.callout.weight(.medium))
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(
-                            justCopied ? AnyShapeStyle(Color.green.opacity(0.3)) : AnyShapeStyle(Brand.gradient),
-                            in: Capsule()
-                        )
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-                ShareLink(item: text) {
-                    Image(systemName: "square.and.arrow.up").font(.body)
+            }
+            Spacer()
+            if isEditing { editActions } else { readActions }
+        }
+    }
+
+    private var readActions: some View {
+        HStack(spacing: 10) {
+            if !model.isBusy {
+                Button { beginEdit() } label: {
+                    Image(systemName: "pencil").font(.body)
                         .padding(9).background(.ultraThinMaterial, in: Circle())
                 }
                 .buttonStyle(.plain)
+                .help("Редактировать текст")
             }
+            Button { model.copyItem(item) } label: {
+                Label(justCopied ? "Скопировано" : "Копировать",
+                      systemImage: justCopied ? "checkmark" : "doc.on.doc")
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(
+                        justCopied ? AnyShapeStyle(Color.green.opacity(0.3)) : AnyShapeStyle(Brand.gradient),
+                        in: Capsule()
+                    )
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            ShareLink(item: text) {
+                Image(systemName: "square.and.arrow.up").font(.body)
+                    .padding(9).background(.ultraThinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var editActions: some View {
+        HStack(spacing: 8) {
+            Button { cancelEdit() } label: {
+                Text("Отмена")
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)   // Esc
+            Button { commitEdit() } label: {
+                Label("Готово", systemImage: "checkmark")
+                    .font(.callout.weight(.semibold))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Brand.gradient, in: Capsule())
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.return, modifiers: .command)   // ⌘↩
+        }
+    }
+
+    private var editedChip: some View {
+        Text("изменено")
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Brand.accent.opacity(0.18), in: Capsule())
+            .foregroundStyle(Brand.accent)
+            .help(item.editedAt.map { "Отредактировано \($0.formatted(date: .abbreviated, time: .shortened))" }
+                  ?? "Текст изменён вручную")
+    }
+
+    // MARK: Тело — текст (чтение) или редактор (правка)
+
+    @ViewBuilder private var content: some View {
+        if isEditing {
+            TextEditor(text: $draft)
+                .font(.system(.body, design: .rounded))
+                .scrollContentBackground(.hidden)          // macOS 14-safe; сохраняем тёмный фон карточки
+                .focused($editorFocused)
+                .frame(maxWidth: .infinity, minHeight: 160, maxHeight: .infinity, alignment: .leading)
+                .padding(10)
+                .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+        } else {
             ScrollView {
                 Text(text)
                     .font(.system(.body, design: .rounded))
@@ -292,10 +374,23 @@ struct TranscriptCard: View {
             }
             .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
         }
-        .padding(16)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    // MARK: Правка — хелперы
+
+    private func beginEdit() {
+        draft = item.text          // ВСЕГДА плоский текст, не display(timestamps:)
+        isEditing = true
+        editorFocused = true
+    }
+    private func cancelEdit() {
+        isEditing = false
+        editorFocused = false
+    }
+    private func commitEdit() {
+        model.saveEdit(draft, for: item.id)
+        isEditing = false
+        editorFocused = false
     }
 
     private var meta: String {

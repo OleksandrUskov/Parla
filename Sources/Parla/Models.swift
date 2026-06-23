@@ -17,10 +17,17 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var model: String
     var text: String
     var segments: [Segment]
+    var edited: Bool? = nil           // правился ли текст вручную (Optional — иначе старый history.json не декодится)
+    var editedAt: Date? = nil         // когда правился (nil для нетронутых / легаси-записей)
+
+    /// Удобный аксессор: nil/false → не редактировалось.
+    var isEdited: Bool { edited == true }
 
     /// Текст с таймкодами или без — для отображения/копирования.
+    /// Для отредактированных записей таймкоды подавляются: правленый текст уже не совпадает
+    /// с границами исходных сегментов, поэтому показываем плоский текст.
     func display(timestamps: Bool) -> String {
-        guard timestamps, !segments.isEmpty else { return text }
+        guard timestamps, !isEdited, !segments.isEmpty else { return text }
         return segments
             .filter { !$0.text.isEmpty }
             .map { "[\(fmtTime($0.start))] \($0.text)" }
@@ -35,6 +42,15 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
 func fmtTime(_ s: Double) -> String {
     let t = max(0, Int(s.rounded()))
     return String(format: "%02d:%02d", t / 60, t % 60)
+}
+
+/// Нормализованная правка: убираем CRLF и хвостовые пробелы/переводы строк.
+/// Пустой результат не затирает оригинал. Возвращает (newText, changed).
+func normalizedEdit(_ raw: String, from original: String) -> (text: String, changed: Bool) {
+    let trimmed = raw.replacingOccurrences(of: "\r\n", with: "\n")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    let new = trimmed.isEmpty ? original : trimmed   // не даём случайно стереть весь текст
+    return (new, new != original)
 }
 
 /// «openai_whisper-large-v3-v20240930_turbo_632MB» → «Large v3 v20240930 turbo 632MB».
@@ -83,7 +99,8 @@ func exportText(_ items: [TranscriptItem]) -> String {
     var out = "# Parla — история расшифровок\n\n"
     for it in items {
         out += "## \(it.sourceName)\n"
-        out += "_\(it.date.formatted(date: .abbreviated, time: .shortened)) · \(it.language.uppercased()) · \(friendlyModel(it.model))_\n\n"
+        let editedMark = it.isEdited ? " · изменено" : ""
+        out += "_\(it.date.formatted(date: .abbreviated, time: .shortened)) · \(it.language.uppercased()) · \(friendlyModel(it.model))\(editedMark)_\n\n"
         out += it.text + "\n\n---\n\n"
     }
     return out
@@ -107,7 +124,10 @@ enum EnginePhase: Equatable {
 
 /// Хранилище истории в ~/Library/Application Support/Parla/history.json
 enum HistoryStore {
-    static let fileURL: URL = {
+    /// Путь к файлу истории в ~/Library/Application Support/Parla/.
+    /// `var` (а не `let`) — это тест-шов: тесты подменяют путь на временный, чтобы не трогать
+    /// реальную историю пользователя. В продакшене значение никогда не меняется.
+    static var fileURL: URL = {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Parla", isDirectory: true)

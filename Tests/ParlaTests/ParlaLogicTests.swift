@@ -320,11 +320,124 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertLessThan(m.modelTiers.count, 5)   // отсутствующие уровни не показываются
     }
 
+    // MARK: Правка текста (фича 02)
+
+    func testNormalizedEditDetectsChange() {
+        let a = normalizedEdit("новый текст", from: "старый")
+        XCTAssertTrue(a.changed)
+        XCTAssertEqual(a.text, "новый текст")
+        let b = normalizedEdit("одинаковый", from: "одинаковый")
+        XCTAssertFalse(b.changed)
+        XCTAssertEqual(b.text, "одинаковый")
+    }
+
+    func testNormalizedEditTrimsAndIgnoresWhitespace() {
+        XCTAssertFalse(normalizedEdit("  привет мир  \n", from: "привет мир").changed)  // тримминг → равно
+        XCTAssertFalse(normalizedEdit("a\r\nb", from: "a\nb").changed)                  // CRLF нормализован
+        let changed = normalizedEdit("  новое  ", from: "старое")
+        XCTAssertTrue(changed.changed)
+        XCTAssertEqual(changed.text, "новое")   // вернулся тримнутый текст
+    }
+
+    func testNormalizedEditEmptyKeepsOriginal() {
+        let r = normalizedEdit("   ", from: "оригинал")
+        XCTAssertEqual(r.text, "оригинал")   // пустую правку не применяем
+        XCTAssertFalse(r.changed)
+    }
+
+    func testEditedItemSuppressesTimestamps() {
+        let segs = [Segment(start: 0, end: 2, text: "привет"), Segment(start: 65, end: 67, text: "мир")]
+        let edited = makeItem(text: "привет мир", segments: segs, edited: true)
+        XCTAssertEqual(edited.display(timestamps: true), "привет мир")   // таймкоды подавлены
+        let notEdited = makeItem(text: "привет мир", segments: segs, edited: false)
+        XCTAssertEqual(notEdited.display(timestamps: true), "[00:00] привет\n[01:05] мир")
+        let legacy = makeItem(text: "привет мир", segments: segs, edited: nil)
+        XCTAssertEqual(legacy.display(timestamps: true), "[00:00] привет\n[01:05] мир")  // nil = не редактировалось
+    }
+
+    /// Ключевой миграционный тест: старый history.json без ключей edited/editedAt декодится без throw.
+    func testCodableBackwardCompatLegacyJSON() throws {
+        let legacy = #"[{"id":"\#(UUID().uuidString)","date":740000000,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"openai_whisper-tiny","text":"привет","segments":[]}]"#
+        let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8))
+        XCTAssertEqual(items.count, 1)
+        XCTAssertNil(items.first?.edited)              // отсутствующий ключ → nil, НЕ throw
+        XCTAssertFalse(items.first?.isEdited ?? true)
+        XCTAssertNil(items.first?.editedAt)
+        XCTAssertEqual(items.first?.text, "привет")
+    }
+
+    func testCodableRoundtripWithEditFields() throws {
+        var item = makeItem(text: "txt", segments: [Segment(start: 0, end: 1, text: "x")])
+        item.edited = true
+        item.editedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let data = try JSONEncoder().encode([item])
+        let back = try JSONDecoder().decode([TranscriptItem].self, from: data)
+        XCTAssertEqual(back.first?.edited, true)
+        XCTAssertTrue(back.first?.isEdited ?? false)
+        XCTAssertEqual(back.first?.editedAt, Date(timeIntervalSince1970: 1_700_000_000))
+    }
+
+    @MainActor func testSaveEditPersistsAndStamps() {
+        withTemporaryHistoryStore {
+            let m = AppModel()
+            let item = makeItem(text: "оригинал")
+            m.history = [item]
+
+            XCTAssertTrue(m.saveEdit("исправлено", for: item.id))
+            XCTAssertEqual(m.history.first?.text, "исправлено")
+            XCTAssertEqual(m.history.first?.edited, true)
+            XCTAssertNotNil(m.history.first?.editedAt)
+
+            // no-op: тот же текст → false, штамп не трогаем
+            let stampedAt = m.history.first?.editedAt
+            XCTAssertFalse(m.saveEdit("исправлено", for: item.id))
+            XCTAssertEqual(m.history.first?.editedAt, stampedAt)
+
+            // неизвестный id → false, история не меняется
+            XCTAssertFalse(m.saveEdit("другое", for: UUID()))
+            XCTAssertEqual(m.history.count, 1)
+
+            // правка реально на диске (во временном файле) и декодится обратно
+            let reloaded = HistoryStore.load()
+            XCTAssertEqual(reloaded.first?.text, "исправлено")
+            XCTAssertEqual(reloaded.first?.isEdited, true)
+        }
+    }
+
+    func testExportTextMarksEdited() {
+        let out = exportText([
+            makeItem(name: "a.ogg", text: "txt", edited: true),
+            makeItem(name: "b.ogg", text: "txt2"),
+        ])
+        let blocks = out.components(separatedBy: "---")
+        XCTAssertTrue(blocks[0].contains("## a.ogg"))
+        XCTAssertTrue(blocks[0].contains("изменено"))    // правленая — с пометкой
+        XCTAssertTrue(blocks[1].contains("## b.ogg"))
+        XCTAssertFalse(blocks[1].contains("изменено"))   // обычная — без
+    }
+
     // MARK: helpers
 
     private func makeItem(name: String = "a.ogg", text: String, segments: [Segment] = [],
-                          lang: String = "ru", model: String = "openai_whisper-tiny") -> TranscriptItem {
-        TranscriptItem(sourceName: name, language: lang, durationSec: 1, model: model,
-                       text: text, segments: segments)
+                          lang: String = "ru", model: String = "openai_whisper-tiny",
+                          edited: Bool? = nil) -> TranscriptItem {
+        var item = TranscriptItem(sourceName: name, language: lang, durationSec: 1, model: model,
+                                  text: text, segments: segments)
+        item.edited = edited
+        return item
+    }
+
+    /// Выполнить блок с временным файлом истории — чтобы saveEdit/HistoryStore.save НЕ трогали
+    /// реальную историю пользователя в ~/Library/Application Support/Parla/.
+    private func withTemporaryHistoryStore(_ body: () -> Void) {
+        let original = HistoryStore.fileURL
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ParlaTest-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        HistoryStore.fileURL = dir.appendingPathComponent("history.json")
+        defer {
+            HistoryStore.fileURL = original
+            try? FileManager.default.removeItem(at: dir)
+        }
+        body()
     }
 }
