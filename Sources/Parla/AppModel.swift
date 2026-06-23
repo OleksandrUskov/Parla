@@ -24,6 +24,21 @@ final class AppModel {
     var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Keys.timestamps) } }
     var translateToEnglish: Bool { didSet { UserDefaults.standard.set(translateToEnglish, forKey: Keys.translate) } }
 
+    // Слежение за папкой (фича 04) — тот же didSet-паттерн зеркалирования в UserDefaults.
+    var watchEnabled: Bool      { didSet { UserDefaults.standard.set(watchEnabled, forKey: Keys.watchEnabled); applyWatchToggle() } }
+    var watchRecursive: Bool    { didSet { UserDefaults.standard.set(watchRecursive, forKey: Keys.watchRecursive); if watchEnabled { restartWatching() } } }
+    var watchWriteSidecar: Bool { didSet { UserDefaults.standard.set(watchWriteSidecar, forKey: Keys.watchSidecar) } }
+
+    var watchedFolderURL: URL?          // резолвится из bookmark — для отображения пути
+    var watchQueueCount: Int = 0        // сколько файлов ждут в очереди (для статус-чипа)
+
+    // Приватное состояние слежения/очереди.
+    private var watcher: FolderWatcher?
+    private var watchQueue: [URL] = []                          // ждут транскрибации (single-flight)
+    private var lastSeen: [String: WatchedFileStat] = [:]       // снимок прошлого прохода (стабильность)
+    private var processedKeys: [String] = []                   // FIFO-порядок обработанных dedupKey
+    private var processedSet: Set<String> = []                 // = Set(processedKeys), для O(1) проверки
+
     private let engine = TranscriptionEngine()
 
     private enum Keys {
@@ -32,6 +47,10 @@ final class AppModel {
         static let autoCopy = "autoCopy"
         static let timestamps = "timestamps"
         static let translate = "translateToEnglish"
+        static let watchEnabled = "watchEnabled"
+        static let watchRecursive = "watchRecursive"
+        static let watchSidecar = "watchWriteSidecar"
+        static let watchBookmark = "watchBookmark"
     }
 
     init() {
@@ -41,6 +60,11 @@ final class AppModel {
         autoCopy = (d.object(forKey: Keys.autoCopy) as? Bool) ?? true
         showTimestamps = d.bool(forKey: Keys.timestamps)
         translateToEnglish = d.bool(forKey: Keys.translate)
+        watchEnabled = d.bool(forKey: Keys.watchEnabled)
+        watchRecursive = (d.object(forKey: Keys.watchRecursive) as? Bool) ?? true   // подпапки по умолчанию вкл.
+        watchWriteSidecar = d.bool(forKey: Keys.watchSidecar)
+        processedKeys = ProcessedStore.load()
+        processedSet = Set(processedKeys)
         availableModels = [
             "openai_whisper-tiny", "openai_whisper-base", "openai_whisper-small",
             "openai_whisper-large-v3", "openai_whisper-large-v3-v20240930",
@@ -230,6 +254,122 @@ final class AppModel {
                 }
             }
         }
+    }
+
+    // MARK: Слежение за папкой (фича 04)
+
+    /// Возобновить слежение на старте (зовётся из ParlaApp). Резолвит сохранённую папку.
+    func startWatchingIfEnabled() {
+        watchedFolderURL = resolveBookmarkedFolder()
+        if watchEnabled { startWatching() }
+    }
+
+    /// Выбрать папку через системный диалог и запомнить её (bookmark переживает перезапуск).
+    func pickWatchFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Выбрать"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // Обычный bookmark: приложение не в песочнице. При будущей сэндбоксации (App Store)
+        // заменить на .withSecurityScope + start/stopAccessingSecurityScopedResource.
+        if let data = try? url.bookmarkData() {
+            UserDefaults.standard.set(data, forKey: Keys.watchBookmark)
+        }
+        watchedFolderURL = url
+        if watchEnabled { restartWatching() }
+    }
+
+    private func resolveBookmarkedFolder() -> URL? {
+        guard let data = UserDefaults.standard.data(forKey: Keys.watchBookmark) else { return nil }
+        var stale = false
+        return try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale)
+    }
+
+    private func applyWatchToggle() { watchEnabled ? startWatching() : stopWatching() }
+    private func restartWatching() { stopWatching(); startWatching() }
+
+    private func startWatching() {
+        guard let folder = watchedFolderURL ?? resolveBookmarkedFolder() else { return }
+        watchedFolderURL = folder
+        // ПОЛИТИКА «только новые»: фиксируем текущее содержимое как уже-виденное, в очередь НЕ ставим.
+        let now = Self.scanFolder(folder, recursive: watchRecursive)
+        lastSeen = Dictionary(now.map { ($0.url.path, $0) }, uniquingKeysWith: { a, _ in a })
+        let w = FolderWatcher(folder: folder, recursive: watchRecursive) { [weak self] in
+            self?.handleFolderChange()
+        }
+        watcher = w
+        w.start()
+    }
+
+    private func stopWatching() {
+        watcher?.stop()
+        watcher = nil
+        watchQueue.removeAll()
+        watchQueueCount = 0
+    }
+
+    /// FSEvents/таймер дёрнул нас: перечитать папку, отобрать устаканившиеся новые файлы → в очередь.
+    private func handleFolderChange() {
+        guard let folder = watchedFolderURL else { return }
+        let current = Self.scanFolder(folder, recursive: watchRecursive)
+        let (ready, next) = FolderScan.newStableFiles(current: current, lastSeen: lastSeen, processed: processedSet)
+        lastSeen = next
+        for stat in ready where !watchQueue.contains(stat.url) {
+            watchQueue.append(stat.url)
+            markProcessed(stat.dedupKey)     // помечаем СРАЗУ при постановке → нет повторов и нет вечного ретрая
+        }
+        watchQueueCount = watchQueue.count
+        drainQueue()
+    }
+
+    /// Single-flight: запускаем по одному, только когда движок свободен. Манульный дроп и слежение
+    /// делят одну «полосу» через `isBusy` — никогда не пересекаются.
+    private func drainQueue() {
+        guard !isBusy, downloadingModel == nil, !watchQueue.isEmpty else { return }
+        let next = watchQueue.removeFirst()
+        watchQueueCount = watchQueue.count
+        phase = .preparing(next.lastPathComponent)   // синхронно занимаем фазу → закрываем гонку двойного запуска
+        Task {
+            await transcribe(urls: [next])           // ТОТ ЖЕ путь, что у ручного дропа
+            if watchWriteSidecar { writeSidecar(for: next) }
+            drainQueue()                             // тянем следующий, когда снова свободны
+        }
+    }
+
+    private func markProcessed(_ key: String) {
+        guard !processedSet.contains(key) else { return }
+        processedSet.insert(key)
+        processedKeys.append(key)
+        let capped = FolderScan.capProcessed(processedKeys, max: 2000)
+        if capped.count != processedKeys.count {
+            processedKeys = capped
+            processedSet = Set(capped)
+        }
+        ProcessedStore.save(processedKeys)
+    }
+
+    private func writeSidecar(for src: URL) {
+        guard let item = history.first(where: { $0.sourceName == src.lastPathComponent }) else { return }
+        let txt = src.deletingPathExtension().appendingPathExtension("txt")
+        try? Data(item.display(timestamps: showTimestamps).utf8).write(to: txt, options: .atomic)
+    }
+
+    /// Снимок папки: аудиофайлы + их size/mtime. `nonisolated` — тяжёлый walk можно звать вне main.
+    nonisolated static func scanFolder(_ dir: URL, recursive: Bool) -> [WatchedFileStat] {
+        let fm = FileManager.default
+        let opts: FileManager.DirectoryEnumerationOptions = recursive ? [] : [.skipsSubdirectoryDescendants]
+        guard let en = fm.enumerator(at: dir,
+                                     includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+                                     options: opts) else { return [] }
+        return en.compactMap { $0 as? URL }
+            .filter { audioExts.contains($0.pathExtension.lowercased()) }
+            .compactMap { url in
+                let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+                guard let size = v?.fileSize, let mtime = v?.contentModificationDate else { return nil }
+                return WatchedFileStat(url: url, size: Int64(size), mtime: mtime)
+            }
     }
 
     // MARK: История

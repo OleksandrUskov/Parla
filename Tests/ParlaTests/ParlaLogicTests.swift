@@ -468,7 +468,115 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(pluralRu(0,  "ф", "ф2", "ф5"), "ф5")
     }
 
+    // MARK: Слежение за папкой (фича 04)
+
+    func testFolderScanIgnoresUnstable() {
+        let a = stat("a.ogg", 100, 1000)
+        let bPrev = stat("b.ogg", 100, 1000)
+        let bNow  = stat("b.ogg", 200, 1000)   // размер вырос → файл ещё дописывается
+        let (ready, next) = FolderScan.newStableFiles(
+            current: [a, bNow],
+            lastSeen: ["/watch/a.ogg": a, "/watch/b.ogg": bPrev],
+            processed: [])
+        XCTAssertEqual(ready.map { $0.url.lastPathComponent }, ["a.ogg"])   // только стабильный a
+        XCTAssertEqual(next["/watch/b.ogg"], bNow)                          // b перенесён на следующий проход
+    }
+
+    func testFolderScanFirstSightNotReady() {
+        let a = stat("a.ogg", 100, 1000)
+        let (ready, next) = FolderScan.newStableFiles(current: [a], lastSeen: [:], processed: [])
+        XCTAssertTrue(ready.isEmpty)               // впервые увиден — ещё не готов
+        XCTAssertEqual(next["/watch/a.ogg"], a)    // но запомнен
+    }
+
+    func testFolderScanSkipsProcessed() {
+        let a = stat("a.ogg", 100, 1000)
+        let (ready, _) = FolderScan.newStableFiles(current: [a], lastSeen: ["/watch/a.ogg": a], processed: [a.dedupKey])
+        XCTAssertTrue(ready.isEmpty)   // dedupKey уже обработан → пропускаем
+    }
+
+    func testFolderScanReadyIsSorted() {
+        let c = stat("c.ogg", 1, 1), a = stat("a.ogg", 1, 1), b = stat("b.ogg", 1, 1)
+        let lastSeen = ["/watch/c.ogg": c, "/watch/a.ogg": a, "/watch/b.ogg": b]
+        let (ready, _) = FolderScan.newStableFiles(current: [c, a, b], lastSeen: lastSeen, processed: [])
+        XCTAssertEqual(ready.map { $0.url.lastPathComponent }, ["a.ogg", "b.ogg", "c.ogg"])
+    }
+
+    func testDedupKeyChangesWithContent() {
+        let base = stat("a.ogg", 100, 1000)
+        XCTAssertEqual(base.dedupKey, stat("a.ogg", 100, 1000).dedupKey)       // тот же triple → тот же ключ
+        XCTAssertNotEqual(base.dedupKey, stat("a.ogg", 200, 1000).dedupKey)    // другой размер
+        XCTAssertNotEqual(base.dedupKey, stat("a.ogg", 100, 2000).dedupKey)    // другой mtime
+    }
+
+    func testCapProcessedFIFO() {
+        XCTAssertEqual(FolderScan.capProcessed(["1", "2", "3", "4"], max: 2), ["3", "4"])  // старые отброшены
+        XCTAssertEqual(FolderScan.capProcessed(["1"], max: 2), ["1"])                      // под лимитом — без изменений
+        XCTAssertEqual(FolderScan.capProcessed(["1", "2"], max: 0), [])
+    }
+
+    func testProcessedStoreRoundtrip() {
+        let original = ProcessedStore.fileURL
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ParlaPS-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        ProcessedStore.fileURL = dir.appendingPathComponent("processed.json")
+        defer { ProcessedStore.fileURL = original; try? FileManager.default.removeItem(at: dir) }
+
+        XCTAssertEqual(ProcessedStore.load(), [])                    // нет файла → пусто, без краша
+        ProcessedStore.save(["k1", "k2", "k3"])
+        XCTAssertEqual(ProcessedStore.load(), ["k1", "k2", "k3"])   // порядок сохранён (нужен для FIFO)
+    }
+
+    func testScanFolderRecursiveVsFlat() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fm.removeItem(at: tmp) }
+        try fm.createDirectory(at: tmp.appendingPathComponent("sub"), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: tmp.appendingPathComponent("a.ogg"))
+        try Data("x".utf8).write(to: tmp.appendingPathComponent("note.txt"))
+        try Data("x".utf8).write(to: tmp.appendingPathComponent("sub/b.mp3"))
+
+        let flat = AppModel.scanFolder(tmp, recursive: false).map { $0.url.lastPathComponent }
+        XCTAssertEqual(flat, ["a.ogg"])                                                  // без подпапок, без note.txt
+        let rec = Set(AppModel.scanFolder(tmp, recursive: true).map { $0.url.lastPathComponent })
+        XCTAssertEqual(rec, ["a.ogg", "b.mp3"])
+    }
+
+    func testScanFolderCapturesSizeAndMtime() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fm.removeItem(at: tmp) }
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        try Data(repeating: 0, count: 1234).write(to: tmp.appendingPathComponent("a.ogg"))
+        let stats = AppModel.scanFolder(tmp, recursive: false)
+        XCTAssertEqual(stats.count, 1)
+        XCTAssertEqual(stats.first?.size, 1234)
+        XCTAssertNotNil(stats.first?.mtime)
+    }
+
+    func testNewStableFilesEndToEnd() throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fm.removeItem(at: tmp) }
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        try Data(repeating: 0, count: 500).write(to: tmp.appendingPathComponent("a.ogg"))
+
+        // первый проход: файл впервые увиден → не готов
+        let pass1 = AppModel.scanFolder(tmp, recursive: false)
+        let (ready1, seen1) = FolderScan.newStableFiles(current: pass1, lastSeen: [:], processed: [])
+        XCTAssertTrue(ready1.isEmpty)
+        // второй проход без изменений → готов (двухпроходная гарантия стабильности, без FSEvents)
+        let pass2 = AppModel.scanFolder(tmp, recursive: false)
+        let (ready2, _) = FolderScan.newStableFiles(current: pass2, lastSeen: seen1, processed: [])
+        XCTAssertEqual(ready2.map { $0.url.lastPathComponent }, ["a.ogg"])
+    }
+
     // MARK: helpers
+
+    private func stat(_ name: String, _ size: Int64, _ mtime: TimeInterval) -> WatchedFileStat {
+        WatchedFileStat(url: URL(fileURLWithPath: "/watch/\(name)"), size: size,
+                        mtime: Date(timeIntervalSince1970: mtime))
+    }
 
     private func makeItem(name: String = "a.ogg", text: String, segments: [Segment] = [],
                           lang: String = "ru", model: String = "openai_whisper-tiny",

@@ -39,6 +39,20 @@ struct BrandHeader: View {
                     .foregroundStyle(Brand.accent)
                     .help("Результат переводится в английский")
             }
+            if model.watchEnabled {
+                HStack(spacing: 4) {
+                    Image(systemName: "eye.fill").font(.caption2)
+                    if model.watchQueueCount > 0 {
+                        Text("\(model.watchQueueCount)").font(.caption2.weight(.bold)).monospacedDigit()
+                    }
+                }
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(Brand.accent.opacity(0.2), in: Capsule())
+                .foregroundStyle(Brand.accent)
+                .help(model.watchQueueCount > 0
+                      ? "Слежу за папкой · в очереди: \(model.watchQueueCount)"
+                      : "Слежу за папкой")
+            }
             Spacer()
             ModelButton()
             SettingsLink {

@@ -37,6 +37,23 @@ struct SettingsView: View {
                 Toggle("Показывать таймкоды", isOn: $model.showTimestamps)
             }
 
+            Section("Слежение за папкой") {
+                Toggle("Следить за папкой", isOn: $model.watchEnabled)
+                LabeledContent("Папка") {
+                    HStack(spacing: 8) {
+                        Text(model.watchedFolderURL?.path ?? "не выбрана")
+                            .font(.caption)
+                            .foregroundStyle(model.watchedFolderURL == nil ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                            .lineLimit(1).truncationMode(.middle)
+                        Button("Выбрать…") { model.pickWatchFolder() }
+                    }
+                }
+                Toggle("Включая подпапки", isOn: $model.watchRecursive)
+                Toggle("Сохранять .txt рядом с файлом", isOn: $model.watchWriteSidecar)
+                Text("Новые аудиофайлы в папке распознаются сами — как старый скрипт, но локально. Транскрибируются только файлы, появившиеся после включения; уже лежащие игнорируются.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("История") {
                 Button("Экспортировать историю…") { model.exportHistory() }
                     .disabled(model.history.isEmpty)

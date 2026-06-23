@@ -183,3 +183,68 @@ enum HistoryStore {
         try? data.write(to: fileURL, options: .atomic)
     }
 }
+
+// MARK: - Слежение за папкой (фича 04)
+
+/// Снимок файла: для проверки «дописался ли» (size+mtime стабильны) и для ключа дедупликации.
+struct WatchedFileStat: Equatable {
+    let url: URL
+    let size: Int64
+    let mtime: Date
+    /// Стабильная дешёвая идентичность: путь + размер + mtime. Меняется при смене содержимого
+    /// (тот же файл, новые байты → новый ключ → распознаём заново).
+    var dedupKey: String { "\(url.path)|\(size)|\(Int(mtime.timeIntervalSince1970))" }
+}
+
+/// Чистое ядро слежения: всё тестируемое, без файловой системы внутри.
+/// FSEvents/таймер только ВЫЗЫВАЮТ эти функции — сами решений не принимают.
+enum FolderScan {
+    /// Из снимка папки выбрать файлы, которые: (а) ещё не обработаны (нет dedupKey в `processed`),
+    /// (б) «устаканились» — size+mtime совпали с прошлым наблюдением (`lastSeen`).
+    /// Возвращает (готовые к работе, новый lastSeen для следующего прохода).
+    static func newStableFiles(
+        current: [WatchedFileStat],
+        lastSeen: [String: WatchedFileStat],   // ключ = path
+        processed: Set<String>                 // dedupKey уже обработанных
+    ) -> (ready: [WatchedFileStat], nextLastSeen: [String: WatchedFileStat]) {
+        var ready: [WatchedFileStat] = []
+        var next: [String: WatchedFileStat] = [:]
+        for stat in current {
+            next[stat.url.path] = stat
+            if processed.contains(stat.dedupKey) { continue }     // уже сделали
+            if let prev = lastSeen[stat.url.path], prev == stat {
+                ready.append(stat)                                // не менялся с прошлого раза → дописался
+            }
+            // новый ИЛИ изменился → только запоминаем в next, ждём следующего прохода
+        }
+        return (ready.sorted { $0.url.lastPathComponent < $1.url.lastPathComponent }, next)
+    }
+
+    /// FIFO-обрезка множества обработанных, чтобы не росло бесконечно (старые ключи отбрасываются).
+    static func capProcessed(_ ordered: [String], max: Int) -> [String] {
+        guard max >= 0, ordered.count > max else { return ordered }
+        return Array(ordered.suffix(max))
+    }
+}
+
+/// Хранилище множества обработанных ключей в ~/Library/Application Support/Parla/processed.json.
+/// Зеркалит HistoryStore (включая `var fileURL` тест-шов).
+enum ProcessedStore {
+    static var fileURL: URL = {
+        let base = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Parla", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("processed.json")
+    }()
+
+    static func load() -> [String] {
+        guard let data = try? Data(contentsOf: fileURL) else { return [] }   // нет файла → пусто, без краша
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    static func save(_ keys: [String]) {
+        guard let data = try? JSONEncoder().encode(keys) else { return }
+        try? data.write(to: fileURL, options: .atomic)
+    }
+}

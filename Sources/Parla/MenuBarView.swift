@@ -37,7 +37,7 @@ struct MenuBarView: View {
 
             Button {
                 openWindow(id: "main")
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()   // macOS 14: без ignoringOtherApps (deprecated)
             } label: {
                 Label("Открыть окно", systemImage: "macwindow").frame(maxWidth: .infinity, alignment: .leading)
             }

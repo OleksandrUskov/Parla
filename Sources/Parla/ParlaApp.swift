@@ -12,6 +12,7 @@ struct ParlaApp: App {
                 .environment(model)
                 .task {
                     NotificationClickHandler.install()   // клик по уведомлению о завершении → окно вперёд
+                    model.startWatchingIfEnabled()       // возобновить слежение за папкой, если включено
                     await model.refreshModels()
                 }
                 .preferredColorScheme(.dark)
