@@ -363,6 +363,48 @@ enum AudioStore {
     }
 
     static func totalBytes() -> Int64 { TranscriptionEngine.folderSize(at: folder) }
+
+    /// Размер аудио-файлов одной записи (копия + рендишен). 0, если файлов нет.
+    static func bytes(of item: TranscriptItem) -> Int64 {
+        [item.audioFile, item.audioPlayable].compactMap { $0 }.reduce(Int64(0)) { $0 + fileSize($1) }
+    }
+    private static func fileSize(_ name: String) -> Int64 {
+        let u = folder.appendingPathComponent(name)
+        return Int64((try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+    }
+
+    /// Снести файлы-сироты: всё в audio/, что не упомянуто ни в одной записи (ловит обрывки от краша
+    /// между copy и save, недописанный ffmpeg .m4a). Текст не трогает — только файлы.
+    static func pruneOrphans(keeping history: [TranscriptItem]) {
+        let referenced = Set(history.flatMap { [$0.audioFile, $0.audioPlayable].compactMap { $0 } })
+        guard let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        else { return }
+        for f in files where !referenced.contains(f.lastPathComponent) {
+            try? FileManager.default.removeItem(at: f)
+        }
+    }
+
+    /// ЧИСТОЕ ядро LRU-выселения: какие записи лишить аудио, чтобы влезть в кэп.
+    /// ТЕКСТ НЕ ТРОГАЕТСЯ — вызывающий лишь обнуляет audioFile/audioPlayable и удаляет эти файлы.
+    /// `history[0]` — новейшая (insert at:0), поэтому «старое» = бóльший индекс → идём с хвоста.
+    /// `sizeOf` инжектируется (нет ФС в ядре → детерминированно и тестируемо). `protected`
+    /// (выделенная/играющая + только что добавленная) НИКОГДА не выселяется — даже если из-за этого
+    /// кэп чуть превышен (частичное соответствие корректно, не дёргаем аудио из-под плеера).
+    static func enforceAudioCap(_ history: [TranscriptItem], capBytes: Int64,
+                                sizeOf: (TranscriptItem) -> Int64,
+                                protected: Set<UUID>) -> [UUID] {
+        var total = history.reduce(Int64(0)) { $0 + sizeOf($1) }
+        guard total > capBytes else { return [] }
+        var evict: [UUID] = []
+        for item in history.reversed() {                 // с хвоста (старое) к голове (новое)
+            if total <= capBytes { break }
+            let bytes = sizeOf(item)
+            guard bytes > 0, !protected.contains(item.id) else { continue }   // нет аудио или защищён
+            evict.append(item.id)
+            total -= bytes
+        }
+        return evict
+    }
 }
 
 /// Индекс сегмента, чей [start, …) содержит t (для подсветки активного сегмента при проигрывании).

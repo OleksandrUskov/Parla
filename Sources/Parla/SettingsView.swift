@@ -96,6 +96,8 @@ struct SettingsView: View {
                     Text(formatBytes(AudioStore.totalBytes())).foregroundStyle(.secondary).font(.caption)
                 }
                 Button("Очистить аудио-кэш", role: .destructive) { model.clearAudioCache() }
+                Text("Parla хранит копии аудио для повторного прослушивания и автоматически удаляет самые старые, когда их набирается слишком много. Текст расшифровок при этом сохраняется всегда.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

@@ -94,8 +94,18 @@ Everything beyond plain transcription is **opt-in** and asks for the minimum mac
 | Global hotkey ⌃⌥⌘T *(off by default)* | Accessibility | needed only for the **global** combo; the menu-bar buttons work with no permission. The monitor checks for that one combo — **no keystrokes are logged or stored** |
 
 Parla is **not sandboxed** (it shells out to `ffmpeg`), so it ships outside the Mac App Store —
-and it's open source, so you can read exactly what it does. Source audio you transcribe is kept
-in `~/Library/Application Support/Parla/audio/` for the player; clear it anytime in **Settings**.
+and it's open source, so you can read exactly what it does.
+
+**Audio cache.** For the in-app player, Parla keeps a copy of each transcribed clip in
+`~/Library/Application Support/Parla/audio/`. This is **auto-managed**: the cache is capped at
+**500 MB** and the oldest clips' audio is removed automatically when it grows past that — **your
+transcript text is always kept** (an evicted clip just loses its replay button; you can re-transcribe
+from the original file). You can also clear it anytime in **Settings**. To change the cap (e.g. keep
+more for long-form replay, or disable auto-cleanup):
+
+```bash
+defaults write com.parla.app PARLA_AUDIO_CAP_MB -int 2000   # 2 GB; use 0 for unlimited
+```
 
 ## Tech stack
 

@@ -773,6 +773,43 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(hotKeyMatches(keyCode: 16, flags: mods, wantKey: 17, wantMods: mods))
     }
 
+    // MARK: Авто-уборка аудио-кэша (LRU)
+
+    func testEnforceAudioCapNoOpUnderCap() {
+        let a = makeItem(text: "a"), b = makeItem(text: "b")
+        let sizes = [a.id: Int64(100), b.id: Int64(100)]
+        let evict = AudioStore.enforceAudioCap([b, a], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [])
+        XCTAssertTrue(evict.isEmpty)   // влезаем → ничего не трогаем
+    }
+
+    func testEnforceAudioCapEvictsOldest() {
+        let n = makeItem(text: "n"), m = makeItem(text: "m"), o = makeItem(text: "o")   // newest-first: [n, m, o]
+        let sizes = [n.id: Int64(400), m.id: Int64(400), o.id: Int64(400)]               // 1200 > 1000
+        let evict = AudioStore.enforceAudioCap([n, m, o], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [])
+        XCTAssertEqual(evict, [o.id])   // только самый старый, до влезания (1200-400=800 ≤ 1000)
+    }
+
+    func testEnforceAudioCapProtectsSelected() {
+        let n = makeItem(text: "n"), m = makeItem(text: "m"), o = makeItem(text: "o")
+        let sizes = [n.id: Int64(400), m.id: Int64(400), o.id: Int64(400)]
+        let evict = AudioStore.enforceAudioCap([n, m, o], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [o.id])
+        XCTAssertEqual(evict, [m.id])   // o защищён (играет/выделена) → выселяем следующую старую
+    }
+
+    func testEnforceAudioCapSkipsItemsWithoutAudio() {
+        let n = makeItem(text: "n"), m = makeItem(text: "m"), o = makeItem(text: "o")
+        let sizes = [n.id: Int64(600), o.id: Int64(600)]   // у m аудио нет (0 байт)
+        let evict = AudioStore.enforceAudioCap([n, m, o], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [])
+        XCTAssertEqual(evict, [o.id])   // 1200>1000 → выселяем o (600≤1000); m пропущен (нет аудио)
+    }
+
+    func testEnforceAudioCapPartialWhenOnlyProtectedExceeds() {
+        let big = makeItem(text: "big")
+        let sizes = [big.id: Int64(2000)]   // одна запись больше всего кэпа, но защищена
+        let evict = AudioStore.enforceAudioCap([big], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [big.id])
+        XCTAssertTrue(evict.isEmpty)   // не дёргаем аудио из-под плеера — частичное соответствие OK
+    }
+
     // MARK: helpers
 
     private func stat(_ name: String, _ size: Int64, _ mtime: TimeInterval) -> WatchedFileStat {

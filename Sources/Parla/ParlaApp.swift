@@ -14,6 +14,7 @@ struct ParlaApp: App {
                 .task {
                     NotificationClickHandler.install()   // клик по уведомлению о завершении → окно вперёд
                     model.startWatchingIfEnabled()       // возобновить слежение за папкой, если включено
+                    await model.pruneAudioCache()        // убрать сирот + старое аудио сверх лимита
                     await model.refreshModels()
                 }
                 .onAppear { syncHotkey() }
