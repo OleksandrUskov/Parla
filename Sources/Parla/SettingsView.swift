@@ -73,6 +73,10 @@ struct SettingsView: View {
                 LabeledContent("Модели на диске") {
                     Text(formatBytes(model.totalModelsBytes)).foregroundStyle(.secondary).font(.caption)
                 }
+                LabeledContent("Аудио для плеера") {
+                    Text(formatBytes(AudioStore.totalBytes())).foregroundStyle(.secondary).font(.caption)
+                }
+                Button("Очистить аудио-кэш", role: .destructive) { model.clearAudioCache() }
             }
         }
         .formStyle(.grouped)

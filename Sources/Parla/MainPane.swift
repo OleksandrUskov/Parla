@@ -282,9 +282,11 @@ struct TranscriptCard: View {
     @State private var isEditing = false
     @State private var draft = ""
     @FocusState private var editorFocused: Bool
+    @State private var player = PlaybackController()
 
     private var text: String { item.display(timestamps: model.showTimestamps) }
     private var justCopied: Bool { model.lastCopiedID == item.id }
+    private var audioURL: URL? { AudioStore.playableURL(for: item) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -295,9 +297,14 @@ struct TranscriptCard: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Смена выделения (или новая расшифровка) → сбрасываем незавершённую правку, чтобы
-        // не записать её в чужую запись.
-        .onChange(of: item.id) { _, _ in if isEditing { cancelEdit() } }
+        // Смена выделения (или новая расшифровка): сбрасываем незавершённую правку (чтобы не
+        // записать её в чужую запись) и перегружаем плеер на аудио новой записи. initial:true —
+        // грузим и при первом показе.
+        .onChange(of: item.id, initial: true) { _, _ in
+            if isEditing { cancelEdit() }
+            player.load(audioURL)
+        }
+        .onDisappear { player.stop() }
     }
 
     // MARK: Шапка — мета + действия (разные в режиме чтения и правки)
@@ -391,6 +398,20 @@ struct TranscriptCard: View {
                 .padding(10)
                 .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
         } else {
+            VStack(spacing: 10) {
+                TransportBar(player: player, hasAudio: audioURL != nil)
+                readBody
+            }
+        }
+    }
+
+    // MARK: Правка — хелперы
+
+    /// Текст записи: список тапабельных сегментов (если есть таймкоды и запись не правлена) или плоский текст.
+    @ViewBuilder private var readBody: some View {
+        if model.showTimestamps, !item.isEdited, !item.segments.isEmpty {
+            SegmentList(segments: item.segments, player: player, tappable: audioURL != nil)
+        } else {
             ScrollView {
                 Text(text)
                     .font(.system(.body, design: .rounded))
@@ -402,9 +423,8 @@ struct TranscriptCard: View {
         }
     }
 
-    // MARK: Правка — хелперы
-
     private func beginEdit() {
+        player.stop()              // правим текст — не проигрываем
         draft = item.text          // ВСЕГДА плоский текст, не display(timestamps:)
         isEditing = true
         editorFocused = true
@@ -457,5 +477,94 @@ struct RetranscribeMenu: View {
         .help(item.hasResolvableSource
               ? "Перераспознать другой моделью"
               : "Исходный файл недоступен — перетащи его заново")
+    }
+}
+
+// MARK: - Плеер исходного аудио (фича 06)
+
+/// Транспорт: play/pause + скрабер + время. Деградирует в одну строку-заметку, если аудио нет
+/// или формат не проигрывается встроенным плеером.
+struct TransportBar: View {
+    let player: PlaybackController
+    let hasAudio: Bool
+
+    var body: some View {
+        if hasAudio && player.canPlay {
+            HStack(spacing: 12) {
+                Button { player.togglePlay() } label: {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.title3).foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Brand.gradient, in: Circle())
+                }
+                .buttonStyle(.plain)
+                Slider(value: Binding(get: { player.currentTime },
+                                      set: { player.scrub(to: $0) }),
+                       in: 0...max(player.duration, 0.01))
+                    .tint(Brand.accent)
+                Text("\(fmtTime(player.currentTime)) / \(fmtTime(player.duration))")
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        } else if hasAudio {
+            note("Это аудио нельзя проиграть встроенным плеером (формат не поддержан).")
+        } else {
+            note("Исходное аудио недоступно.")
+        }
+    }
+
+    private func note(_ s: String) -> some View {
+        Text(s).font(.caption).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// Список сегментов с таймкодами. Клик по строке (если есть аудио) перематывает плеер.
+/// Активный сегмент подсвечивается по текущему времени проигрывания.
+struct SegmentList: View {
+    let segments: [Segment]
+    let player: PlaybackController
+    let tappable: Bool
+
+    private var activeIdx: Int? { activeSegmentIndex(segments, at: player.currentTime) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
+                    if !seg.text.isEmpty {
+                        SegmentRow(seg: seg, active: i == activeIdx, tappable: tappable)
+                            .contentShape(Rectangle())
+                            .onTapGesture { if tappable { player.seek(to: seg.start) } }
+                    }
+                }
+            }
+            .padding(12)
+        }
+        .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+struct SegmentRow: View {
+    let seg: Segment
+    let active: Bool
+    let tappable: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("[\(fmtTime(seg.start))]")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(active || tappable ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.tertiary))
+            Text(seg.text)
+                .font(.system(.body, design: .rounded))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(active ? AnyShapeStyle(Brand.gradient.opacity(0.18)) : AnyShapeStyle(Color.clear),
+                    in: RoundedRectangle(cornerRadius: 8))
     }
 }

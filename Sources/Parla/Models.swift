@@ -21,6 +21,8 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var editedAt: Date? = nil         // когда правился (nil для нетронутых / легаси-записей)
     var sourcePath: String? = nil     // абсолютный путь к исходнику (для «перераспознать»); nil у старых/легаси
     var sourceBookmark: Data? = nil   // запасной локатор-bookmark; nil — норм (Optional → легаси-совместимо)
+    var audioFile: String? = nil      // имя копии исходника в .../Parla/audio/ (для плеера); nil у старых записей
+    var audioPlayable: String? = nil  // имя m4a-рендишена для проигрывания (Opus/видео); nil если не нужен/не вышел
 
     /// Удобный аксессор: nil/false → не редактировалось.
     var isEdited: Bool { edited == true }
@@ -290,4 +292,85 @@ enum ProcessedStore {
         guard let data = try? JSONEncoder().encode(keys) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
+}
+
+// MARK: - Хранилище аудио для плеера (фича 06)
+
+/// Копии исходного аудио рядом с историей: ~/Library/Application Support/Parla/audio/.
+/// Папка выводится из `HistoryStore.fileURL` → автоматически уезжает на временный путь в тестах.
+enum AudioStore {
+    /// Форматы, которые AVAudioPlayer открывает напрямую — рендишен .m4a им не нужен.
+    static let directlyPlayable: Set<String> = ["m4a", "mp3", "wav", "aac", "caf", "aiff", "aif"]
+
+    static var folder: URL {
+        HistoryStore.fileURL.deletingLastPathComponent().appendingPathComponent("audio", isDirectory: true)
+    }
+    private static func ensureFolder() {
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+
+    /// Имя файла копии: "<uuid>.<ext>" (ext нижним регистром, или "bin"). Чистая функция.
+    static func fileName(for id: UUID, sourceExtension ext: String) -> String {
+        let e = ext.lowercased()
+        return e.isEmpty ? "\(id.uuidString).bin" : "\(id.uuidString).\(e)"
+    }
+
+    /// Лучший URL для проигрывания: сначала m4a-рендишен, затем копия оригинала (если файл на месте).
+    static func playableURL(for item: TranscriptItem) -> URL? {
+        for name in [item.audioPlayable, item.audioFile].compactMap({ $0 }) {
+            let u = folder.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: u.path) { return u }
+        }
+        return nil
+    }
+
+    /// Копирует исходник в хранилище. Возвращает имя файла или nil (на ошибке не валим транскрибацию).
+    static func copy(from src: URL, id: UUID) -> String? {
+        ensureFolder()
+        let name = fileName(for: id, sourceExtension: src.pathExtension)
+        let dest = folder.appendingPathComponent(name)
+        do {
+            if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
+            try FileManager.default.copyItem(at: src, to: dest)
+            return name
+        } catch { return nil }
+    }
+
+    /// Делает m4a-рендишен исходника для проигрывания. Возвращает имя или nil. Best-effort.
+    static func makePlayable(from src: URL, id: UUID) -> String? {
+        ensureFolder()
+        let name = "\(id.uuidString).m4a"
+        let dest = folder.appendingPathComponent(name)
+        do {
+            if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
+            try AudioConverter.toM4a(src, to: dest)
+            return name
+        } catch { return nil }
+    }
+
+    /// Удалить аудио записи (копию и рендишен).
+    static func remove(_ item: TranscriptItem) {
+        for name in [item.audioFile, item.audioPlayable].compactMap({ $0 }) {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+        }
+    }
+
+    /// Снести весь кэш аудио (для кнопки «Очистить аудио-кэш» в настройках).
+    static func clearAll() {
+        guard let items = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        else { return }
+        for u in items { try? FileManager.default.removeItem(at: u) }
+    }
+
+    static func totalBytes() -> Int64 { TranscriptionEngine.folderSize(at: folder) }
+}
+
+/// Индекс сегмента, чей [start, …) содержит t (для подсветки активного сегмента при проигрывании).
+/// Берём последний сегмент со `start <= t` — устойчиво к зазорам/перекрытиям в выводе Whisper.
+/// nil, если t раньше первого сегмента или сегментов нет.
+func activeSegmentIndex(_ segments: [Segment], at t: Double) -> Int? {
+    guard !segments.isEmpty else { return nil }
+    var idx: Int? = nil
+    for (i, s) in segments.enumerated() where s.start <= t + 0.0001 { idx = i }
+    return idx
 }

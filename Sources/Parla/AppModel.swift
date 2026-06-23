@@ -202,7 +202,7 @@ final class AppModel {
             let batch = total > 1 ? BatchProgress(index: i + 1, total: total, done: i) : nil
             do {
                 let r = try await transcribeOne(url: url, model: selectedModel, batch: batch)
-                let item = TranscriptItem(
+                var item = TranscriptItem(
                     sourceName: url.lastPathComponent,
                     language: r.language,
                     durationSec: r.duration,
@@ -212,6 +212,10 @@ final class AppModel {
                     sourcePath: url.path,                       // запоминаем исходник для «перераспознать»
                     sourceBookmark: makeSourceBookmark(url)
                 )
+                // Сохраняем исходник для плеера (off-main, best-effort; ошибка не валит результат).
+                let kept = await Self.keepAudio(from: url, id: item.id)
+                item.audioFile = kept.file
+                item.audioPlayable = kept.playable
                 history.insert(item, at: 0)
                 selection = item.id
                 HistoryStore.save(history)
@@ -462,15 +466,37 @@ final class AppModel {
         return true
     }
 
+    /// Скопировать исходник + при необходимости отрендерить m4a — в фоне. Best-effort.
+    nonisolated static func keepAudio(from url: URL, id: UUID) async -> (file: String?, playable: String?) {
+        await Task.detached(priority: .utility) {
+            let file = AudioStore.copy(from: url, id: id)
+            let needsRender = !AudioStore.directlyPlayable.contains(url.pathExtension.lowercased())
+            let playable = needsRender ? AudioStore.makePlayable(from: url, id: id) : nil
+            return (file, playable)
+        }.value
+    }
+
     func delete(_ item: TranscriptItem) {
+        AudioStore.remove(item)                 // снести копию аудио вместе с записью
         history.removeAll { $0.id == item.id }
         if selection == item.id { selection = nil }
         HistoryStore.save(history)
     }
 
     func clearHistory() {
+        history.forEach(AudioStore.remove)
         history.removeAll()
         selection = nil
+        HistoryStore.save(history)
+    }
+
+    /// Очистить кэш аудио (кнопка в настройках): снести файлы и обнулить ссылки в истории.
+    func clearAudioCache() {
+        AudioStore.clearAll()
+        for i in history.indices {
+            history[i].audioFile = nil
+            history[i].audioPlayable = nil
+        }
         HistoryStore.save(history)
     }
 

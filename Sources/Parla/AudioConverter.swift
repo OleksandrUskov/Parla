@@ -49,4 +49,26 @@ enum AudioConverter {
         }
         return out
     }
+
+    /// Рендишен для проигрывания: любой источник → AAC .m4a. Нужно для Opus/Ogg/видео-контейнеров,
+    /// которые AVAudioPlayer не открывает. `-vn` выбрасывает видеодорожку.
+    static func toM4a(_ src: URL, to dest: URL) throws {
+        guard let ffmpeg = ffmpegURL() else { throw Failure.ffmpegNotFound }
+
+        let proc = Process()
+        proc.executableURL = ffmpeg
+        proc.arguments = ["-y", "-i", src.path, "-vn", "-c:a", "aac", "-b:a", "96k", dest.path]
+        let errPipe = Pipe()
+        proc.standardError = errPipe
+        proc.standardOutput = Pipe()
+
+        try proc.run()
+        proc.waitUntilExit()
+
+        guard proc.terminationStatus == 0 else {
+            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let tail = err.split(separator: "\n").suffix(3).joined(separator: "\n")
+            throw Failure.conversionFailed(tail)
+        }
+    }
 }

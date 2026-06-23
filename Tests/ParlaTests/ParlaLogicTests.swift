@@ -658,6 +658,75 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(m.canRetranscribe(present))                // движок свободен + файл есть
     }
 
+    // MARK: Аудиоплеер (фича 06)
+
+    func testTranscriptItemDecodesWithoutAudioFile() throws {
+        let legacy = #"[{"id":"\#(UUID().uuidString)","date":740000000,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"openai_whisper-tiny","text":"привет","segments":[]}]"#
+        let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8))
+        XCTAssertNil(items.first?.audioFile)        // нет ключа → nil, НЕ throw
+        XCTAssertNil(items.first?.audioPlayable)
+        XCTAssertEqual(items.first?.text, "привет")
+    }
+
+    func testCodableRoundtripWithAudioFile() throws {
+        var item = makeItem(text: "txt")
+        item.audioFile = "X.ogg"
+        item.audioPlayable = "X.m4a"
+        let data = try JSONEncoder().encode([item])
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("audioFile") ?? false)
+        let back = try JSONDecoder().decode([TranscriptItem].self, from: data)
+        XCTAssertEqual(back.first?.audioFile, "X.ogg")
+        XCTAssertEqual(back.first?.audioPlayable, "X.m4a")
+    }
+
+    func testAudioStoreFileName() {
+        let id = UUID()
+        XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: "OGG"), "\(id.uuidString).ogg")  // нижний регистр
+        XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: "m4a"), "\(id.uuidString).m4a")
+        XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: "MP3"), "\(id.uuidString).mp3")
+        XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: ""),    "\(id.uuidString).bin")
+    }
+
+    func testAudioStoreCopyAndRemove() throws {
+        withTemporaryHistoryStore {
+            let fm = FileManager.default
+            let src = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).ogg")
+            try? Data("audio".utf8).write(to: src)
+            defer { try? fm.removeItem(at: src) }
+
+            let id = UUID()
+            let name = AudioStore.copy(from: src, id: id)
+            XCTAssertNotNil(name)
+            var item = makeItem(text: "t")
+            item.audioFile = name
+            XCTAssertNotNil(AudioStore.playableURL(for: item))   // копия на месте
+            AudioStore.remove(item)
+            XCTAssertNil(AudioStore.playableURL(for: item))      // удалена
+        }
+    }
+
+    func testAudioStoreUrlMissingReturnsNil() {
+        withTemporaryHistoryStore {
+            var item = makeItem(text: "t")
+            item.audioFile = "nope-\(UUID().uuidString).ogg"     // файла нет
+            XCTAssertNil(AudioStore.playableURL(for: item))
+        }
+    }
+
+    func testActiveSegmentIndex() {
+        let segs = [Segment(start: 0, end: 2, text: "a"),
+                    Segment(start: 2, end: 5, text: "b"),
+                    Segment(start: 10, end: 12, text: "c")]
+        XCTAssertNil(activeSegmentIndex(segs, at: -1))          // раньше первого
+        XCTAssertEqual(activeSegmentIndex(segs, at: 0), 0)
+        XCTAssertEqual(activeSegmentIndex(segs, at: 1.9), 0)
+        XCTAssertEqual(activeSegmentIndex(segs, at: 2), 1)      // ровно start → новый сегмент
+        XCTAssertEqual(activeSegmentIndex(segs, at: 6), 1)      // в зазоре → остаёмся на последнем начавшемся
+        XCTAssertEqual(activeSegmentIndex(segs, at: 11), 2)
+        XCTAssertEqual(activeSegmentIndex(segs, at: 100), 2)    // за концом → последний
+        XCTAssertNil(activeSegmentIndex([], at: 1))             // нет сегментов
+    }
+
     // MARK: helpers
 
     private func stat(_ name: String, _ size: Int64, _ mtime: TimeInterval) -> WatchedFileStat {
