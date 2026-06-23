@@ -416,6 +416,58 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(blocks[1].contains("изменено"))   // обычная — без
     }
 
+    // MARK: Батч-прогресс + уведомления (фича 05)
+
+    func testBatchLabelSingleVsMulti() {
+        XCTAssertEqual(batchLabel("a.ogg", nil), "«a.ogg»")
+        XCTAssertEqual(batchLabel("a.ogg", BatchProgress(index: 1, total: 1, done: 0)), "«a.ogg»")  // одиночный — без счётчика
+        XCTAssertEqual(batchLabel("a.ogg", BatchProgress(index: 3, total: 12, done: 2)), "«a.ogg» (3 из 12)")
+    }
+
+    func testEnginePhaseDefaultBatchNil() {
+        XCTAssertEqual(EnginePhase.preparing("x"), .preparing("x", batch: nil))   // дефолтный конструктор = nil
+        XCTAssertNotEqual(EnginePhase.transcribing("x", batch: BatchProgress(index: 1, total: 2, done: 0)),
+                          .transcribing("x", batch: nil))
+    }
+
+    func testShouldNotifyBatchAlwaysWhenBackground() {
+        XCTAssertTrue(BatchNotifier.shouldNotify(total: 5, elapsed: 1, frontmost: false))
+    }
+    func testShouldNotifyNeverWhenFrontmost() {
+        XCTAssertFalse(BatchNotifier.shouldNotify(total: 5, elapsed: 999, frontmost: true))
+    }
+    func testShouldNotifySingleFileThreshold() {
+        XCTAssertFalse(BatchNotifier.shouldNotify(total: 1, elapsed: 5,  frontmost: false))   // быстрый одиночный — молчим
+        XCTAssertTrue (BatchNotifier.shouldNotify(total: 1, elapsed: 25, frontmost: false))   // долгий одиночный — шлём
+        XCTAssertFalse(BatchNotifier.shouldNotify(total: 1, elapsed: 25, frontmost: true))    // но если активны — нет
+    }
+
+    func testSummaryAllSuccess() {
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 12, failed: 0).body, "Готово: 12 расшифровок")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 1,  failed: 0).body, "Готово: 1 расшифровка")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 3,  failed: 0).body, "Готово: 3 расшифровки")
+    }
+    func testSummaryAllFailed() {
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 0, failed: 4).body, "Не удалось распознать (4)")
+    }
+    func testSummaryMixed() {
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 11, failed: 1).body, "11 из 12 готово · 1 не удалась")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 8,  failed: 4).body, "8 из 12 готово · 4 не удалось")
+    }
+    func testSummaryTitleAlwaysParla() {
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).title, "Parla")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 0, failed: 2).title, "Parla")
+    }
+
+    func testPluralRu() {
+        XCTAssertEqual(pluralRu(1,  "ф", "ф2", "ф5"), "ф")
+        XCTAssertEqual(pluralRu(2,  "ф", "ф2", "ф5"), "ф2")
+        XCTAssertEqual(pluralRu(5,  "ф", "ф2", "ф5"), "ф5")
+        XCTAssertEqual(pluralRu(11, "ф", "ф2", "ф5"), "ф5")   // 11–14 → many
+        XCTAssertEqual(pluralRu(21, "ф", "ф2", "ф5"), "ф")    // 21 → one
+        XCTAssertEqual(pluralRu(0,  "ф", "ф2", "ф5"), "ф5")
+    }
+
     // MARK: helpers
 
     private func makeItem(name: String = "a.ogg", text: String, segments: [Segment] = [],

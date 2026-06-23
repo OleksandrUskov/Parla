@@ -113,13 +113,35 @@ func formatBytes(_ bytes: Int64) -> String {
     return String(format: "%.0f МБ", mb)
 }
 
+/// Позиция в пакетной обработке: «index из total». Только для дропа папки / нескольких файлов.
+struct BatchProgress: Equatable {
+    var index: Int     // 1-based: текущий файл
+    var total: Int     // всего файлов в задании (>= 2; для одиночного — nil вместо структуры)
+    var done: Int      // завершённых до текущего (для нижнего бара): index-1
+}
+
 enum EnginePhase: Equatable {
     case idle
-    case preparing(String)
+    case preparing(String, batch: BatchProgress? = nil)
     case downloadingModel(Double)   // 0...1, реальное скачивание (один раз)
     case loadingModel               // загрузка в память (быстро, каждый запуск)
-    case transcribing(String)
+    case transcribing(String, batch: BatchProgress? = nil)
     case failed(String)
+}
+
+/// «msg.ogg» (3 из 12)» для батча, или просто «msg.ogg» для одиночного файла.
+func batchLabel(_ name: String, _ b: BatchProgress?) -> String {
+    guard let b, b.total > 1 else { return "«\(name)»" }
+    return "«\(name)» (\(b.index) из \(b.total))"
+}
+
+/// Русская плюрализация (1 файл / 2 файла / 5 файлов).
+func pluralRu(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
+    let a = abs(n) % 100, b = a % 10
+    if a > 10 && a < 20 { return many }
+    if b == 1 { return one }
+    if b >= 2 && b <= 4 { return few }
+    return many
 }
 
 /// Хранилище истории в ~/Library/Application Support/Parla/history.json

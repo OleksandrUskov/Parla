@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP="Parla"
+# Не менять: к bundle ID привязан грант на уведомления (UNUserNotificationCenter).
+# Сменишь — пользователь потеряет разрешение и его спросят заново.
 BUNDLE_ID="com.parla.app"
 VERSION="1.0.0"
 
@@ -61,6 +63,9 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
 PLIST
 
 # Ad-hoc подпись — чтобы запускалось локально без «неизвестный разработчик».
+# Для UNUserNotificationCenter ad-hoc подписи достаточно при запуске собранного .app;
+# уведомления НЕ доставляются при запуске вне бандла (swift run) или из карантина/translocated —
+# поэтому в приложении они best-effort, а основной сигнал готовности это чип/прогресс в окне.
 codesign --force --deep --sign - "$APPDIR" >/dev/null 2>&1 || true
 
 echo "✅ Готово: $(pwd)/$APPDIR"

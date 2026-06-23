@@ -186,16 +186,27 @@ struct StatusBar: View {
         switch model.phase {
         case .idle:
             EmptyView()
-        case .preparing(let n):
-            chip("Готовлю «\(n)»…", busy: true)
+        case .preparing(let n, let b):
+            progressChip("Готовлю \(batchLabel(n, b))…", b)
         case .downloadingModel(let p):
             downloadChip(p)
         case .loadingModel:
             chip("Загружаю модель в память…", busy: true)
-        case .transcribing(let n):
-            chip("Распознаю «\(n)»…", busy: true)
+        case .transcribing(let n, let b):
+            progressChip("Распознаю \(batchLabel(n, b))…", b)
         case .failed(let m):
             chip(m, busy: false, error: true)
+        }
+    }
+
+    /// Чип + (для батча) нижний детерминированный бар «сколько из скольких».
+    private func progressChip(_ text: String, _ b: BatchProgress?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            chip(text, busy: true)
+            if let b, b.total > 1 {
+                ProgressView(value: Double(b.done), total: Double(b.total))
+                    .tint(Brand.accent)
+            }
         }
     }
 

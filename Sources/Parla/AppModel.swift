@@ -169,10 +169,15 @@ final class AppModel {
             phase = .failed("Не нашёл аудиофайлов")
             return
         }
+        let total = files.count
+        let jobStart = Date()
         var failures: [String] = []
-        for url in files {
+        var succeeded = 0
+        for (i, url) in files.enumerated() {
+            // Позицию в очереди показываем только для батча (>1 файла); одиночный дроп выглядит как раньше.
+            let batch = total > 1 ? BatchProgress(index: i + 1, total: total, done: i) : nil
             do {
-                phase = .preparing(url.lastPathComponent)
+                phase = .preparing(url.lastPathComponent, batch: batch)
                 let wav = try await Task.detached(priority: .userInitiated) {
                     try AudioConverter.toWav16k(url)
                 }.value
@@ -181,7 +186,7 @@ final class AppModel {
                 phase = .loadingModel
                 try await engine.ensureLoaded(model: selectedModel, progress: progressHandler())
 
-                phase = .transcribing(url.lastPathComponent)
+                phase = .transcribing(url.lastPathComponent, batch: batch)
                 let lang = language.isEmpty ? nil : language
                 let r = try await engine.transcribe(wavPath: wav.path, language: lang,
                                                     model: selectedModel, translate: translateToEnglish)
@@ -198,6 +203,7 @@ final class AppModel {
                 selection = item.id
                 HistoryStore.save(history)
                 if autoCopy, !r.text.isEmpty { copy(item.text) }
+                succeeded += 1
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 failures.append("\(url.lastPathComponent) (\(msg))")
@@ -205,6 +211,13 @@ final class AppModel {
         }
         refreshDownloaded()
         phase = failures.isEmpty ? .idle : .failed("Не удалось: \(failures.joined(separator: "; "))")
+
+        // Уведомление: только если задание «стоило ожидания» и окно не на переднем плане.
+        // Frontmost читаем в КОНЦЕ — переключение во время батча как раз и должно уведомить.
+        let elapsed = Date().timeIntervalSince(jobStart)
+        if BatchNotifier.shouldNotify(total: total, elapsed: elapsed, frontmost: NSApp.isActive) {
+            await BatchNotifier.post(succeeded: succeeded, failed: failures.count)
+        }
     }
 
     private func progressHandler() -> @Sendable (ModelLoad) -> Void {

@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import UserNotifications
 
 @main
 struct ParlaApp: App {
@@ -8,7 +10,10 @@ struct ParlaApp: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(model)
-                .task { await model.refreshModels() }
+                .task {
+                    NotificationClickHandler.install()   // клик по уведомлению о завершении → окно вперёд
+                    await model.refreshModels()
+                }
                 .preferredColorScheme(.dark)
         }
         .defaultSize(width: 980, height: 660)
@@ -24,5 +29,17 @@ struct ParlaApp: App {
                 .frame(width: 500)
                 .preferredColorScheme(.dark)
         }
+    }
+}
+
+/// Клик по уведомлению о завершении батча → активируем Parla и выносим окно вперёд.
+/// Регистрируется только в реальном приложении (через `.task`), не в `swift test`.
+final class NotificationClickHandler: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = NotificationClickHandler()
+    static func install() { UNUserNotificationCenter.current().delegate = shared }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async {
+        await MainActor.run { NSApp.activate() }   // macOS 14: без ignoringOtherApps (deprecated)
     }
 }
