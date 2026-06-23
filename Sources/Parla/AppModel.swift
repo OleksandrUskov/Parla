@@ -369,6 +369,7 @@ final class AppModel {
 
     private func startWatching() {
         guard let folder = watchedFolderURL ?? resolveBookmarkedFolder() else { return }
+        watcher?.stop()   // защита: никогда не теряем старый watcher без stop() (его поток держит +1 на себя)
         watchedFolderURL = folder
         // ПОЛИТИКА «только новые»: фиксируем текущее содержимое как уже-виденное, в очередь НЕ ставим.
         let now = Self.scanFolder(folder, recursive: watchRecursive)
