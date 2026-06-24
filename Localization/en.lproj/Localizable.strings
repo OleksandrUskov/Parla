@@ -124,7 +124,6 @@
 
 /* Accessibility (VoiceOver) + completion sound + retry */
 "a11y.settings"           = "Settings";
-"a11y.share"              = "Share";
 "a11y.play"               = "Play";
 "a11y.pause"              = "Pause";
 "a11y.dismiss"            = "Dismiss";
@@ -172,6 +171,7 @@
 "batch.label.multi"  = "“%1$@” (%2$lld of %3$lld)";
 
 /* Export + units */
+"export.menu.help" = "Export transcript";
 "export.title" = "# Parla — transcript history\n\n";
 "unit.gb.fmt"  = "%.1f GB";
 "unit.mb.fmt"  = "%.0f MB";

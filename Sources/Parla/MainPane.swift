@@ -371,12 +371,20 @@ struct TranscriptCard: View {
             }
             .buttonStyle(.plain)
             RetranscribeMenu(item: item)
-            ShareLink(item: text) {
+            Menu {
+                ForEach(ExportFormat.allCases) { fmt in
+                    Button(fmt.displayName) { model.export(item, as: fmt) }
+                }
+            } label: {
                 Image(systemName: "square.and.arrow.up").font(.body)
                     .padding(9).background(.ultraThinMaterial, in: Circle())
             }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
             .buttonStyle(.plain)
-            .accessibilityLabel(Text(L("a11y.share")))
+            .fixedSize()
+            .help(Text(L("export.menu.help")))
+            .accessibilityLabel(Text(L("export.menu.help")))
         }
     }
 

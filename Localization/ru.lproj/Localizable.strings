@@ -124,7 +124,6 @@
 
 /* Accessibility (VoiceOver) + completion sound + retry */
 "a11y.settings"           = "Настройки";
-"a11y.share"              = "Поделиться";
 "a11y.play"               = "Воспроизвести";
 "a11y.pause"              = "Пауза";
 "a11y.dismiss"            = "Закрыть";
@@ -172,6 +171,7 @@
 "batch.label.multi"  = "«%1$@» (%2$lld из %3$lld)";
 
 /* Export + units */
+"export.menu.help" = "Экспортировать запись";
 "export.title" = "# Parla — история расшифровок\n\n";
 "unit.gb.fmt"  = "%.1f ГБ";
 "unit.mb.fmt"  = "%.0f МБ";

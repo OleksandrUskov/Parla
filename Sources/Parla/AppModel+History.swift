@@ -64,4 +64,23 @@ extension AppModel {
             phase = .failed(Lf("error.save.failed", error.localizedDescription))
         }
     }
+
+    /// Export ONE transcript in the chosen format (save dialog). The format rendering is the pure
+    /// `Export.swift` layer; this just runs the panel + writes, reusing `exportHistory`'s error path.
+    func export(_ item: TranscriptItem, as format: ExportFormat) {
+        let panel = NSSavePanel()
+        let base = (item.sourceName as NSString).deletingPathExtension
+        panel.nameFieldStringValue = "\(base).\(format.fileExtension)"
+        panel.allowedContentTypes = [UTType(filenameExtension: format.fileExtension) ?? .plainText, .plainText]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = format == .json
+                ? try exportJSON(item)
+                : Data(exportString(item, as: format, timestamps: showTimestamps).utf8)
+            try data.write(to: url)
+        } catch {
+            phase = .failed(Lf("error.save.failed", error.localizedDescription))
+        }
+    }
 }
