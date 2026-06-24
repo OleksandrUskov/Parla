@@ -444,7 +444,11 @@ struct TranscriptCard: View {
     /// Record text: a list of tappable segments (if there are timestamps and the record isn't edited) or plain text.
     @ViewBuilder private var readBody: some View {
         if model.showTimestamps, !item.isEdited, !item.segments.isEmpty {
-            SegmentList(segments: item.segments, player: player, tappable: audioURL != nil)
+            if AudioChunker.isLong(durationSec: item.durationSec) {
+                ChapterListView(segments: item.segments, player: player, tappable: audioURL != nil)
+            } else {
+                SegmentList(segments: item.segments, player: player, tappable: audioURL != nil)
+            }
         } else {
             ScrollView {
                 Text(text)
@@ -602,5 +606,67 @@ struct SegmentRow: View {
         .padding(.horizontal, 8).padding(.vertical, 5)
         .background(active ? AnyShapeStyle(Brand.gradient.opacity(0.18)) : AnyShapeStyle(Color.clear),
                     in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// Chapter-grouped transcript for long recordings: collapsible ~2-min sections (first one expanded),
+/// each a list of tap-to-seek segments. Derived from segments via `AudioChunker.chapters` — no state.
+struct ChapterListView: View {
+    let segments: [Segment]
+    let player: PlaybackController
+    let tappable: Bool
+
+    private var chapters: [Chapter] { AudioChunker.chapters(from: segments) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(chapters) { chapter in
+                    ChapterSection(chapter: chapter, player: player, tappable: tappable,
+                                   initiallyExpanded: chapter.index == 0)
+                }
+            }
+            .padding(12)
+        }
+        .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+struct ChapterSection: View {
+    let chapter: Chapter
+    let player: PlaybackController
+    let tappable: Bool
+    @State private var expanded: Bool
+
+    init(chapter: Chapter, player: PlaybackController, tappable: Bool, initiallyExpanded: Bool) {
+        self.chapter = chapter
+        self.player = player
+        self.tappable = tappable
+        _expanded = State(initialValue: initiallyExpanded)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(chapter.segments.enumerated()), id: \.offset) { _, seg in
+                    if !seg.cleanText.isEmpty {
+                        SegmentRow(seg: seg, active: false, tappable: tappable)
+                            .contentShape(Rectangle())
+                            .onTapGesture { if tappable { player.seek(to: seg.start) } }
+                    }
+                }
+            }
+            .padding(.top, 2)
+        } label: {
+            HStack(spacing: 8) {
+                Text(Lf("chapter.title", chapter.index + 1))
+                    .font(.callout.weight(.semibold))
+                Text(chapter.rangeLabel)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .tint(Brand.accent)
+        .padding(.horizontal, 6).padding(.vertical, 4)
     }
 }

@@ -171,6 +171,7 @@
 "batch.label.multi"  = "«%1$@» (%2$lld из %3$lld)";
 "chunk.label"        = "Фрагмент %1$lld/%2$lld";
 "chunk.failed"       = "(фрагмент %lld не распознан)";
+"chapter.title"      = "Глава %lld";
 
 /* Export + units */
 "export.menu.help" = "Экспортировать запись";
