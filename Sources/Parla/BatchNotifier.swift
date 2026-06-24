@@ -1,24 +1,24 @@
 import Foundation
 import UserNotifications
 
-/// Тонкая обёртка над UNUserNotificationCenter + чистое (тестируемое) решение «слать ли уведомление».
+/// Thin wrapper over UNUserNotificationCenter + a pure (testable) "should we notify" decision.
 ///
-/// Решение и текст вынесены в чистые `static`-функции без системных вызовов — они юнит-тестятся.
-/// Систему трогает только `post(...)`, и только из реального бандла (в тестах никогда не вызывается).
+/// The decision and text live in pure `static` functions with no system calls — they're unit-tested.
+/// Only `post(...)` touches the system, and only from the real bundle (never called in tests).
 enum BatchNotifier {
-    /// Одиночный файл короче этого порога не шлёт уведомление (не спамим на 3-сек голосовых).
+    /// A single file shorter than this threshold won't post a notification (no spam on 3-sec voice memos).
     static let singleFileThreshold: TimeInterval = 20
 
-    /// Слать ли уведомление: только если задание «стоило ожидания» И окно не на переднем плане.
+    /// Whether to notify: only if the job «was worth the wait» AND the window isn't frontmost.
     /// - Parameters:
-    ///   - total: файлов в задании; elapsed: суммарное время; frontmost: активно ли окно Parla.
+    ///   - total: files in the job; elapsed: total time; frontmost: whether the Parla window is active.
     static func shouldNotify(total: Int, elapsed: TimeInterval, frontmost: Bool) -> Bool {
-        if frontmost { return false }            // юзер и так смотрит на чип
-        if total >= 2 { return true }            // любой батч достоин уведомления
-        return elapsed >= singleFileThreshold    // одиночный файл — только если был долгим
+        if frontmost { return false }            // user is already looking at the chip
+        if total >= 2 { return true }            // any batch is worth a notification
+        return elapsed >= singleFileThreshold    // single file — only if it took a while
     }
 
-    /// Заголовок + тело уведомления (чисто, тестируемо).
+    /// Notification title + body (pure, testable).
     static func summary(succeeded: Int, failed: Int) -> (title: String, body: String) {
         let total = succeeded + failed
         if succeeded == 0 {
@@ -30,8 +30,8 @@ enum BatchNotifier {
         return ("Parla", Lf("notify.partial", succeeded, total, failed))
     }
 
-    /// Запросить разрешение лениво (на первой реальной отправке) и доставить уведомление.
-    /// Best-effort: при отказе/недоступности молча выходит — основной сигнал готовности это чип в окне.
+    /// Request permission lazily (on the first real send) and deliver the notification.
+    /// Best-effort: on denial/unavailability it bails silently — the primary readiness signal is the in-window chip.
     @MainActor
     static func post(succeeded: Int, failed: Int) async {
         let center = UNUserNotificationCenter.current()
@@ -49,7 +49,7 @@ enum BatchNotifier {
         content.body = body
         content.sound = .default
         let req = UNNotificationRequest(identifier: "parla.batch.\(UUID().uuidString)",
-                                        content: content, trigger: nil)   // trigger:nil → доставка сразу
+                                        content: content, trigger: nil)   // trigger:nil → deliver immediately
         try? await center.add(req)
     }
 }

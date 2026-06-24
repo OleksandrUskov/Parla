@@ -1,33 +1,33 @@
 import XCTest
 @testable import Parla
 
-/// Юнит-тесты на чистую логику (без WhisperKit/аудио/UI):
-/// имена и тиры моделей, история (схема/поиск/экспорт/миграция),
-/// размеры/пути моделей, сбор аудиофайлов, форматирование, языки.
+/// Unit tests for pure logic (no WhisperKit/audio/UI):
+/// model names and tiers, history (schema/search/export/migration),
+/// model sizes/paths, audio file collection, formatting, languages.
 final class ParlaLogicTests: XCTestCase {
 
-    // MARK: Локализация (тест-шов)
+    // MARK: Localization (test seam)
 
-    /// Корень репозитория, выведенный из пути этого файла (Tests/ParlaTests/…→ ../../..).
+    /// Repo root, derived from this file's path (Tests/ParlaTests/… → ../../..).
     private var repoRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     }
 
-    /// Указать `Localized` на реальный `.lproj` из репо (детерминированно, без Bundle.main).
+    /// Point `Localized` at a real `.lproj` from the repo (deterministic, no Bundle.main).
     private func activateLocalization(_ lang: String) {
         let lproj = repoRoot.appendingPathComponent("Localization/\(lang).lproj")
         Localized.bundle = Bundle(path: lproj.path) ?? .main
         Localized.currentCode = lang
     }
 
-    /// По умолчанию все тесты идут на русском (исторические ожидания = русский исходный текст).
+    /// By default all tests run in Russian (historical expectations = Russian source text).
     override func setUp() {
         super.setUp()
         activateLocalization("ru")
     }
 
-    // MARK: Имена моделей
+    // MARK: Model names
 
     func testPrettyModel() {
         XCTAssertEqual(prettyModel("openai_whisper-tiny"), "Tiny")
@@ -49,7 +49,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(friendlyModel("something-weird"), prettyModel("something-weird"))
     }
 
-    // MARK: Форматирование
+    // MARK: Formatting
 
     func testFmtTime() {
         XCTAssertEqual(fmtTime(0), "00:00")
@@ -72,7 +72,7 @@ final class ParlaLogicTests: XCTestCase {
     func testDisplayPlain() {
         let item = makeItem(text: "привет мир", segments: [])
         XCTAssertEqual(item.display(timestamps: false), "привет мир")
-        XCTAssertEqual(item.display(timestamps: true), "привет мир")   // нет сегментов → откат
+        XCTAssertEqual(item.display(timestamps: true), "привет мир")   // no segments → fallback
     }
 
     func testDisplayTimestamps() {
@@ -100,7 +100,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(back[0].model, item.model)
     }
 
-    // MARK: История — поиск
+    // MARK: History — search
 
     func testFilterHistory() {
         let items = [
@@ -108,15 +108,15 @@ final class ParlaLogicTests: XCTestCase {
             makeItem(name: "b.ogg", text: "пока всем"),
             makeItem(name: "secret.ogg", text: "ничего"),
         ]
-        XCTAssertEqual(filterHistory(items, query: "").count, 3)       // пустой запрос → всё
-        XCTAssertEqual(filterHistory(items, query: "  ").count, 3)     // пробелы → всё
-        XCTAssertEqual(filterHistory(items, query: "мир").count, 1)    // по тексту
-        XCTAssertEqual(filterHistory(items, query: "ПРИВЕТ").count, 1) // регистронезависимо
-        XCTAssertEqual(filterHistory(items, query: "secret").count, 1) // по имени файла
+        XCTAssertEqual(filterHistory(items, query: "").count, 3)       // empty query → all
+        XCTAssertEqual(filterHistory(items, query: "  ").count, 3)     // whitespace → all
+        XCTAssertEqual(filterHistory(items, query: "мир").count, 1)    // by text
+        XCTAssertEqual(filterHistory(items, query: "ПРИВЕТ").count, 1) // case-insensitive
+        XCTAssertEqual(filterHistory(items, query: "secret").count, 1) // by file name
         XCTAssertEqual(filterHistory(items, query: "неттакого").count, 0)
     }
 
-    // MARK: История — экспорт
+    // MARK: History — export
 
     func testExportText() {
         let items = [makeItem(name: "a.ogg", text: "первый"), makeItem(name: "b.ogg", text: "второй")]
@@ -128,7 +128,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(exportText([]).hasPrefix("# Parla"), true)
     }
 
-    // MARK: История — миграция Murmur → Parla
+    // MARK: History — Murmur → Parla migration
 
     func testMigrationCopiesWhenTargetMissing() throws {
         let fm = FileManager.default
@@ -142,7 +142,7 @@ final class ParlaLogicTests: XCTestCase {
         HistoryStore.migrate(target: target, legacy: legacy)
         XCTAssertTrue(fm.fileExists(atPath: target.path))
 
-        try Data("[1,2,3]".utf8).write(to: legacy)  // повторно — не перезатирает
+        try Data("[1,2,3]".utf8).write(to: legacy)  // run again — does not overwrite
         HistoryStore.migrate(target: target, legacy: legacy)
         XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "[]")
     }
@@ -156,7 +156,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: target.path))
     }
 
-    // MARK: Выбор дефолтной модели
+    // MARK: Default model selection
 
     func testBestDefault() {
         XCTAssertEqual(AppModel.bestDefault(from: ["openai_whisper-base", "openai_whisper-large-v3-v20240930"]),
@@ -171,7 +171,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(AppModel.bestDefault(from: []), "openai_whisper-base")
     }
 
-    // MARK: Пути / размеры моделей
+    // MARK: Model paths / sizes
 
     func testLocalFolderPath() {
         let url = TranscriptionEngine.localFolder("openai_whisper-tiny")
@@ -190,7 +190,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(TranscriptionEngine.folderSize(at: tmp.appendingPathComponent("nope")), 0)
     }
 
-    // MARK: Сбор аудиофайлов из папки
+    // MARK: Collecting audio files from a folder
 
     func testAudioFiles() throws {
         let fm = FileManager.default
@@ -203,24 +203,24 @@ final class ParlaLogicTests: XCTestCase {
         try Data("x".utf8).write(to: tmp.appendingPathComponent("sub/d.wav"))
 
         let found = AppModel.audioFiles(in: tmp).map { $0.lastPathComponent }
-        XCTAssertEqual(found, ["a.ogg", "b.mp3", "d.wav"])  // только аудио, отсортировано по имени
+        XCTAssertEqual(found, ["a.ogg", "b.mp3", "d.wav"])  // audio only, sorted by name
         XCTAssertFalse(found.contains("note.txt"))
         XCTAssertFalse(found.contains("image.png"))
     }
 
-    // MARK: Языки
+    // MARK: Languages
 
     func testLanguages() {
         XCTAssertGreaterThan(whisperLanguages.count, 20)
-        XCTAssertEqual(whisperLanguages.first?.code, "")   // «Авто» первым
+        XCTAssertEqual(whisperLanguages.first?.code, "")   // «Auto» first
         XCTAssertTrue(whisperLanguages.contains { $0.code == "en" })
         XCTAssertTrue(whisperLanguages.contains { $0.code == "ru" })
         XCTAssertTrue(whisperLanguages.contains { $0.code == "uk" })
-        // коды уникальны
+        // codes are unique
         XCTAssertEqual(Set(whisperLanguages.map(\.code)).count, whisperLanguages.count)
     }
 
-    // MARK: Тиры моделей
+    // MARK: Model tiers
 
     @MainActor func testModelTiersCuration() {
         let m = AppModel()
@@ -232,7 +232,7 @@ final class ParlaLogicTests: XCTestCase {
         m.selectedModel = "openai_whisper-large-v3-v20240930_626MB"
         let tiers = m.modelTiers
 
-        XCTAssertEqual(tiers.count, 5)                                   // 5 уровней, без клонов
+        XCTAssertEqual(tiers.count, 5)                                   // 5 tiers, no clones
         XCTAssertEqual(tiers.first(where: { $0.recommended })?.name,
                        "openai_whisper-large-v3-v20240930_626MB")
         XCTAssertTrue(tiers.contains { $0.title == "Large v3 turbo" })
@@ -247,27 +247,27 @@ final class ParlaLogicTests: XCTestCase {
             "openai_whisper-large-v3-v20240930_626MB", "openai_whisper-large-v3",
             "openai_whisper-large-v2_949MB",
         ]
-        m.selectedModel = "openai_whisper-large-v2_949MB"   // не попадает ни в один уровень
+        m.selectedModel = "openai_whisper-large-v2_949MB"   // matches no tier
         let tiers = m.modelTiers
-        XCTAssertEqual(tiers.count, 6)                       // 5 + «текущая»
+        XCTAssertEqual(tiers.count, 6)                       // 5 + «current»
         XCTAssertEqual(tiers.last?.name, "openai_whisper-large-v2_949MB")
         XCTAssertEqual(tiers.last?.title, "Large v2")
     }
 
-    // MARK: Доп. покрытие (по итогам ревью)
+    // MARK: Extra coverage (from review)
 
     func testDisplayDropsEmptySegments() {
         let segs = [Segment(start: 0, end: 1, text: "привет"),
                     Segment(start: 1, end: 2, text: ""),
                     Segment(start: 2, end: 3, text: "мир")]
         let item = makeItem(text: "привет мир", segments: segs)
-        XCTAssertEqual(item.display(timestamps: true), "[00:00] привет\n[00:02] мир")  // пустой сегмент выкинут
+        XCTAssertEqual(item.display(timestamps: true), "[00:00] привет\n[00:02] мир")  // empty segment dropped
     }
 
     func testFmtTimeNegativeAndRounding() {
-        XCTAssertEqual(fmtTime(-5), "00:00")    // отрицательное клампится
+        XCTAssertEqual(fmtTime(-5), "00:00")    // negative is clamped
         XCTAssertEqual(fmtTime(-1), "00:00")
-        XCTAssertEqual(fmtTime(59.6), "01:00")  // округление вверх
+        XCTAssertEqual(fmtTime(59.6), "01:00")  // rounds up
         XCTAssertEqual(fmtTime(0.4), "00:00")
     }
 
@@ -301,9 +301,9 @@ final class ParlaLogicTests: XCTestCase {
 
     func testBestDefaultEnExclusion() {
         XCTAssertEqual(AppModel.bestDefault(from: ["openai_whisper-base.en", "openai_whisper-tiny"]),
-                       "openai_whisper-base.en")   // base-ветка пропускает .en → первый элемент
+                       "openai_whisper-base.en")   // base branch skips .en → first element
         XCTAssertEqual(AppModel.bestDefault(from: ["openai_whisper-base.en", "openai_whisper-base"]),
-                       "openai_whisper-base")       // выбирает не-.en base
+                       "openai_whisper-base")       // picks the non-.en base
     }
 
     func testPrettyModelMultiToken() {
@@ -319,14 +319,14 @@ final class ParlaLogicTests: XCTestCase {
         let out = exportText(items)
         XCTAssertTrue(out.contains("RU · Large v3"))
         XCTAssertTrue(out.contains("EN · Small"))
-        XCTAssertEqual(out.components(separatedBy: "---").count, items.count + 1)  // один разделитель на запись
+        XCTAssertEqual(out.components(separatedBy: "---").count, items.count + 1)  // one separator per entry
     }
 
     @MainActor func testModelTiersPrefixFallback() {
         let m = AppModel()
         m.availableModels = ["openai_whisper-tiny", "openai_whisper-large-v3-v20240930_626MB_quant"]
         m.selectedModel = "openai_whisper-tiny"
-        XCTAssertTrue(m.modelTiers.contains { $0.title == "Large v3 turbo" })  // зарезолвилось по префиксу
+        XCTAssertTrue(m.modelTiers.contains { $0.title == "Large v3 turbo" })  // resolved by prefix
     }
 
     @MainActor func testModelTiersSparse() {
@@ -338,10 +338,10 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(titles.contains("Large v3"))
         XCTAssertFalse(titles.contains("Tiny"))
         XCTAssertFalse(titles.contains("Base"))
-        XCTAssertLessThan(m.modelTiers.count, 5)   // отсутствующие уровни не показываются
+        XCTAssertLessThan(m.modelTiers.count, 5)   // missing tiers are not shown
     }
 
-    // MARK: Правка текста (фича 02)
+    // MARK: Text editing (feature 02)
 
     func testNormalizedEditDetectsChange() {
         let a = normalizedEdit("новый текст", from: "старый")
@@ -353,35 +353,35 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     func testNormalizedEditTrimsAndIgnoresWhitespace() {
-        XCTAssertFalse(normalizedEdit("  привет мир  \n", from: "привет мир").changed)  // тримминг → равно
-        XCTAssertFalse(normalizedEdit("a\r\nb", from: "a\nb").changed)                  // CRLF нормализован
+        XCTAssertFalse(normalizedEdit("  привет мир  \n", from: "привет мир").changed)  // trimming → equal
+        XCTAssertFalse(normalizedEdit("a\r\nb", from: "a\nb").changed)                  // CRLF normalized
         let changed = normalizedEdit("  новое  ", from: "старое")
         XCTAssertTrue(changed.changed)
-        XCTAssertEqual(changed.text, "новое")   // вернулся тримнутый текст
+        XCTAssertEqual(changed.text, "новое")   // returns the trimmed text
     }
 
     func testNormalizedEditEmptyKeepsOriginal() {
         let r = normalizedEdit("   ", from: "оригинал")
-        XCTAssertEqual(r.text, "оригинал")   // пустую правку не применяем
+        XCTAssertEqual(r.text, "оригинал")   // we don't apply an empty edit
         XCTAssertFalse(r.changed)
     }
 
     func testEditedItemSuppressesTimestamps() {
         let segs = [Segment(start: 0, end: 2, text: "привет"), Segment(start: 65, end: 67, text: "мир")]
         let edited = makeItem(text: "привет мир", segments: segs, edited: true)
-        XCTAssertEqual(edited.display(timestamps: true), "привет мир")   // таймкоды подавлены
+        XCTAssertEqual(edited.display(timestamps: true), "привет мир")   // timestamps suppressed
         let notEdited = makeItem(text: "привет мир", segments: segs, edited: false)
         XCTAssertEqual(notEdited.display(timestamps: true), "[00:00] привет\n[01:05] мир")
         let legacy = makeItem(text: "привет мир", segments: segs, edited: nil)
-        XCTAssertEqual(legacy.display(timestamps: true), "[00:00] привет\n[01:05] мир")  // nil = не редактировалось
+        XCTAssertEqual(legacy.display(timestamps: true), "[00:00] привет\n[01:05] мир")  // nil = not edited
     }
 
-    /// Ключевой миграционный тест: старый history.json без ключей edited/editedAt декодится без throw.
+    /// Key migration test: an old history.json without the edited/editedAt keys decodes without throwing.
     func testCodableBackwardCompatLegacyJSON() throws {
         let legacy = #"[{"id":"\#(UUID().uuidString)","date":740000000,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"openai_whisper-tiny","text":"привет","segments":[]}]"#
         let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8))
         XCTAssertEqual(items.count, 1)
-        XCTAssertNil(items.first?.edited)              // отсутствующий ключ → nil, НЕ throw
+        XCTAssertNil(items.first?.edited)              // missing key → nil, NOT a throw
         XCTAssertFalse(items.first?.isEdited ?? true)
         XCTAssertNil(items.first?.editedAt)
         XCTAssertEqual(items.first?.text, "привет")
@@ -409,16 +409,16 @@ final class ParlaLogicTests: XCTestCase {
             XCTAssertEqual(m.history.first?.edited, true)
             XCTAssertNotNil(m.history.first?.editedAt)
 
-            // no-op: тот же текст → false, штамп не трогаем
+            // no-op: same text → false, leave the timestamp alone
             let stampedAt = m.history.first?.editedAt
             XCTAssertFalse(m.saveEdit("исправлено", for: item.id))
             XCTAssertEqual(m.history.first?.editedAt, stampedAt)
 
-            // неизвестный id → false, история не меняется
+            // unknown id → false, history unchanged
             XCTAssertFalse(m.saveEdit("другое", for: UUID()))
             XCTAssertEqual(m.history.count, 1)
 
-            // правка реально на диске (во временном файле) и декодится обратно
+            // edit really lands on disk (in the temp file) and decodes back
             let reloaded = HistoryStore.load()
             XCTAssertEqual(reloaded.first?.text, "исправлено")
             XCTAssertEqual(reloaded.first?.isEdited, true)
@@ -432,21 +432,21 @@ final class ParlaLogicTests: XCTestCase {
         ])
         let blocks = out.components(separatedBy: "---")
         XCTAssertTrue(blocks[0].contains("## a.ogg"))
-        XCTAssertTrue(blocks[0].contains("изменено"))    // правленая — с пометкой
+        XCTAssertTrue(blocks[0].contains("изменено"))    // edited — with the marker
         XCTAssertTrue(blocks[1].contains("## b.ogg"))
-        XCTAssertFalse(blocks[1].contains("изменено"))   // обычная — без
+        XCTAssertFalse(blocks[1].contains("изменено"))   // plain — without
     }
 
-    // MARK: Батч-прогресс + уведомления (фича 05)
+    // MARK: Batch progress + notifications (feature 05)
 
     func testBatchLabelSingleVsMulti() {
         XCTAssertEqual(batchLabel("a.ogg", nil), "«a.ogg»")
-        XCTAssertEqual(batchLabel("a.ogg", BatchProgress(index: 1, total: 1, done: 0)), "«a.ogg»")  // одиночный — без счётчика
+        XCTAssertEqual(batchLabel("a.ogg", BatchProgress(index: 1, total: 1, done: 0)), "«a.ogg»")  // single — no counter
         XCTAssertEqual(batchLabel("a.ogg", BatchProgress(index: 3, total: 12, done: 2)), "«a.ogg» (3 из 12)")
     }
 
     func testEnginePhaseDefaultBatchNil() {
-        XCTAssertEqual(EnginePhase.preparing("x"), .preparing("x", batch: nil))   // дефолтный конструктор = nil
+        XCTAssertEqual(EnginePhase.preparing("x"), .preparing("x", batch: nil))   // default initializer = nil
         XCTAssertNotEqual(EnginePhase.transcribing("x", batch: BatchProgress(index: 1, total: 2, done: 0)),
                           .transcribing("x", batch: nil))
     }
@@ -458,9 +458,9 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(BatchNotifier.shouldNotify(total: 5, elapsed: 999, frontmost: true))
     }
     func testShouldNotifySingleFileThreshold() {
-        XCTAssertFalse(BatchNotifier.shouldNotify(total: 1, elapsed: 5,  frontmost: false))   // быстрый одиночный — молчим
-        XCTAssertTrue (BatchNotifier.shouldNotify(total: 1, elapsed: 25, frontmost: false))   // долгий одиночный — шлём
-        XCTAssertFalse(BatchNotifier.shouldNotify(total: 1, elapsed: 25, frontmost: true))    // но если активны — нет
+        XCTAssertFalse(BatchNotifier.shouldNotify(total: 1, elapsed: 5,  frontmost: false))   // fast single — stay quiet
+        XCTAssertTrue (BatchNotifier.shouldNotify(total: 1, elapsed: 25, frontmost: false))   // slow single — notify
+        XCTAssertFalse(BatchNotifier.shouldNotify(total: 1, elapsed: 25, frontmost: true))    // but if active — no
     }
 
     func testSummaryAllSuccess() {
@@ -492,11 +492,11 @@ final class ParlaLogicTests: XCTestCase {
     func testPluralEn() {
         XCTAssertEqual(pluralEn(1, "file", "files"), "file")
         XCTAssertEqual(pluralEn(2, "file", "files"), "files")
-        XCTAssertEqual(pluralEn(21, "file", "files"), "files")   // english: 1 → one, всё прочее → other
+        XCTAssertEqual(pluralEn(21, "file", "files"), "files")   // english: 1 → one, everything else → other
         XCTAssertEqual(pluralEn(0, "file", "files"), "files")
     }
 
-    /// Все три каталога (en/ru/uk) обязаны иметь ОДИНАКОВЫЙ набор ключей — ловит пропуски перевода.
+    /// All three catalogs (en/ru/uk) must have the SAME set of keys — catches missing translations.
     func testLocalizationKeyParity() {
         func keys(_ lang: String) -> Set<String> {
             let url = repoRoot.appendingPathComponent("Localization/\(lang).lproj/Localizable.strings")
@@ -509,45 +509,45 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(en, uk, "uk differs from en: \(en.symmetricDifference(uk).sorted())")
     }
 
-    /// Рантайм-переключение языка реально меняет вывод локализованных функций.
+    /// Switching the language at runtime really changes the output of localized functions.
     func testLocalizationLanguageSwitch() {
         activateLocalization("en")
         XCTAssertEqual(formatBytes(500 * 1_048_576), "500 MB")
         XCTAssertEqual(batchLabel("a.ogg", BatchProgress(index: 3, total: 12, done: 2)), "“a.ogg” (3 of 12)")
         XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).body, "Done: 1 transcription")
         XCTAssertEqual(BatchNotifier.summary(succeeded: 5, failed: 0).body, "Done: 5 transcriptions")
-        XCTAssertEqual(BatchNotifier.summary(succeeded: 21, failed: 0).body, "Done: 21 transcriptions") // англ. 21 → other
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 21, failed: 0).body, "Done: 21 transcriptions") // english 21 → other
 
         activateLocalization("uk")
         XCTAssertEqual(BatchNotifier.summary(succeeded: 5, failed: 0).body, "Готово: 5 розшифровок")
         XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).body, "Готово: 1 розшифровка")
     }
 
-    // MARK: Слежение за папкой (фича 04)
+    // MARK: Folder watching (feature 04)
 
     func testFolderScanIgnoresUnstable() {
         let a = stat("a.ogg", 100, 1000)
         let bPrev = stat("b.ogg", 100, 1000)
-        let bNow  = stat("b.ogg", 200, 1000)   // размер вырос → файл ещё дописывается
+        let bNow  = stat("b.ogg", 200, 1000)   // size grew → file is still being written
         let (ready, next) = FolderScan.newStableFiles(
             current: [a, bNow],
             lastSeen: ["/watch/a.ogg": a, "/watch/b.ogg": bPrev],
             processed: [])
-        XCTAssertEqual(ready.map { $0.url.lastPathComponent }, ["a.ogg"])   // только стабильный a
-        XCTAssertEqual(next["/watch/b.ogg"], bNow)                          // b перенесён на следующий проход
+        XCTAssertEqual(ready.map { $0.url.lastPathComponent }, ["a.ogg"])   // only the stable a
+        XCTAssertEqual(next["/watch/b.ogg"], bNow)                          // b deferred to the next pass
     }
 
     func testFolderScanFirstSightNotReady() {
         let a = stat("a.ogg", 100, 1000)
         let (ready, next) = FolderScan.newStableFiles(current: [a], lastSeen: [:], processed: [])
-        XCTAssertTrue(ready.isEmpty)               // впервые увиден — ещё не готов
-        XCTAssertEqual(next["/watch/a.ogg"], a)    // но запомнен
+        XCTAssertTrue(ready.isEmpty)               // seen for the first time — not ready yet
+        XCTAssertEqual(next["/watch/a.ogg"], a)    // but remembered
     }
 
     func testFolderScanSkipsProcessed() {
         let a = stat("a.ogg", 100, 1000)
         let (ready, _) = FolderScan.newStableFiles(current: [a], lastSeen: ["/watch/a.ogg": a], processed: [a.dedupKey])
-        XCTAssertTrue(ready.isEmpty)   // dedupKey уже обработан → пропускаем
+        XCTAssertTrue(ready.isEmpty)   // dedupKey already processed → skip
     }
 
     func testFolderScanReadyIsSorted() {
@@ -559,14 +559,14 @@ final class ParlaLogicTests: XCTestCase {
 
     func testDedupKeyChangesWithContent() {
         let base = stat("a.ogg", 100, 1000)
-        XCTAssertEqual(base.dedupKey, stat("a.ogg", 100, 1000).dedupKey)       // тот же triple → тот же ключ
-        XCTAssertNotEqual(base.dedupKey, stat("a.ogg", 200, 1000).dedupKey)    // другой размер
-        XCTAssertNotEqual(base.dedupKey, stat("a.ogg", 100, 2000).dedupKey)    // другой mtime
+        XCTAssertEqual(base.dedupKey, stat("a.ogg", 100, 1000).dedupKey)       // same triple → same key
+        XCTAssertNotEqual(base.dedupKey, stat("a.ogg", 200, 1000).dedupKey)    // different size
+        XCTAssertNotEqual(base.dedupKey, stat("a.ogg", 100, 2000).dedupKey)    // different mtime
     }
 
     func testCapProcessedFIFO() {
-        XCTAssertEqual(FolderScan.capProcessed(["1", "2", "3", "4"], max: 2), ["3", "4"])  // старые отброшены
-        XCTAssertEqual(FolderScan.capProcessed(["1"], max: 2), ["1"])                      // под лимитом — без изменений
+        XCTAssertEqual(FolderScan.capProcessed(["1", "2", "3", "4"], max: 2), ["3", "4"])  // oldest discarded
+        XCTAssertEqual(FolderScan.capProcessed(["1"], max: 2), ["1"])                      // under the limit — unchanged
         XCTAssertEqual(FolderScan.capProcessed(["1", "2"], max: 0), [])
     }
 
@@ -577,9 +577,9 @@ final class ParlaLogicTests: XCTestCase {
         ProcessedStore.fileURL = dir.appendingPathComponent("processed.json")
         defer { ProcessedStore.fileURL = original; try? FileManager.default.removeItem(at: dir) }
 
-        XCTAssertEqual(ProcessedStore.load(), [])                    // нет файла → пусто, без краша
+        XCTAssertEqual(ProcessedStore.load(), [])                    // no file → empty, no crash
         ProcessedStore.save(["k1", "k2", "k3"])
-        XCTAssertEqual(ProcessedStore.load(), ["k1", "k2", "k3"])   // порядок сохранён (нужен для FIFO)
+        XCTAssertEqual(ProcessedStore.load(), ["k1", "k2", "k3"])   // order preserved (needed for FIFO)
     }
 
     func testScanFolderRecursiveVsFlat() throws {
@@ -592,7 +592,7 @@ final class ParlaLogicTests: XCTestCase {
         try Data("x".utf8).write(to: tmp.appendingPathComponent("sub/b.mp3"))
 
         let flat = AppModel.scanFolder(tmp, recursive: false).map { $0.url.lastPathComponent }
-        XCTAssertEqual(flat, ["a.ogg"])                                                  // без подпапок, без note.txt
+        XCTAssertEqual(flat, ["a.ogg"])                                                  // no subfolders, no note.txt
         let rec = Set(AppModel.scanFolder(tmp, recursive: true).map { $0.url.lastPathComponent })
         XCTAssertEqual(rec, ["a.ogg", "b.mp3"])
     }
@@ -616,23 +616,23 @@ final class ParlaLogicTests: XCTestCase {
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
         try Data(repeating: 0, count: 500).write(to: tmp.appendingPathComponent("a.ogg"))
 
-        // первый проход: файл впервые увиден → не готов
+        // first pass: file seen for the first time → not ready
         let pass1 = AppModel.scanFolder(tmp, recursive: false)
         let (ready1, seen1) = FolderScan.newStableFiles(current: pass1, lastSeen: [:], processed: [])
         XCTAssertTrue(ready1.isEmpty)
-        // второй проход без изменений → готов (двухпроходная гарантия стабильности, без FSEvents)
+        // second pass with no changes → ready (two-pass stability guarantee, no FSEvents)
         let pass2 = AppModel.scanFolder(tmp, recursive: false)
         let (ready2, _) = FolderScan.newStableFiles(current: pass2, lastSeen: seen1, processed: [])
         XCTAssertEqual(ready2.map { $0.url.lastPathComponent }, ["a.ogg"])
     }
 
-    // MARK: Перераспознать (фича 01)
+    // MARK: Re-transcribe (feature 01)
 
-    /// Ключевая обратная совместимость: старый history.json без sourcePath/sourceBookmark декодится.
+    /// Key backward compat: an old history.json without sourcePath/sourceBookmark decodes.
     func testCodableBackwardCompatSourceFields() throws {
         let legacy = #"[{"id":"\#(UUID().uuidString)","date":740000000,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"openai_whisper-tiny","text":"привет","segments":[]}]"#
         let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8))
-        XCTAssertNil(items.first?.sourcePath)        // отсутствующий ключ → nil, НЕ throw
+        XCTAssertNil(items.first?.sourcePath)        // missing key → nil, NOT a throw
         XCTAssertNil(items.first?.sourceBookmark)
         XCTAssertFalse(items.first?.hasResolvableSource ?? true)
     }
@@ -666,7 +666,7 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     func testResolveSourceMissingWhenNilPath() {
-        let item = makeItem(text: "t")   // sourcePath == nil (как у легаси-записи)
+        let item = makeItem(text: "t")   // sourcePath == nil (as in a legacy entry)
         XCTAssertEqual(item.resolveSource(), .missing)
         XCTAssertFalse(item.hasResolvableSource)
     }
@@ -679,7 +679,7 @@ final class ParlaLogicTests: XCTestCase {
         let bm = makeSourceBookmark(tmp)
         XCTAssertNotNil(bm)
         var item = makeItem(text: "t")
-        item.sourcePath = nil            // путь отсутствует — должен найтись по bookmark
+        item.sourcePath = nil            // path absent — should be found via bookmark
         item.sourceBookmark = bm
         if case .found(let url, _) = item.resolveSource() {
             XCTAssertTrue(fm.fileExists(atPath: url.path))
@@ -695,7 +695,7 @@ final class ParlaLogicTests: XCTestCase {
             var item = makeItem(text: "оригинал", model: "openai_whisper-tiny")
             item.sourcePath = "/tmp/whatever.ogg"
             m.history = [item]
-            m.retranscribe(item, with: "openai_whisper-tiny")   // та же модель → no-op, ни истории ни фазы
+            m.retranscribe(item, with: "openai_whisper-tiny")   // same model → no-op, neither history nor phase
             XCTAssertEqual(m.history.first?.text, "оригинал")
             if case .idle = m.phase {} else { XCTFail("phase должна остаться .idle") }
         }
@@ -707,18 +707,18 @@ final class ParlaLogicTests: XCTestCase {
         try Data("x".utf8).write(to: tmp)
         defer { try? fm.removeItem(at: tmp) }
         let m = AppModel()
-        XCTAssertFalse(m.canRetranscribe(makeItem(text: "t")))   // нет sourcePath → нельзя
+        XCTAssertFalse(m.canRetranscribe(makeItem(text: "t")))   // no sourcePath → not allowed
         var present = makeItem(text: "t")
         present.sourcePath = tmp.path
-        XCTAssertTrue(m.canRetranscribe(present))                // движок свободен + файл есть
+        XCTAssertTrue(m.canRetranscribe(present))                // engine free + file present
     }
 
-    // MARK: Аудиоплеер (фича 06)
+    // MARK: Audio player (feature 06)
 
     func testTranscriptItemDecodesWithoutAudioFile() throws {
         let legacy = #"[{"id":"\#(UUID().uuidString)","date":740000000,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"openai_whisper-tiny","text":"привет","segments":[]}]"#
         let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8))
-        XCTAssertNil(items.first?.audioFile)        // нет ключа → nil, НЕ throw
+        XCTAssertNil(items.first?.audioFile)        // no key → nil, NOT a throw
         XCTAssertNil(items.first?.audioPlayable)
         XCTAssertEqual(items.first?.text, "привет")
     }
@@ -736,7 +736,7 @@ final class ParlaLogicTests: XCTestCase {
 
     func testAudioStoreFileName() {
         let id = UUID()
-        XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: "OGG"), "\(id.uuidString).ogg")  // нижний регистр
+        XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: "OGG"), "\(id.uuidString).ogg")  // lowercased
         XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: "m4a"), "\(id.uuidString).m4a")
         XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: "MP3"), "\(id.uuidString).mp3")
         XCTAssertEqual(AudioStore.fileName(for: id, sourceExtension: ""),    "\(id.uuidString).bin")
@@ -754,16 +754,16 @@ final class ParlaLogicTests: XCTestCase {
             XCTAssertNotNil(name)
             var item = makeItem(text: "t")
             item.audioFile = name
-            XCTAssertNotNil(AudioStore.playableURL(for: item))   // копия на месте
+            XCTAssertNotNil(AudioStore.playableURL(for: item))   // copy in place
             AudioStore.remove(item)
-            XCTAssertNil(AudioStore.playableURL(for: item))      // удалена
+            XCTAssertNil(AudioStore.playableURL(for: item))      // removed
         }
     }
 
     func testAudioStoreUrlMissingReturnsNil() {
         withTemporaryHistoryStore {
             var item = makeItem(text: "t")
-            item.audioFile = "nope-\(UUID().uuidString).ogg"     // файла нет
+            item.audioFile = "nope-\(UUID().uuidString).ogg"     // no such file
             XCTAssertNil(AudioStore.playableURL(for: item))
         }
     }
@@ -772,17 +772,17 @@ final class ParlaLogicTests: XCTestCase {
         let segs = [Segment(start: 0, end: 2, text: "a"),
                     Segment(start: 2, end: 5, text: "b"),
                     Segment(start: 10, end: 12, text: "c")]
-        XCTAssertNil(activeSegmentIndex(segs, at: -1))          // раньше первого
+        XCTAssertNil(activeSegmentIndex(segs, at: -1))          // before the first
         XCTAssertEqual(activeSegmentIndex(segs, at: 0), 0)
         XCTAssertEqual(activeSegmentIndex(segs, at: 1.9), 0)
-        XCTAssertEqual(activeSegmentIndex(segs, at: 2), 1)      // ровно start → новый сегмент
-        XCTAssertEqual(activeSegmentIndex(segs, at: 6), 1)      // в зазоре → остаёмся на последнем начавшемся
+        XCTAssertEqual(activeSegmentIndex(segs, at: 2), 1)      // exactly start → new segment
+        XCTAssertEqual(activeSegmentIndex(segs, at: 6), 1)      // in a gap → stay on the last one that started
         XCTAssertEqual(activeSegmentIndex(segs, at: 11), 2)
-        XCTAssertEqual(activeSegmentIndex(segs, at: 100), 2)    // за концом → последний
-        XCTAssertNil(activeSegmentIndex([], at: 1))             // нет сегментов
+        XCTAssertEqual(activeSegmentIndex(segs, at: 100), 2)    // past the end → last
+        XCTAssertNil(activeSegmentIndex([], at: 1))             // no segments
     }
 
-    // MARK: Быстрая расшифровка — буфер + хоткей (фича 03)
+    // MARK: Quick transcribe — pasteboard + hotkey (feature 03)
 
     func testPasteboardParseFileScheme() {
         XCTAssertEqual(PasteboardReader.parse(strings: ["file:///Users/me/v.ogg"]).map(\.path),
@@ -804,47 +804,47 @@ final class ParlaLogicTests: XCTestCase {
     func testAudioOnlyKeepsAudioDropsOther() {
         let urls = [URL(fileURLWithPath: "/t/a.ogg"), URL(fileURLWithPath: "/t/b.pdf"),
                     URL(fileURLWithPath: "/t/c.M4A"), URL(fileURLWithPath: "/t/d.txt")]
-        XCTAssertEqual(PasteboardReader.audioOnly(urls).map { $0.lastPathComponent }, ["a.ogg", "c.M4A"])  // регистронезависимо, только аудио
+        XCTAssertEqual(PasteboardReader.audioOnly(urls).map { $0.lastPathComponent }, ["a.ogg", "c.M4A"])  // case-insensitive, audio only
     }
     func testAudioOnlyEmpty() {
         XCTAssertTrue(PasteboardReader.audioOnly([]).isEmpty)
     }
 
-    // MARK: Авто-уборка аудио-кэша (LRU)
+    // MARK: Audio cache auto-cleanup (LRU)
 
     func testEnforceAudioCapNoOpUnderCap() {
         let a = makeItem(text: "a"), b = makeItem(text: "b")
         let sizes = [a.id: Int64(100), b.id: Int64(100)]
         let evict = AudioStore.enforceAudioCap([b, a], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [])
-        XCTAssertTrue(evict.isEmpty)   // влезаем → ничего не трогаем
+        XCTAssertTrue(evict.isEmpty)   // we fit → don't touch anything
     }
 
     func testEnforceAudioCapEvictsOldest() {
         let n = makeItem(text: "n"), m = makeItem(text: "m"), o = makeItem(text: "o")   // newest-first: [n, m, o]
         let sizes = [n.id: Int64(400), m.id: Int64(400), o.id: Int64(400)]               // 1200 > 1000
         let evict = AudioStore.enforceAudioCap([n, m, o], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [])
-        XCTAssertEqual(evict, [o.id])   // только самый старый, до влезания (1200-400=800 ≤ 1000)
+        XCTAssertEqual(evict, [o.id])   // only the oldest, until it fits (1200-400=800 ≤ 1000)
     }
 
     func testEnforceAudioCapProtectsSelected() {
         let n = makeItem(text: "n"), m = makeItem(text: "m"), o = makeItem(text: "o")
         let sizes = [n.id: Int64(400), m.id: Int64(400), o.id: Int64(400)]
         let evict = AudioStore.enforceAudioCap([n, m, o], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [o.id])
-        XCTAssertEqual(evict, [m.id])   // o защищён (играет/выделена) → выселяем следующую старую
+        XCTAssertEqual(evict, [m.id])   // o is protected (playing/selected) → evict the next oldest
     }
 
     func testEnforceAudioCapSkipsItemsWithoutAudio() {
         let n = makeItem(text: "n"), m = makeItem(text: "m"), o = makeItem(text: "o")
-        let sizes = [n.id: Int64(600), o.id: Int64(600)]   // у m аудио нет (0 байт)
+        let sizes = [n.id: Int64(600), o.id: Int64(600)]   // m has no audio (0 bytes)
         let evict = AudioStore.enforceAudioCap([n, m, o], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [])
-        XCTAssertEqual(evict, [o.id])   // 1200>1000 → выселяем o (600≤1000); m пропущен (нет аудио)
+        XCTAssertEqual(evict, [o.id])   // 1200>1000 → evict o (600≤1000); m skipped (no audio)
     }
 
     func testEnforceAudioCapPartialWhenOnlyProtectedExceeds() {
         let big = makeItem(text: "big")
-        let sizes = [big.id: Int64(2000)]   // одна запись больше всего кэпа, но защищена
+        let sizes = [big.id: Int64(2000)]   // a single entry exceeds the whole cap, but it's protected
         let evict = AudioStore.enforceAudioCap([big], capBytes: 1000, sizeOf: { sizes[$0.id] ?? 0 }, protected: [big.id])
-        XCTAssertTrue(evict.isEmpty)   // не дёргаем аудио из-под плеера — частичное соответствие OK
+        XCTAssertTrue(evict.isEmpty)   // don't yank audio out from under the player — partial compliance is OK
     }
 
     // MARK: helpers
@@ -863,8 +863,8 @@ final class ParlaLogicTests: XCTestCase {
         return item
     }
 
-    /// Выполнить блок с временным файлом истории — чтобы saveEdit/HistoryStore.save НЕ трогали
-    /// реальную историю пользователя в ~/Library/Application Support/Parla/.
+    /// Run a block with a temporary history file — so that saveEdit/HistoryStore.save do NOT touch
+    /// the user's real history in ~/Library/Application Support/Parla/.
     private func withTemporaryHistoryStore(_ body: () -> Void) {
         let original = HistoryStore.fileURL
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ParlaTest-\(UUID().uuidString)")

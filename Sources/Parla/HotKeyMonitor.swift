@@ -1,16 +1,16 @@
 import KeyboardShortcuts
 
-/// «Шов» горячей клавиши быстрой расшифровки.
+/// The hot-key «seam» for quick transcription.
 ///
-/// Раньше здесь жил ручной NSEvent global+local монитор — он требовал «Универсального доступа»
-/// (Accessibility) и слетал после каждой пере-сборки под ad-hoc подписью. Теперь — KeyboardShortcuts
-/// (Carbon `RegisterEventHotKey`): переназначаемая комбинация, БЕЗ Accessibility и без системных
-/// промптов. Регистрация обработчика и вкл/выкл — в `ParlaApp`; рекордер — в `SettingsView`.
+/// This used to be a manual NSEvent global+local monitor — it required Accessibility
+/// («Universal Access») and broke after every rebuild under an ad-hoc signature. Now it's KeyboardShortcuts
+/// (Carbon `RegisterEventHotKey`): a rebindable combo, WITHOUT Accessibility and without system
+/// prompts. Handler registration and enable/disable live in `ParlaApp`; the recorder lives in `SettingsView`.
 ///
-/// ПРИВАТНОСТЬ: библиотека регистрирует ровно ОДНУ заданную комбинацию через Carbon — это НЕ
-/// перехват и не лог нажатий (в отличие от мониторов ввода). Опционально, по умолчанию выключено.
+/// PRIVACY: the library registers exactly ONE specified combo via Carbon — this is NOT
+/// keystroke interception or logging (unlike input monitors). Optional, disabled by default.
 extension KeyboardShortcuts.Name {
-    /// Быстрая расшифровка аудиофайла из буфера. По умолчанию ⌃⌥⌘T; меняется в Настройках.
+    /// Quick transcription of an audio file from the clipboard. Defaults to ⌃⌥⌘T; rebindable in Settings.
     static let quickTranscribe = Self("quickTranscribe",
                                       default: .init(.t, modifiers: [.control, .option, .command]))
 }

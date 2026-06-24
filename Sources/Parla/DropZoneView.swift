@@ -56,7 +56,7 @@ struct DropZoneView: View {
         .animation(.easeInOut(duration: 0.2), value: model.isBusy)
     }
 
-    /// Надёжно достаёт файловый URL из NSItemProvider (Finder/любой источник).
+    /// Reliably extracts a file URL from an NSItemProvider (Finder/any source).
     nonisolated static func loadFileURL(_ provider: NSItemProvider) async -> URL? {
         await withCheckedContinuation { cont in
             if provider.canLoadObject(ofClass: URL.self) {

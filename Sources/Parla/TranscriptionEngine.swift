@@ -17,18 +17,18 @@ struct EngineResult {
     var duration: Double
 }
 
-/// Этап загрузки модели — наружу для прогресс-бара.
+/// Model load stage — exposed for the progress bar.
 enum ModelLoad: Sendable, Equatable {
     case downloading(Double)   // 0...1
     case loading
 }
 
-/// Тонкая обёртка над WhisperKit. Держит загруженную модель и переиспользует её.
+/// Thin wrapper around WhisperKit. Keeps the loaded model and reuses it.
 actor TranscriptionEngine {
     private var whisperKit: WhisperKit?
     private var loadedModel: String?
 
-    /// Куда WhisperKit складывает модели: ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml
+    /// Where WhisperKit stores models: ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml
     static func modelsRoot() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml", isDirectory: true)
@@ -36,13 +36,13 @@ actor TranscriptionEngine {
     static func localFolder(_ model: String) -> URL {
         modelsRoot().appendingPathComponent(model, isDirectory: true)
     }
-    /// Модель уже скачана на диск?
+    /// Is the model already downloaded to disk?
     static func isDownloaded(_ model: String) -> Bool {
         let items = (try? FileManager.default.contentsOfDirectory(atPath: localFolder(model).path)) ?? []
         return !items.isEmpty
     }
 
-    /// Суммарный размер файлов в папке (рекурсивно).
+    /// Total size of files in the folder (recursively).
     static func folderSize(at url: URL) -> Int64 {
         let fm = FileManager.default
         guard let en = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
@@ -54,8 +54,8 @@ actor TranscriptionEngine {
     }
     static func modelSize(_ model: String) -> Int64 { folderSize(at: localFolder(model)) }
 
-    /// Если модель на диске — грузим ЛОКАЛЬНО (download:false, офлайн, без повторного скачивания).
-    /// Иначе — качаем с прогрессом. На любой сбой локальной загрузки — фолбэк на докачку.
+    /// If the model is on disk — load it LOCALLY (download:false, offline, no re-download).
+    /// Otherwise — download with progress. On any local-load failure — fall back to re-downloading.
     func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {
         if loadedModel == model, whisperKit != nil { return }
         whisperKit = nil
@@ -68,7 +68,7 @@ actor TranscriptionEngine {
                 loadedModel = model
                 return
             } catch {
-                // повреждённый/неполный кэш → перекачаем ниже
+                // corrupted/incomplete cache → re-download below
             }
         }
 
@@ -82,7 +82,7 @@ actor TranscriptionEngine {
         loadedModel = model
     }
 
-    /// Удалить модель с диска. Если она сейчас загружена — выгружаем из памяти.
+    /// Delete the model from disk. If it's currently loaded — unload it from memory.
     func deleteModel(_ name: String) throws {
         let folder = Self.localFolder(name)
         if FileManager.default.fileExists(atPath: folder.path) {
@@ -97,11 +97,11 @@ actor TranscriptionEngine {
         }
         guard let kit = whisperKit else { throw EngineError.notLoaded }
 
-        // task: .translate → Whisper переводит речь любого языка в английский текст.
+        // task: .translate → Whisper translates speech in any language into English text.
         let options = DecodingOptions(task: translate ? .translate : .transcribe,
                                       language: language, detectLanguage: language == nil)
         let start = Date()
-        // Массивная перегрузка + слияние чанков (длинное аудио WhisperKit может бить).
+        // Array overload + chunk merging (WhisperKit may split long audio).
         let results: [TranscriptionResult] = try await kit.transcribe(audioPath: wavPath, decodeOptions: options)
         let elapsed = Date().timeIntervalSince(start)
 

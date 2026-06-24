@@ -1,21 +1,21 @@
 import Foundation
 import WhisperKit
 
-/// Каталог моделей: статус/размер на диске, скачивание/удаление, уровни для менеджера.
+/// Model catalog: download status / on-disk size, download/delete, tiers for the manager.
 extension AppModel {
-    // MARK: Статус / размер на диске
+    // MARK: Status / on-disk size
 
     func isDownloaded(_ model: String) -> Bool { downloadedSet.contains(model) }
     var totalModelsBytes: Int64 { modelSizes.values.reduce(0, +) }
 
-    /// Дешёвая проверка наличия — на главном потоке; тяжёлый подсчёт размеров — в фоне.
+    /// Cheap presence check on the main thread; the heavy size walk runs in the background.
     func refreshDownloaded() {
         let models = Set(availableModels + [selectedModel])
         var set = Set<String>()
         for m in models where TranscriptionEngine.isDownloaded(m) { set.insert(m) }
         downloadedSet = set
         let toSize = set
-        Task {   // @MainActor-задача; тяжёлый walk считаем в detached и присваиваем на main
+        Task {   // @MainActor task; run the heavy walk detached and assign back on main
             let sizes = await Task.detached { () -> [String: Int64] in
                 var s: [String: Int64] = [:]
                 for m in toSize { s[m] = TranscriptionEngine.modelSize(m) }
@@ -30,7 +30,7 @@ extension AppModel {
         let models = support.supported.sorted()
         guard !models.isEmpty else { return }
         availableModels = models
-        // Не перебиваем выбор пользователя, если модель уже скачана (даже если её нет в рекомендованных).
+        // Don't override the user's choice if the model is already downloaded (even if it's not in the recommended list).
         if !models.contains(selectedModel), !TranscriptionEngine.isDownloaded(selectedModel) {
             selectedModel = Self.bestDefault(from: models)
         }
@@ -62,9 +62,9 @@ extension AppModel {
         }
     }
 
-    // MARK: Уровни моделей (для менеджера)
+    // MARK: Model tiers (for the manager)
 
-    /// Чистый список из 5 уровней (по одному варианту на уровень), без квантованных клонов.
+    /// Clean list of 5 tiers (one variant per tier), without quantized clones.
     var modelTiers: [ModelTier] {
         func pick(_ cands: [String]) -> String? {
             cands.first(where: { availableModels.contains($0) })

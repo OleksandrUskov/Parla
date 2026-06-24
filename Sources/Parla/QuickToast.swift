@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Маленькое ненавязчивое окошко-тост у строки меню (для хоткея/быстрых действий).
-/// Не крадёт фокус (.nonactivatingPanel) и авто-исчезает. macOS-14-safe (обычные материалы).
+/// Small, unobtrusive toast window near the menu bar (for hotkeys/quick actions).
+/// Doesn't steal focus (.nonactivatingPanel) and auto-dismisses. macOS-14-safe (standard materials).
 @MainActor
 final class QuickToast {
     static let shared = QuickToast()

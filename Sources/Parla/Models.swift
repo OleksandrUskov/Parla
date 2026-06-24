@@ -1,13 +1,13 @@
 import Foundation
 
-/// Один распознанный фрагмент с таймкодом.
+/// A single recognized fragment with a timecode.
 struct Segment: Codable, Hashable {
     var start: Double
     var end: Double
     var text: String
 }
 
-/// Одна расшифровка в истории.
+/// A single transcript in the history.
 struct TranscriptItem: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var date: Date = Date()
@@ -17,19 +17,19 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var model: String
     var text: String
     var segments: [Segment]
-    var edited: Bool? = nil           // правился ли текст вручную (Optional — иначе старый history.json не декодится)
-    var editedAt: Date? = nil         // когда правился (nil для нетронутых / легаси-записей)
-    var sourcePath: String? = nil     // абсолютный путь к исходнику (для «перераспознать»); nil у старых/легаси
-    var sourceBookmark: Data? = nil   // запасной локатор-bookmark; nil — норм (Optional → легаси-совместимо)
-    var audioFile: String? = nil      // имя копии исходника в .../Parla/audio/ (для плеера); nil у старых записей
-    var audioPlayable: String? = nil  // имя m4a-рендишена для проигрывания (Opus/видео); nil если не нужен/не вышел
+    var edited: Bool? = nil           // whether the text was edited manually (Optional — otherwise old history.json won't decode)
+    var editedAt: Date? = nil         // when it was edited (nil for untouched / legacy records)
+    var sourcePath: String? = nil     // absolute path to the source (for "re-transcribe"); nil on old/legacy
+    var sourceBookmark: Data? = nil   // fallback locator bookmark; nil is fine (Optional → legacy-compatible)
+    var audioFile: String? = nil      // name of the source copy in .../Parla/audio/ (for the player); nil on old records
+    var audioPlayable: String? = nil  // name of the m4a rendition for playback (Opus/video); nil if not needed/not produced
 
-    /// Удобный аксессор: nil/false → не редактировалось.
+    /// Convenience accessor: nil/false → not edited.
     var isEdited: Bool { edited == true }
 
-    /// Текст с таймкодами или без — для отображения/копирования.
-    /// Для отредактированных записей таймкоды подавляются: правленый текст уже не совпадает
-    /// с границами исходных сегментов, поэтому показываем плоский текст.
+    /// Text with or without timecodes — for display/copying.
+    /// For edited records timecodes are suppressed: the edited text no longer matches
+    /// the boundaries of the original segments, so we show flat text.
     func display(timestamps: Bool) -> String {
         guard timestamps, !isEdited, !segments.isEmpty else { return text }
         return segments
@@ -43,17 +43,17 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     }
 }
 
-// MARK: - Поиск исходного файла записи (фича 01 «перераспознать»)
+// MARK: - Finding a record's source file (feature 01 «re-transcribe»)
 
-/// Результат попытки найти исходник записи.
+/// Result of trying to find a record's source.
 enum SourceResolution: Equatable {
-    case found(URL, scoped: Bool)   // scoped == true → надо вызвать stopAccessing… после (на будущее, под sandbox)
+    case found(URL, scoped: Bool)   // scoped == true → must call stopAccessing… afterwards (future-proofing, under sandbox)
     case missing
 }
 
 extension TranscriptItem {
-    /// Пытается найти исходный файл: сначала по абсолютному пути, затем по bookmark.
-    /// Несендбоксный билд: обычный путь — основной механизм, bookmark — запасной локатор.
+    /// Tries to find the source file: first by absolute path, then by bookmark.
+    /// Non-sandboxed build: the plain path is the primary mechanism, bookmark is the fallback locator.
     func resolveSource(fileManager fm: FileManager = .default) -> SourceResolution {
         if let p = sourcePath, fm.fileExists(atPath: p) {
             return .found(URL(fileURLWithPath: p), scoped: false)
@@ -62,13 +62,13 @@ extension TranscriptItem {
             var stale = false
             if let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale),
                fm.fileExists(atPath: url.path) {
-                return .found(url, scoped: false)   // обычный bookmark (не security-scoped — приложение не в песочнице)
+                return .found(url, scoped: false)   // plain bookmark (not security-scoped — the app isn't sandboxed)
             }
         }
         return .missing
     }
 
-    /// Доступен ли исходник прямо сейчас (для включения/выключения пункта «перераспознать»).
+    /// Whether the source is available right now (for enabling/disabling the «re-transcribe» item).
     var hasResolvableSource: Bool {
         if case .found(let url, let scoped) = resolveSource() {
             if scoped { url.stopAccessingSecurityScopedResource() }
@@ -78,8 +78,8 @@ extension TranscriptItem {
     }
 }
 
-/// Best-effort bookmark исходника при создании записи. Обычный (не security-scoped) — годится
-/// как запасной локатор в несендбоксном билде. Ошибки игнорируем: основной механизм — путь.
+/// Best-effort source bookmark when a record is created. Plain (not security-scoped) — good enough
+/// as a fallback locator in a non-sandboxed build. We ignore errors: the primary mechanism is the path.
 func makeSourceBookmark(_ url: URL) -> Data? {
     try? url.bookmarkData()
 }
@@ -89,12 +89,12 @@ func fmtTime(_ s: Double) -> String {
     return String(format: "%02d:%02d", t / 60, t % 60)
 }
 
-/// Нормализованная правка: убираем CRLF и хвостовые пробелы/переводы строк.
-/// Пустой результат не затирает оригинал. Возвращает (newText, changed).
+/// Normalized edit: strip CRLF and trailing whitespace/newlines.
+/// An empty result doesn't overwrite the original. Returns (newText, changed).
 func normalizedEdit(_ raw: String, from original: String) -> (text: String, changed: Bool) {
     let trimmed = raw.replacingOccurrences(of: "\r\n", with: "\n")
         .trimmingCharacters(in: .whitespacesAndNewlines)
-    let new = trimmed.isEmpty ? original : trimmed   // не даём случайно стереть весь текст
+    let new = trimmed.isEmpty ? original : trimmed   // don't let the whole text get wiped by accident
     return (new, new != original)
 }
 
@@ -107,7 +107,7 @@ func prettyModel(_ raw: String) -> String {
     return first.uppercased() + s.dropFirst()
 }
 
-/// Короткое дружелюбное имя варианта для чипа/метаданных.
+/// Short friendly name of the variant for the chip/metadata.
 func friendlyModel(_ raw: String) -> String {
     if raw.contains("large-v3-v20240930") { return "Large v3 turbo" }
     if raw.contains("distil") && raw.contains("large-v3") { return "Distil Large v3" }
@@ -120,26 +120,26 @@ func friendlyModel(_ raw: String) -> String {
     return prettyModel(raw)
 }
 
-/// Один «уровень» модели в менеджере (резолвится в реальный вариант).
+/// One model «tier» in the manager (resolves to a real variant).
 struct ModelTier: Identifiable {
     let title: String
-    let hint: String          // только качество/скорость, без размера
-    let estimate: String      // примерный размер до скачивания, напр. "~630 МБ" ("" — неизвестно)
+    let hint: String          // quality/speed only, no size
+    let estimate: String      // approximate size before download, e.g. "~630 МБ" ("" — unknown)
     let name: String
     let recommended: Bool
     var id: String { name }
 }
 
-// MARK: - История: фильтр, экспорт, форматирование размера
+// MARK: - History: filter, export, size formatting
 
-/// Поиск по истории (без учёта регистра, по тексту и имени файла).
+/// Search over the history (case-insensitive, by text and file name).
 func filterHistory(_ items: [TranscriptItem], query: String) -> [TranscriptItem] {
     let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !q.isEmpty else { return items }
     return items.filter { $0.text.lowercased().contains(q) || $0.sourceName.lowercased().contains(q) }
 }
 
-/// Вся история в один markdown-текст (для экспорта/бэкапа).
+/// The entire history as a single markdown text (for export/backup).
 func exportText(_ items: [TranscriptItem]) -> String {
     var out = L("export.title")
     for it in items {
@@ -158,29 +158,29 @@ func formatBytes(_ bytes: Int64) -> String {
     return Lf("unit.mb.fmt", mb)
 }
 
-/// Позиция в пакетной обработке: «index из total». Только для дропа папки / нескольких файлов.
+/// Position in batch processing: «index out of total». Only for a folder drop / multiple files.
 struct BatchProgress: Equatable {
-    var index: Int     // 1-based: текущий файл
-    var total: Int     // всего файлов в задании (>= 2; для одиночного — nil вместо структуры)
-    var done: Int      // завершённых до текущего (для нижнего бара): index-1
+    var index: Int     // 1-based: current file
+    var total: Int     // total files in the job (>= 2; for a single file — nil instead of the struct)
+    var done: Int      // completed before the current one (for the bottom bar): index-1
 }
 
 enum EnginePhase: Equatable {
     case idle
     case preparing(String, batch: BatchProgress? = nil)
-    case downloadingModel(Double)   // 0...1, реальное скачивание (один раз)
-    case loadingModel               // загрузка в память (быстро, каждый запуск)
+    case downloadingModel(Double)   // 0...1, actual download (one time)
+    case loadingModel               // loading into memory (fast, every launch)
     case transcribing(String, batch: BatchProgress? = nil)
     case failed(String)
 }
 
-/// «msg.ogg» (3 из 12)» для батча, или просто «msg.ogg» для одиночного файла.
+/// «msg.ogg» (3 of 12)» for a batch, or just «msg.ogg» for a single file.
 func batchLabel(_ name: String, _ b: BatchProgress?) -> String {
     guard let b, b.total > 1 else { return Lf("batch.label.single", name) }
     return Lf("batch.label.multi", name, b.index, b.total)
 }
 
-/// Русская плюрализация (1 файл / 2 файла / 5 файлов).
+/// Russian pluralization (1 файл / 2 файла / 5 файлов).
 func pluralRu(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
     let a = abs(n) % 100, b = a % 10
     if a > 10 && a < 20 { return many }
@@ -189,11 +189,11 @@ func pluralRu(_ n: Int, _ one: String, _ few: String, _ many: String) -> String 
     return many
 }
 
-/// Хранилище истории в ~/Library/Application Support/Parla/history.json
+/// History store in ~/Library/Application Support/Parla/history.json
 enum HistoryStore {
-    /// Путь к файлу истории в ~/Library/Application Support/Parla/.
-    /// `var` (а не `let`) — это тест-шов: тесты подменяют путь на временный, чтобы не трогать
-    /// реальную историю пользователя. В продакшене значение никогда не меняется.
+    /// Path to the history file in ~/Library/Application Support/Parla/.
+    /// `var` (not `let`) is a test seam: tests swap the path for a temporary one so they don't touch
+    /// the user's real history. In production the value never changes.
     static var fileURL: URL = {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -208,14 +208,14 @@ enum HistoryStore {
         return (try? JSONDecoder().decode([TranscriptItem].self, from: data)) ?? []
     }
 
-    /// Одноразовый перенос истории со старого имени приложения (Murmur → Parla).
+    /// One-time history migration from the old app name (Murmur → Parla).
     private static func migrateLegacyIfNeeded() {
         let legacy = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Murmur/history.json")
         migrate(target: fileURL, legacy: legacy)
     }
 
-    /// Чистая тестируемая логика: скопировать legacy → target, если у target ещё нет файла.
+    /// Pure testable logic: copy legacy → target if target doesn't have a file yet.
     static func migrate(target: URL, legacy: URL) {
         let fm = FileManager.default
         guard !fm.fileExists(atPath: target.path), fm.fileExists(atPath: legacy.path) else { return }
@@ -229,51 +229,51 @@ enum HistoryStore {
     }
 }
 
-// MARK: - Слежение за папкой (фича 04)
+// MARK: - Folder watching (feature 04)
 
-/// Снимок файла: для проверки «дописался ли» (size+mtime стабильны) и для ключа дедупликации.
+/// File snapshot: for checking whether it's «finished writing» (size+mtime stable) and as a deduplication key.
 struct WatchedFileStat: Equatable {
     let url: URL
     let size: Int64
     let mtime: Date
-    /// Стабильная дешёвая идентичность: путь + размер + mtime. Меняется при смене содержимого
-    /// (тот же файл, новые байты → новый ключ → распознаём заново).
+    /// Stable, cheap identity: path + size + mtime. Changes when the contents change
+    /// (same file, new bytes → new key → transcribe again).
     var dedupKey: String { "\(url.path)|\(size)|\(Int(mtime.timeIntervalSince1970))" }
 }
 
-/// Чистое ядро слежения: всё тестируемое, без файловой системы внутри.
-/// FSEvents/таймер только ВЫЗЫВАЮТ эти функции — сами решений не принимают.
+/// Pure watching core: everything testable, no file system inside.
+/// FSEvents/the timer only CALL these functions — they make no decisions themselves.
 enum FolderScan {
-    /// Из снимка папки выбрать файлы, которые: (а) ещё не обработаны (нет dedupKey в `processed`),
-    /// (б) «устаканились» — size+mtime совпали с прошлым наблюдением (`lastSeen`).
-    /// Возвращает (готовые к работе, новый lastSeen для следующего прохода).
+    /// From a folder snapshot, pick the files that: (a) aren't processed yet (no dedupKey in `processed`),
+    /// (b) have «settled» — size+mtime matched the previous observation (`lastSeen`).
+    /// Returns (ready to work on, new lastSeen for the next pass).
     static func newStableFiles(
         current: [WatchedFileStat],
-        lastSeen: [String: WatchedFileStat],   // ключ = path
-        processed: Set<String>                 // dedupKey уже обработанных
+        lastSeen: [String: WatchedFileStat],   // key = path
+        processed: Set<String>                 // dedupKey of already processed
     ) -> (ready: [WatchedFileStat], nextLastSeen: [String: WatchedFileStat]) {
         var ready: [WatchedFileStat] = []
         var next: [String: WatchedFileStat] = [:]
         for stat in current {
             next[stat.url.path] = stat
-            if processed.contains(stat.dedupKey) { continue }     // уже сделали
+            if processed.contains(stat.dedupKey) { continue }     // already done
             if let prev = lastSeen[stat.url.path], prev == stat {
-                ready.append(stat)                                // не менялся с прошлого раза → дописался
+                ready.append(stat)                                // unchanged since last time → finished writing
             }
-            // новый ИЛИ изменился → только запоминаем в next, ждём следующего прохода
+            // new OR changed → just remember it in next, wait for the next pass
         }
         return (ready.sorted { $0.url.lastPathComponent < $1.url.lastPathComponent }, next)
     }
 
-    /// FIFO-обрезка множества обработанных, чтобы не росло бесконечно (старые ключи отбрасываются).
+    /// FIFO trimming of the processed set so it doesn't grow forever (old keys are dropped).
     static func capProcessed(_ ordered: [String], max: Int) -> [String] {
         guard max >= 0, ordered.count > max else { return ordered }
         return Array(ordered.suffix(max))
     }
 }
 
-/// Хранилище множества обработанных ключей в ~/Library/Application Support/Parla/processed.json.
-/// Зеркалит HistoryStore (включая `var fileURL` тест-шов).
+/// Store for the set of processed keys in ~/Library/Application Support/Parla/processed.json.
+/// Mirrors HistoryStore (including the `var fileURL` test seam).
 enum ProcessedStore {
     static var fileURL: URL = {
         let base = FileManager.default
@@ -284,7 +284,7 @@ enum ProcessedStore {
     }()
 
     static func load() -> [String] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }   // нет файла → пусто, без краша
+        guard let data = try? Data(contentsOf: fileURL) else { return [] }   // no file → empty, no crash
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 
@@ -294,12 +294,12 @@ enum ProcessedStore {
     }
 }
 
-// MARK: - Хранилище аудио для плеера (фича 06)
+// MARK: - Audio store for the player (feature 06)
 
-/// Копии исходного аудио рядом с историей: ~/Library/Application Support/Parla/audio/.
-/// Папка выводится из `HistoryStore.fileURL` → автоматически уезжает на временный путь в тестах.
+/// Copies of the source audio next to the history: ~/Library/Application Support/Parla/audio/.
+/// The folder is derived from `HistoryStore.fileURL` → automatically moves to a temporary path in tests.
 enum AudioStore {
-    /// Форматы, которые AVAudioPlayer открывает напрямую — рендишен .m4a им не нужен.
+    /// Formats AVAudioPlayer opens directly — they don't need an .m4a rendition.
     static let directlyPlayable: Set<String> = ["m4a", "mp3", "wav", "aac", "caf", "aiff", "aif"]
 
     static var folder: URL {
@@ -309,13 +309,13 @@ enum AudioStore {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     }
 
-    /// Имя файла копии: "<uuid>.<ext>" (ext нижним регистром, или "bin"). Чистая функция.
+    /// Copy file name: "<uuid>.<ext>" (ext lowercased, or "bin"). Pure function.
     static func fileName(for id: UUID, sourceExtension ext: String) -> String {
         let e = ext.lowercased()
         return e.isEmpty ? "\(id.uuidString).bin" : "\(id.uuidString).\(e)"
     }
 
-    /// Лучший URL для проигрывания: сначала m4a-рендишен, затем копия оригинала (если файл на месте).
+    /// Best URL for playback: first the m4a rendition, then the copy of the original (if the file is there).
     static func playableURL(for item: TranscriptItem) -> URL? {
         for name in [item.audioPlayable, item.audioFile].compactMap({ $0 }) {
             let u = folder.appendingPathComponent(name)
@@ -324,7 +324,7 @@ enum AudioStore {
         return nil
     }
 
-    /// Копирует исходник в хранилище. Возвращает имя файла или nil (на ошибке не валим транскрибацию).
+    /// Copies the source into the store. Returns the file name or nil (on error we don't fail the transcription).
     static func copy(from src: URL, id: UUID) -> String? {
         ensureFolder()
         let name = fileName(for: id, sourceExtension: src.pathExtension)
@@ -336,7 +336,7 @@ enum AudioStore {
         } catch { return nil }
     }
 
-    /// Делает m4a-рендишен исходника для проигрывания. Возвращает имя или nil. Best-effort.
+    /// Makes an m4a rendition of the source for playback. Returns the name or nil. Best-effort.
     static func makePlayable(from src: URL, id: UUID) -> String? {
         ensureFolder()
         let name = "\(id.uuidString).m4a"
@@ -348,14 +348,14 @@ enum AudioStore {
         } catch { return nil }
     }
 
-    /// Удалить аудио записи (копию и рендишен).
+    /// Delete a record's audio (the copy and the rendition).
     static func remove(_ item: TranscriptItem) {
         for name in [item.audioFile, item.audioPlayable].compactMap({ $0 }) {
             try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
         }
     }
 
-    /// Снести весь кэш аудио (для кнопки «Очистить аудио-кэш» в настройках).
+    /// Wipe the entire audio cache (for the «Clear audio cache» button in settings).
     static func clearAll() {
         guard let items = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
         else { return }
@@ -364,7 +364,7 @@ enum AudioStore {
 
     static func totalBytes() -> Int64 { TranscriptionEngine.folderSize(at: folder) }
 
-    /// Размер аудио-файлов одной записи (копия + рендишен). 0, если файлов нет.
+    /// Size of one record's audio files (copy + rendition). 0 if there are no files.
     static func bytes(of item: TranscriptItem) -> Int64 {
         [item.audioFile, item.audioPlayable].compactMap { $0 }.reduce(Int64(0)) { $0 + fileSize($1) }
     }
@@ -373,8 +373,8 @@ enum AudioStore {
         return Int64((try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
     }
 
-    /// Снести файлы-сироты: всё в audio/, что не упомянуто ни в одной записи (ловит обрывки от краша
-    /// между copy и save, недописанный ffmpeg .m4a). Текст не трогает — только файлы.
+    /// Wipe orphan files: everything in audio/ not referenced by any record (catches leftovers from a crash
+    /// between copy and save, an unfinished ffmpeg .m4a). Doesn't touch the text — files only.
     static func pruneOrphans(keeping history: [TranscriptItem]) {
         let referenced = Set(history.flatMap { [$0.audioFile, $0.audioPlayable].compactMap { $0 } })
         guard let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
@@ -384,22 +384,22 @@ enum AudioStore {
         }
     }
 
-    /// ЧИСТОЕ ядро LRU-выселения: какие записи лишить аудио, чтобы влезть в кэп.
-    /// ТЕКСТ НЕ ТРОГАЕТСЯ — вызывающий лишь обнуляет audioFile/audioPlayable и удаляет эти файлы.
-    /// `history[0]` — новейшая (insert at:0), поэтому «старое» = бóльший индекс → идём с хвоста.
-    /// `sizeOf` инжектируется (нет ФС в ядре → детерминированно и тестируемо). `protected`
-    /// (выделенная/играющая + только что добавленная) НИКОГДА не выселяется — даже если из-за этого
-    /// кэп чуть превышен (частичное соответствие корректно, не дёргаем аудио из-под плеера).
+    /// PURE LRU-eviction core: which records to strip of audio to fit within the cap.
+    /// THE TEXT IS NOT TOUCHED — the caller only nulls out audioFile/audioPlayable and deletes those files.
+    /// `history[0]` is the newest (insert at:0), so «old» = larger index → we go from the tail.
+    /// `sizeOf` is injected (no FS in the core → deterministic and testable). `protected`
+    /// (selected/playing + just added) is NEVER evicted — even if that slightly exceeds
+    /// the cap (partial compliance is correct, we don't yank audio out from under the player).
     static func enforceAudioCap(_ history: [TranscriptItem], capBytes: Int64,
                                 sizeOf: (TranscriptItem) -> Int64,
                                 protected: Set<UUID>) -> [UUID] {
         var total = history.reduce(Int64(0)) { $0 + sizeOf($1) }
         guard total > capBytes else { return [] }
         var evict: [UUID] = []
-        for item in history.reversed() {                 // с хвоста (старое) к голове (новое)
+        for item in history.reversed() {                 // from the tail (old) to the head (new)
             if total <= capBytes { break }
             let bytes = sizeOf(item)
-            guard bytes > 0, !protected.contains(item.id) else { continue }   // нет аудио или защищён
+            guard bytes > 0, !protected.contains(item.id) else { continue }   // no audio or protected
             evict.append(item.id)
             total -= bytes
         }
@@ -407,9 +407,9 @@ enum AudioStore {
     }
 }
 
-/// Индекс сегмента, чей [start, …) содержит t (для подсветки активного сегмента при проигрывании).
-/// Берём последний сегмент со `start <= t` — устойчиво к зазорам/перекрытиям в выводе Whisper.
-/// nil, если t раньше первого сегмента или сегментов нет.
+/// Index of the segment whose [start, …) contains t (for highlighting the active segment during playback).
+/// We take the last segment with `start <= t` — robust to gaps/overlaps in Whisper's output.
+/// nil if t is before the first segment or there are no segments.
 func activeSegmentIndex(_ segments: [Segment], at t: Double) -> Int? {
     guard !segments.isEmpty else { return nil }
     var idx: Int? = nil

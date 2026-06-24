@@ -63,7 +63,7 @@ struct BrandHeader: View {
     }
 }
 
-// MARK: - Менеджер моделей
+// MARK: - Model manager
 
 struct ModelButton: View {
     @Environment(AppModel.self) private var model
@@ -191,7 +191,7 @@ struct ModelRow: View {
     }
 }
 
-// MARK: - Статус / прогресс
+// MARK: - Status / progress
 
 struct StatusBar: View {
     @Environment(AppModel.self) private var model
@@ -213,7 +213,7 @@ struct StatusBar: View {
         }
     }
 
-    /// Чип + (для батча) нижний детерминированный бар «сколько из скольких».
+    /// Chip + (for a batch) a bottom determinate bar showing «how many of how many».
     private func progressChip(_ text: String, _ b: BatchProgress?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             chip(text, busy: true)
@@ -297,9 +297,9 @@ struct TranscriptCard: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Смена выделения (или новая расшифровка): сбрасываем незавершённую правку (чтобы не
-        // записать её в чужую запись) и перегружаем плеер на аудио новой записи. initial:true —
-        // грузим и при первом показе.
+        // Selection change (or a new transcript): discard the in-progress edit (so we don't
+        // write it into someone else's record) and reload the player with the new record's audio.
+        // initial:true — also load on first appearance.
         .onChange(of: item.id, initial: true) { _, _ in
             if isEditing { cancelEdit() }
             player.load(audioURL)
@@ -307,7 +307,7 @@ struct TranscriptCard: View {
         .onDisappear { player.stop() }
     }
 
-    // MARK: Шапка — мета + действия (разные в режиме чтения и правки)
+    // MARK: Header — meta + actions (different in read vs edit mode)
 
     private var header: some View {
         HStack(alignment: .top) {
@@ -386,13 +386,13 @@ struct TranscriptCard: View {
                   ?? L("transcript.edited.manually")))
     }
 
-    // MARK: Тело — текст (чтение) или редактор (правка)
+    // MARK: Body — text (reading) or editor (editing)
 
     @ViewBuilder private var content: some View {
         if isEditing {
             TextEditor(text: $draft)
                 .font(.system(.body, design: .rounded))
-                .scrollContentBackground(.hidden)          // macOS 14-safe; сохраняем тёмный фон карточки
+                .scrollContentBackground(.hidden)          // macOS 14-safe; keeps the card's dark background
                 .focused($editorFocused)
                 .frame(maxWidth: .infinity, minHeight: 160, maxHeight: .infinity, alignment: .leading)
                 .padding(10)
@@ -405,9 +405,9 @@ struct TranscriptCard: View {
         }
     }
 
-    // MARK: Правка — хелперы
+    // MARK: Editing — helpers
 
-    /// Текст записи: список тапабельных сегментов (если есть таймкоды и запись не правлена) или плоский текст.
+    /// Record text: a list of tappable segments (if there are timestamps and the record isn't edited) or plain text.
     @ViewBuilder private var readBody: some View {
         if model.showTimestamps, !item.isEdited, !item.segments.isEmpty {
             SegmentList(segments: item.segments, player: player, tappable: audioURL != nil)
@@ -424,8 +424,8 @@ struct TranscriptCard: View {
     }
 
     private func beginEdit() {
-        player.stop()              // правим текст — не проигрываем
-        draft = item.text          // ВСЕГДА плоский текст, не display(timestamps:)
+        player.stop()              // editing text — don't play
+        draft = item.text          // ALWAYS plain text, not display(timestamps:)
         isEditing = true
         editorFocused = true
     }
@@ -445,8 +445,8 @@ struct TranscriptCard: View {
     }
 }
 
-/// «Перераспознать» — дропдаун уровней моделей. Перезапускает запись на выбранной модели,
-/// заменяя её содержимое на месте. Выключен, если движок занят или исходник недоступен.
+/// «Re-transcribe» — a dropdown of model tiers. Re-runs the record on the selected model,
+/// replacing its content in place. Disabled if the engine is busy or the source is unavailable.
 struct RetranscribeMenu: View {
     @Environment(AppModel.self) private var model
     let item: TranscriptItem
@@ -463,7 +463,7 @@ struct RetranscribeMenu: View {
                         Text(tier.title)
                     }
                 }
-                .disabled(tier.name == item.model)   // та же модель — пересчитывать нечего
+                .disabled(tier.name == item.model)   // same model — nothing to recompute
             }
         } label: {
             Image(systemName: "arrow.triangle.2.circlepath").font(.body)
@@ -480,10 +480,10 @@ struct RetranscribeMenu: View {
     }
 }
 
-// MARK: - Плеер исходного аудио (фича 06)
+// MARK: - Source audio player (feature 06)
 
-/// Транспорт: play/pause + скрабер + время. Деградирует в одну строку-заметку, если аудио нет
-/// или формат не проигрывается встроенным плеером.
+/// Transport: play/pause + scrubber + time. Degrades to a single note line if there's no audio
+/// or the format isn't playable by the built-in player.
 struct TransportBar: View {
     let player: PlaybackController
     let hasAudio: Bool
@@ -522,8 +522,8 @@ struct TransportBar: View {
     }
 }
 
-/// Список сегментов с таймкодами. Клик по строке (если есть аудио) перематывает плеер.
-/// Активный сегмент подсвечивается по текущему времени проигрывания.
+/// List of segments with timestamps. Clicking a row (if there's audio) seeks the player.
+/// The active segment is highlighted based on the current playback time.
 struct SegmentList: View {
     let segments: [Segment]
     let player: PlaybackController

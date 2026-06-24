@@ -1,8 +1,8 @@
 import Foundation
 import AVFoundation
 
-/// Плеер исходного аудио записи (фича 06). Обёртка над AVAudioPlayer + 0.1с тикер для прогресса.
-/// Это эфемерное UI-состояние — живёт во @State карточки, НЕ в AppModel.
+/// Player for the recording's source audio (feature 06). A wrapper over AVAudioPlayer + a 0.1s ticker for progress.
+/// This is ephemeral UI state — it lives in the card's @State, NOT in AppModel.
 @MainActor
 @Observable
 final class PlaybackController {
@@ -14,13 +14,13 @@ final class PlaybackController {
     private var player: AVAudioPlayer?
     private var ticker: Timer?
 
-    /// Грузим аудио записи. nil-URL → выгружаем. Идемпотентно по URL.
+    /// Loads the recording's audio. A nil URL → unload. Idempotent by URL.
     func load(_ url: URL?) {
         guard loadedURL != url else { return }
         stop()
         player = nil; duration = 0; currentTime = 0; loadedURL = url
         guard let url else { return }
-        // AVAudioPlayer не открывает Ogg/Opus напрямую — на ошибке остаёмся «без плеера» (canPlay=false).
+        // AVAudioPlayer can't open Ogg/Opus directly — on failure we stay «without a player» (canPlay=false).
         guard let p = try? AVAudioPlayer(contentsOf: url) else { return }
         p.prepareToPlay()
         player = p
@@ -35,7 +35,7 @@ final class PlaybackController {
         else { p.play(); isPlaying = true; startTicker() }
     }
 
-    /// Перемотка с авто-стартом проигрывания (клик по сегменту = «играй отсюда»).
+    /// Seek with auto-start playback (clicking a segment = «play from here»).
     func seek(to t: Double) {
         guard let p = player else { return }
         p.currentTime = min(max(0, t), max(0, duration - 0.05))
@@ -43,7 +43,7 @@ final class PlaybackController {
         if !p.isPlaying { p.play(); isPlaying = true; startTicker() }
     }
 
-    /// Перетаскивание скрабера: перемотка без авто-старта.
+    /// Dragging the scrubber: seek without auto-start.
     func scrub(to t: Double) {
         guard let p = player else { return }
         p.currentTime = min(max(0, t), max(0, duration - 0.05))
@@ -58,7 +58,7 @@ final class PlaybackController {
     private func startTicker() {
         stopTicker()
         ticker = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tick() }   // Timer на main runloop → точно главный поток
+            MainActor.assumeIsolated { self?.tick() }   // Timer on the main runloop → guaranteed main thread
         }
     }
     private func stopTicker() { ticker?.invalidate(); ticker = nil }
@@ -66,12 +66,12 @@ final class PlaybackController {
     private func tick() {
         guard let p = player else { return }
         currentTime = p.currentTime
-        if !p.isPlaying {                                // доиграли до конца
+        if !p.isPlaying {                                // played through to the end
             isPlaying = false; stopTicker()
             if currentTime >= duration - 0.15 { currentTime = duration }
         }
     }
-    // Без deinit: тикер детерминированно гасится через stop()/stopTicker() (пауза/конец/load/
-    // onDisappear), а контроллер живёт всё время работы приложения (@State единственной карточки).
-    // Это обходит «@MainActor deinit trap» (nonisolated deinit не может трогать изолированный ticker).
+    // No deinit: the ticker is deterministically torn down via stop()/stopTicker() (pause/end/load/
+    // onDisappear), and the controller lives for the app's entire runtime (@State of the single card).
+    // This sidesteps the «@MainActor deinit trap» (a nonisolated deinit can't touch the isolated ticker).
 }

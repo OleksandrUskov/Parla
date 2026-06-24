@@ -1,9 +1,9 @@
 import Foundation
 
-/// Языки для ручного выбора. Whisper мультиязычный (~99 языков); «Авто» (пустой код)
-/// определяет язык сам — английский и любой другой работают без доскачивания.
+/// Languages for manual selection. Whisper is multilingual (~99 languages); «Auto» (empty code)
+/// detects the language itself — English and any other work without an extra download.
 let whisperLanguages: [(code: String, name: String)] = [
-    ("",   ""),   // «Авто» — локализуется при отрисовке (ключ lang.auto), остальные имена — эндонимы
+    ("",   ""),   // «Auto» — localized at render time (key lang.auto); the other names are endonyms
     ("ru", "Русский"),
     ("uk", "Українська"),
     ("en", "English"),

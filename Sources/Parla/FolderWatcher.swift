@@ -1,11 +1,11 @@
 import Foundation
-import CoreServices   // FSEvents — системный фреймворк, без новых зависимостей
+import CoreServices   // FSEvents — system framework, no new dependencies
 
-/// Наблюдатель за папкой через FSEvents (рекурсивно). Сам решений не принимает — дебаунсит
-/// «что-то изменилось под этим путём» и зовёт `onChange` на главном потоке. Решение, что именно
-/// делать, принимает `AppModel` через чистое ядро `FolderScan`.
+/// Folder watcher via FSEvents (recursive). It makes no decisions itself — it debounces
+/// «something changed under this path» and calls `onChange` on the main thread. The decision about what
+/// to actually do is made by `AppModel` through the pure `FolderScan` core.
 ///
-/// Для нестабильных томов (сеть/облако) есть poll-фолбэк с тем же `onChange`.
+/// For unstable volumes (network/cloud) there's a poll fallback with the same `onChange`.
 final class FolderWatcher: @unchecked Sendable {
     private var stream: FSEventStreamRef?
     private let lock = NSLock()
@@ -29,10 +29,10 @@ final class FolderWatcher: @unchecked Sendable {
 
     func start() {
         if usePolling { startPolling(); return }
-        // passRetained + release-колбэк: поток держит +1 на self, поэтому takeUnretainedValue в
-        // колбэке безопасен даже в момент teardown — колбэк бежит на фоновой очереди, а объект жив,
-        // пока жив поток. +1 балансируется FSEventStreamRelease в stop(). Так закрываем
-        // use-after-free на «выключил слежение ровно когда прилетело событие».
+        // passRetained + release callback: the stream holds a +1 on self, so takeUnretainedValue in
+        // the callback is safe even during teardown — the callback runs on a background queue, and the object stays alive
+        // as long as the stream lives. The +1 is balanced by FSEventStreamRelease in stop(). This closes
+        // the use-after-free on «stopped watching right when an event arrived».
         let infoPtr = Unmanaged.passRetained(self).toOpaque()
         var ctx = FSEventStreamContext(
             version: 0,
@@ -48,16 +48,16 @@ final class FolderWatcher: @unchecked Sendable {
             let me = Unmanaged<FolderWatcher>.fromOpaque(info).takeUnretainedValue()
             me.coalesceAndNotify()
         }
-        // sinceWhen = SinceNow → ТОЛЬКО будущие события; существующие файлы не «всплывают»
-        // (часть политики «только новые после включения»).
+        // sinceWhen = SinceNow → ONLY future events; existing files don't «surface»
+        // (part of the «only new ones after enabling» policy).
         let created = FSEventStreamCreate(
             nil, cb, &ctx,
             [folder.path] as CFArray,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            debounce,                                   // встроенная коалесценция FSEvents
+            debounce,                                   // built-in FSEvents coalescing
             FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents))
         guard let s = created else {
-            // Create провалился и release-колбэк НЕ вызовется → балансируем +1 вручную.
+            // Create failed and the release callback will NOT fire → balance the +1 manually.
             Unmanaged<FolderWatcher>.fromOpaque(infoPtr).release()
             startPolling()
             return
@@ -79,15 +79,15 @@ final class FolderWatcher: @unchecked Sendable {
         pollTimer = nil
     }
 
-    /// Схлопываем всплеск событий в один проход: первый зовёт onChange через `debounce`,
-    /// остальные в этом окне игнорируются.
+    /// Collapse a burst of events into a single pass: the first one calls onChange after `debounce`,
+    /// the rest within that window are ignored.
     private func coalesceAndNotify() {
         lock.lock(); let already = pending; pending = true; lock.unlock()
         guard !already else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + debounce) { [weak self] in
             guard let self else { return }
             self.lock.lock(); self.pending = false; self.lock.unlock()
-            MainActor.assumeIsolated { self.onChange() }   // asyncAfter(.main) → точно главный поток
+            MainActor.assumeIsolated { self.onChange() }   // asyncAfter(.main) → guaranteed main thread
         }
     }
 
@@ -95,14 +95,14 @@ final class FolderWatcher: @unchecked Sendable {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-                guard let self else { return }                  // weak — иначе таймер держит self вечно
+                guard let self else { return }                  // weak — otherwise the timer holds self forever
                 MainActor.assumeIsolated { self.onChange() }
             }
         }
     }
 
-    // nonisolated — только C-вызовы FSEvents/таймер, без @MainActor (избегаем deinit-ловушки).
-    // В FSEvents-режиме поток держит +1 на self (passRetained), поэтому deinit срабатывает уже
-    // ПОСЛЕ stop() и тут это страховочный no-op; в polling-режиме — глушит таймер при dealloc.
+    // nonisolated — only C calls into FSEvents/the timer, no @MainActor (avoiding the deinit trap).
+    // In FSEvents mode the stream holds a +1 on self (passRetained), so deinit fires only
+    // AFTER stop() and here it's a safety no-op; in polling mode it silences the timer on dealloc.
     deinit { stop() }
 }

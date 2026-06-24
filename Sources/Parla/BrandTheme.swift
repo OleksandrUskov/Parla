@@ -2,9 +2,9 @@ import SwiftUI
 
 enum Brand {
     static let name = "Parla"
-    static let c1 = Color(hex: 0x6D5DF6)   // индиго
-    static let c2 = Color(hex: 0x8B5CF6)   // фиолет
-    static let c3 = Color(hex: 0xB14AED)   // пурпур
+    static let c1 = Color(hex: 0x6D5DF6)   // indigo
+    static let c2 = Color(hex: 0x8B5CF6)   // violet
+    static let c3 = Color(hex: 0xB14AED)   // purple
     static let accent = c2
     static let gradient = LinearGradient(colors: [c1, c3], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
@@ -19,8 +19,8 @@ extension Color {
     }
 }
 
-/// Тёмный «аврора»-фон из мягких радиальных пятен. Только API macOS 14
-/// (RadialGradient + blur) — никакого MeshGradient/Liquid Glass, работает везде.
+/// Dark «aurora» background built from soft radial blobs. macOS 14 APIs only
+/// (RadialGradient + blur) — no MeshGradient/Liquid Glass, works everywhere.
 struct AuroraBackground: View {
     var body: some View {
         ZStack {

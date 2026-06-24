@@ -1,8 +1,8 @@
 import Foundation
 
-/// Конвертация любого аудио/видео в 16 kHz mono WAV через ffmpeg.
-/// Нужно, потому что Telegram отдаёт .ogg/Opus, а AVFoundation (которым грузит
-/// WhisperKit) его не открывает.
+/// Converts any audio/video to 16 kHz mono WAV via ffmpeg.
+/// Needed because Telegram serves .ogg/Opus, which AVFoundation (used by
+/// WhisperKit to load audio) can't open.
 enum AudioConverter {
     enum Failure: LocalizedError {
         case ffmpegNotFound
@@ -50,8 +50,8 @@ enum AudioConverter {
         return out
     }
 
-    /// Рендишен для проигрывания: любой источник → AAC .m4a. Нужно для Opus/Ogg/видео-контейнеров,
-    /// которые AVAudioPlayer не открывает. `-vn` выбрасывает видеодорожку.
+    /// Render for playback: any source → AAC .m4a. Needed for Opus/Ogg/video containers
+    /// that AVAudioPlayer can't open. `-vn` drops the video track.
     static func toM4a(_ src: URL, to dest: URL) throws {
         guard let ffmpeg = ffmpegURL() else { throw Failure.ffmpegNotFound }
 

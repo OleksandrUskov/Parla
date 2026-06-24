@@ -1,9 +1,9 @@
 import Foundation
 
-/// Быстрая расшифровка без открытого окна (фича 03): из буфера, повтор последнего файла.
-/// Запоминание «последнего исходника» дёргается и из основного `transcribe`.
+/// Quick transcription without an open window (feature 03): from the clipboard, replaying the last file.
+/// Remembering the «last source» is also triggered from the main `transcribe`.
 extension AppModel {
-    /// Триггер из хоткея или кнопки «Распознать из буфера»: берём аудиофайл из буфера и запускаем.
+    /// Triggered from a hotkey or the «Recognize from clipboard» button: grab the audio file from the clipboard and run.
     func quickTranscribeFromClipboard() {
         guard !isBusy, downloadingModel == nil else {
             QuickToast.shared.show(L("toast.busy"))
@@ -16,10 +16,10 @@ extension AppModel {
         }
         quickModeRun = true
         QuickToast.shared.show(Lf("toast.recognizing", first.lastPathComponent), sticky: true)
-        handleDrop(urls: urls)   // существующий вход; гонку двойного запуска он уже закрывает
+        handleDrop(urls: urls)   // existing entry point; it already guards against the double-launch race
     }
 
-    /// Повторить последний файл (если он ещё на диске).
+    /// Replay the last file (if it's still on disk).
     func transcribeLast() {
         guard !isBusy, downloadingModel == nil else { return }
         guard let url = resolveLastSource() else {
@@ -31,9 +31,9 @@ extension AppModel {
         handleDrop(urls: [url])
     }
 
-    /// Запомнить последний успешно расшифрованный исходник (для «повторить последний файл»).
+    /// Remember the last successfully transcribed source (for «replay the last file»).
     func rememberSource(_ url: URL) {
-        if let data = try? url.bookmarkData() {   // обычный bookmark (приложение не в песочнице)
+        if let data = try? url.bookmarkData() {   // plain bookmark (the app is not sandboxed)
             UserDefaults.standard.set(data, forKey: Keys.lastBookmark)
         }
     }

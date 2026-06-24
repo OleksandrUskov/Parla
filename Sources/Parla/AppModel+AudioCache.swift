@@ -1,9 +1,9 @@
 import Foundation
 
-/// Управление кэшем аудио для плеера (фича 06): копирование исходника, авто-уборка (LRU + сироты),
-/// ручная очистка. ТЕКСТ РАСШИФРОВОК НИКОГДА НЕ ТРОГАЕТСЯ — только копии аудио.
+/// Audio cache management for the player (feature 06): source copy, auto-cleanup (LRU + orphans),
+/// manual clear. TRANSCRIPT TEXT IS NEVER TOUCHED — only audio copies.
 extension AppModel {
-    /// Скопировать исходник + при необходимости отрендерить m4a — в фоне. Best-effort.
+    /// Copy the source + render m4a if needed — in the background. Best-effort.
     nonisolated static func keepAudio(from url: URL, id: UUID) async -> (file: String?, playable: String?) {
         await Task.detached(priority: .utility) {
             let file = AudioStore.copy(from: url, id: id)
@@ -13,7 +13,7 @@ extension AppModel {
         }.value
     }
 
-    /// Очистить кэш аудио (кнопка в настройках): снести файлы и обнулить ссылки в истории.
+    /// Clear the audio cache (settings button): delete files and null out the references in history.
     func clearAudioCache() {
         AudioStore.clearAll()
         for i in history.indices {
@@ -23,37 +23,37 @@ extension AppModel {
         HistoryStore.save(history)
     }
 
-    /// Лимит аудио-кэша. Скрытый оверрайд для архивистов (в UI пикача нет):
-    /// `defaults write <bundle-id> PARLA_AUDIO_CAP_MB -int N` (0 — без ограничения). По умолчанию 500 МБ.
+    /// Audio cache limit. Hidden override for archivists (no picker in the UI):
+    /// `defaults write <bundle-id> PARLA_AUDIO_CAP_MB -int N` (0 — unlimited). Defaults to 500 MB.
     private var audioCacheCapBytes: Int64 {
         let mb = UserDefaults.standard.object(forKey: "PARLA_AUDIO_CAP_MB") as? Int ?? 500
         return Int64(max(0, mb)) * 1_048_576
     }
 
-    /// Авто-уборка аудио-кэша: снести сирот + (если задан кэп) выселить аудио самых старых записей.
-    /// ТЕКСТ РАСШИФРОВОК НЕ ТРОГАЕТСЯ — только копии аудио для плеера. Зовём после каждой
-    /// расшифровки и на старте. Тяжёлая ФС-работа — off-main; мутация истории — на main.
+    /// Auto-cleanup of the audio cache: delete orphans + (if a cap is set) evict audio of the oldest entries.
+    /// TRANSCRIPT TEXT IS NOT TOUCHED — only player audio copies. Called after every
+    /// transcription and on startup. Heavy FS work — off-main; history mutation — on main.
     func pruneAudioCache() async {
         let snapshot = history
         let cap = audioCacheCapBytes
-        // Защищаем именно ОТОБРАЖАЕМУЮ/играющую запись: карточка и плеер привязаны к selectedItem,
-        // а не к raw selection (при активном поиске или nil-selection они расходятся → selectedItem
-        // откатывается на filteredHistory.first).
+        // Protect specifically the DISPLAYED/playing entry: the card and player are bound to selectedItem,
+        // not to the raw selection (under active search or nil-selection they diverge → selectedItem
+        // falls back to filteredHistory.first).
         let protectedAtStart: Set<UUID> = selectedItem.map { [$0.id] } ?? []
         var evicted: [UUID] = await Task.detached(priority: .utility) {
-            AudioStore.pruneOrphans(keeping: snapshot)               // сироты — всегда
-            guard cap > 0 else { return [] }                        // 0 = без лимита
+            AudioStore.pruneOrphans(keeping: snapshot)               // orphans — always
+            guard cap > 0 else { return [] }                        // 0 = unlimited
             return AudioStore.enforceAudioCap(snapshot, capBytes: cap,
                                               sizeOf: { AudioStore.bytes(of: $0) },
                                               protected: protectedAtStart)
         }.value
-        // TOCTOU: пока шёл off-main проход (main-актор был свободен), юзер мог переключиться на старую
-        // запись и нажать play — исключаем текущую отображаемую запись из выселения на этапе применения.
+        // TOCTOU: while the off-main pass was running (the main actor was free), the user could have switched to an old
+        // entry and hit play — exclude the currently displayed entry from eviction at the apply stage.
         if let nowShown = selectedItem?.id { evicted.removeAll { $0 == nowShown } }
         guard !evicted.isEmpty else { return }
         let evictedSet = Set(evicted)
-        for item in snapshot where evictedSet.contains(item.id) { AudioStore.remove(item) }   // удаляем файлы
-        for i in history.indices where evictedSet.contains(history[i].id) {                   // обнуляем ссылки
+        for item in snapshot where evictedSet.contains(item.id) { AudioStore.remove(item) }   // delete files
+        for i in history.indices where evictedSet.contains(history[i].id) {                   // null out references
             history[i].audioFile = nil
             history[i].audioPlayable = nil
         }

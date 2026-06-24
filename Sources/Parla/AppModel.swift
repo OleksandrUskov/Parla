@@ -3,11 +3,11 @@ import AppKit
 import UniformTypeIdentifiers
 import WhisperKit
 
-/// Единственный `@Observable` view-model, к которому привязан SwiftUI. Здесь живут СОСТОЯНИЕ и
-/// НАСТРОЙКИ; поведение разнесено по доменным расширениям:
+/// The single `@Observable` view-model SwiftUI binds to. STATE and SETTINGS live here;
+/// behavior is split across domain extensions:
 /// `AppModel+Models` · `+Transcription` · `+FolderWatch` · `+QuickActions` · `+History` · `+AudioCache`.
-/// Stored-свойства нельзя держать в extension, поэтому кросс-доменное состояние объявлено тут и
-/// шарится с расширениями (часть из-за этого `internal`, а не `private`).
+/// Stored properties can't live in an extension, so cross-domain state is declared here and
+/// shared with the extensions (which is why some of it is `internal` rather than `private`).
 @MainActor
 @Observable
 final class AppModel {
@@ -19,23 +19,23 @@ final class AppModel {
     var downloadingModel: String?
     var downloadProgress: Double = 0
     var searchQuery: String = ""
-    var downloadedSet: Set<String> = []        // какие модели на диске (реактивно)
-    var modelSizes: [String: Int64] = [:]      // размер каждой скачанной модели
+    var downloadedSet: Set<String> = []        // which models are on disk (reactive)
+    var modelSizes: [String: Int64] = [:]      // size of each downloaded model
 
-    // Настройки (зеркалятся в UserDefaults).
+    // Settings (mirrored into UserDefaults).
     var selectedModel: String { didSet { UserDefaults.standard.set(selectedModel, forKey: Keys.model) } }
     var language: String { didSet { UserDefaults.standard.set(language, forKey: Keys.language) } }
     var autoCopy: Bool { didSet { UserDefaults.standard.set(autoCopy, forKey: Keys.autoCopy) } }
     var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Keys.timestamps) } }
     var translateToEnglish: Bool { didSet { UserDefaults.standard.set(translateToEnglish, forKey: Keys.translate) } }
 
-    // Слежение за папкой (фича 04) — тот же didSet-паттерн зеркалирования в UserDefaults.
+    // Folder watching (feature 04) — same didSet pattern for mirroring into UserDefaults.
     var watchEnabled: Bool      { didSet { UserDefaults.standard.set(watchEnabled, forKey: Keys.watchEnabled); applyWatchToggle() } }
     var watchRecursive: Bool    { didSet { UserDefaults.standard.set(watchRecursive, forKey: Keys.watchRecursive); if watchEnabled { restartWatching() } } }
     var watchWriteSidecar: Bool { didSet { UserDefaults.standard.set(watchWriteSidecar, forKey: Keys.watchSidecar) } }
     var globalHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(globalHotkeyEnabled, forKey: Keys.hotkey) } }
 
-    /// Язык интерфейса — отдельно от языка распознавания речи (`language`). `.system` следует за ОС.
+    /// UI language — separate from the speech-recognition language (`language`). `.system` follows the OS.
     var uiLanguage: UILanguage {
         didSet {
             UserDefaults.standard.set(uiLanguage.rawValue, forKey: Keys.uiLanguage)
@@ -43,19 +43,19 @@ final class AppModel {
         }
     }
 
-    /// Локаль для SwiftUI `environment(\.locale)` (форматирование + системные контролы).
+    /// Locale for SwiftUI `environment(\.locale)` (formatting + system controls).
     var resolvedLocale: Locale { uiLanguage.locale }
 
-    var watchedFolderURL: URL?          // резолвится из bookmark — для отображения пути
-    var watchQueueCount: Int = 0        // сколько файлов ждут в очереди (для статус-чипа)
+    var watchedFolderURL: URL?          // resolved from a bookmark — for displaying the path
+    var watchQueueCount: Int = 0        // how many files are waiting in the queue (for the status chip)
 
-    // Состояние, общее с расширениями (нельзя в extension → internal, не private).
-    var quickModeRun = false                          // запуск из хоткея/меню-бара → тост по завершении (+Transcription/+QuickActions)
+    // State shared with the extensions (can't be in an extension → internal, not private).
+    var quickModeRun = false                          // launched from hotkey/menu bar → toast on completion (+Transcription/+QuickActions)
     var watcher: FolderWatcher?                        // +FolderWatch
-    var watchQueue: [URL] = []                         // ждут транскрибации (single-flight)
-    var lastSeen: [String: WatchedFileStat] = [:]      // снимок прошлого прохода (стабильность)
-    var processedKeys: [String] = []                   // FIFO-порядок обработанных dedupKey
-    var processedSet: Set<String> = []                 // = Set(processedKeys), для O(1) проверки
+    var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
+    var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
+    var processedKeys: [String] = []                   // FIFO order of processed dedupKeys
+    var processedSet: Set<String> = []                 // = Set(processedKeys), for O(1) lookups
 
     let engine = TranscriptionEngine()                 // +Models (delete) / +Transcription (load+run)
 
@@ -82,11 +82,11 @@ final class AppModel {
         showTimestamps = d.bool(forKey: Keys.timestamps)
         translateToEnglish = d.bool(forKey: Keys.translate)
         watchEnabled = d.bool(forKey: Keys.watchEnabled)
-        watchRecursive = (d.object(forKey: Keys.watchRecursive) as? Bool) ?? true   // подпапки по умолчанию вкл.
+        watchRecursive = (d.object(forKey: Keys.watchRecursive) as? Bool) ?? true   // subfolders on by default
         watchWriteSidecar = d.bool(forKey: Keys.watchSidecar)
-        globalHotkeyEnabled = d.bool(forKey: Keys.hotkey)   // opt-in, по умолчанию выкл.
+        globalHotkeyEnabled = d.bool(forKey: Keys.hotkey)   // opt-in, off by default
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .system
-        Localized.setLanguage(uiLanguage.code)              // применить выбранный язык интерфейса до первой строки
+        Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()
         processedSet = Set(processedKeys)
         availableModels = [
@@ -102,8 +102,8 @@ final class AppModel {
         switch phase { case .idle, .failed: return false; default: return true }
     }
 
-    /// Элемент для правой панели — из ВИДИМОГО (отфильтрованного) списка, чтобы панель и
-    /// сайдбар не расходились при активном поиске.
+    /// Item for the right pane — taken from the VISIBLE (filtered) list, so the pane and
+    /// the sidebar don't diverge while a search is active.
     var selectedItem: TranscriptItem? {
         if let id = selection, let found = filteredHistory.first(where: { $0.id == id }) { return found }
         return filteredHistory.first
@@ -111,7 +111,7 @@ final class AppModel {
 
     var filteredHistory: [TranscriptItem] { filterHistory(history, query: searchQuery) }
 
-    // «Что считается аудио» — кросс-доменная утилита (используется транскрибацией, слежением, буфером).
+    // «What counts as audio» — a cross-domain utility (used by transcription, watching, and the buffer).
     nonisolated static let audioExts: Set<String> = [
         "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac",
         "mp4", "mov", "m4v", "webm", "3gp", "amr", "wma", "aiff", "aif", "caf",

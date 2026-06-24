@@ -1,8 +1,8 @@
 import Foundation
 import WhisperKit
 
-// Headless-проверка: ParlaSmoke <wav> [model]
-// Если модель уже на диске — грузим ЛОКАЛЬНО (modelFolder + download:false), как в приложении.
+// Headless check: ParlaSmoke <wav> [model]
+// If the model is already on disk — load it LOCALLY (modelFolder + download:false), just like the app does.
 let args = CommandLine.arguments
 guard args.count >= 2 else {
     print("usage: ParlaSmoke <wav-path> [model]")
@@ -18,10 +18,10 @@ FileHandle.standardError.write("local=\(isLocal)  folder=\(folder.path)\n".data(
 
 let kit: WhisperKit
 if isLocal {
-    FileHandle.standardError.write("→ локальная загрузка (download:false), офлайн\n".data(using: .utf8)!)
+    FileHandle.standardError.write("→ local load (download:false), offline\n".data(using: .utf8)!)
     kit = try await WhisperKit(WhisperKitConfig(model: model, modelFolder: folder.path, download: false))
 } else {
-    FileHandle.standardError.write("→ обычная загрузка (скачивание)\n".data(using: .utf8)!)
+    FileHandle.standardError.write("→ normal load (downloading)\n".data(using: .utf8)!)
     kit = try await WhisperKit(WhisperKitConfig(model: model))
 }
 

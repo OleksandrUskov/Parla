@@ -17,7 +17,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Быстрые действия — без разрешений. Перетащить файл можно в открытый поповер ниже.
+            // Quick actions — no permissions needed. You can drag a file into the open popover below.
             Button { model.quickTranscribeFromClipboard() } label: {
                 Label(L("menu.transcribe.clipboard"), systemImage: "doc.on.clipboard")
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -55,7 +55,7 @@ struct MenuBarView: View {
 
             Button {
                 openWindow(id: "main")
-                NSApp.activate()   // macOS 14: без ignoringOtherApps (deprecated)
+                NSApp.activate()   // macOS 14: without ignoringOtherApps (deprecated)
             } label: {
                 Label(L("menu.openwindow"), systemImage: "macwindow").frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -75,7 +75,7 @@ struct MenuBarView: View {
         }
         .padding(12)
         .frame(width: 300)
-        // Дроп файла в ОТКРЫТЫЙ поповер (дроп на закрытую иконку macOS не поддерживает — см. блупринт).
+        // Dropping a file into the OPEN popover (macOS doesn't support dropping onto the closed icon — see blueprint).
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             Task { @MainActor in
                 var urls: [URL] = []

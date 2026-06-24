@@ -12,12 +12,12 @@ struct ParlaApp: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(model)
-                .environment(\.locale, model.resolvedLocale)   // чтение resolvedLocale в App.body → ре-рендер при смене языка
+                .environment(\.locale, model.resolvedLocale)   // reading resolvedLocale in App.body → re-render on language change
                 .task {
-                    NotificationClickHandler.install()   // клик по уведомлению о завершении → окно вперёд
-                    installHotkeyOnce()                  // обработчик хоткея + привести вкл/выкл к настройке
-                    model.startWatchingIfEnabled()       // возобновить слежение за папкой, если включено
-                    await model.pruneAudioCache()        // убрать сирот + старое аудио сверх лимита
+                    NotificationClickHandler.install()   // click on completion notification → bring window forward
+                    installHotkeyOnce()                  // install hotkey handler + sync enabled/disabled to the setting
+                    model.startWatchingIfEnabled()       // resume folder watching if enabled
+                    await model.pruneAudioCache()        // remove orphans + old audio beyond the limit
                     await model.refreshModels()
                 }
                 .onChange(of: model.globalHotkeyEnabled) { _, _ in syncHotkey() }
@@ -41,8 +41,8 @@ struct ParlaApp: App {
         }
     }
 
-    /// Один раз: зарегистрировать обработчик глобальной комбинации + привести вкл/выкл к настройке.
-    /// Регистрация только в реальном приложении (через `.task`), не в `swift test`.
+    /// Once: register the global hotkey handler + sync enabled/disabled to the setting.
+    /// Registered only in the real app (via `.task`), not in `swift test`.
     @MainActor private func installHotkeyOnce() {
         if !hotkeyInstalled {
             hotkeyInstalled = true
@@ -51,21 +51,21 @@ struct ParlaApp: App {
         syncHotkey()
     }
 
-    /// Вкл/выкл глобальной комбинации вслед за тоглом (Carbon, без «Универсального доступа»).
+    /// Enable/disable the global hotkey to follow the toggle (Carbon, no «Accessibility» permission).
     @MainActor private func syncHotkey() {
         if model.globalHotkeyEnabled { KeyboardShortcuts.enable(.quickTranscribe) }
         else { KeyboardShortcuts.disable(.quickTranscribe) }
     }
 }
 
-/// Клик по уведомлению о завершении батча → активируем Parla и выносим окно вперёд.
-/// Регистрируется только в реальном приложении (через `.task`), не в `swift test`.
+/// Click on the batch-completion notification → activate Parla and bring its window forward.
+/// Registered only in the real app (via `.task`), not in `swift test`.
 final class NotificationClickHandler: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationClickHandler()
     static func install() { UNUserNotificationCenter.current().delegate = shared }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse) async {
-        await MainActor.run { NSApp.activate() }   // macOS 14: без ignoringOtherApps (deprecated)
+        await MainActor.run { NSApp.activate() }   // macOS 14: without ignoringOtherApps (deprecated)
     }
 }

@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// История: копирование, инлайн-правка (фича 02), удаление, экспорт в Markdown.
+/// History: copy, inline edit (feature 02), delete, export to Markdown.
 extension AppModel {
     func copy(_ text: String) {
         NSPasteboard.general.clearContents()
@@ -12,7 +12,7 @@ extension AppModel {
     func copyItem(_ item: TranscriptItem) {
         copy(item.display(timestamps: showTimestamps))
         lastCopiedID = item.id
-        // «Скопировано» — кратковременная подсветка, сбрасываем.
+        // «Copied» — brief highlight, then reset.
         let id = item.id
         Task {
             try? await Task.sleep(for: .seconds(1.6))
@@ -20,24 +20,24 @@ extension AppModel {
         }
     }
 
-    /// Сохранить отредактированный текст карточки в историю.
-    /// Резолвит запись по `id` (а не по копии), штампует `edited`/`editedAt`, пишет на диск.
-    /// Возвращает true, если текст реально изменился (для UI-фидбэка); no-op правка → false.
+    /// Save the edited card text to history.
+    /// Resolves the entry by `id` (not by a copy), stamps `edited`/`editedAt`, writes to disk.
+    /// Returns true if the text actually changed (for UI feedback); a no-op edit → false.
     @discardableResult
     func saveEdit(_ rawText: String, for id: TranscriptItem.ID) -> Bool {
         guard let idx = history.firstIndex(where: { $0.id == id }) else { return false }
         let (newText, changed) = normalizedEdit(rawText, from: history[idx].text)
-        guard changed else { return false }   // ничего по сути не поменялось → не пишем и не штампуем
+        guard changed else { return false }   // nothing meaningfully changed → don't write or stamp
         history[idx].text = newText
         history[idx].edited = true
         history[idx].editedAt = Date()
         HistoryStore.save(history)
-        selection = id                        // держим выделение на отредактированной записи
+        selection = id                        // keep the selection on the edited entry
         return true
     }
 
     func delete(_ item: TranscriptItem) {
-        AudioStore.remove(item)                 // снести копию аудио вместе с записью
+        AudioStore.remove(item)                 // drop the audio copy along with the entry
         history.removeAll { $0.id == item.id }
         if selection == item.id { selection = nil }
         HistoryStore.save(history)
@@ -50,7 +50,7 @@ extension AppModel {
         HistoryStore.save(history)
     }
 
-    /// Экспорт всей истории в markdown-файл (диалог сохранения).
+    /// Export the entire history to a markdown file (save dialog).
     func exportHistory() {
         guard !history.isEmpty else { return }
         let panel = NSSavePanel()
