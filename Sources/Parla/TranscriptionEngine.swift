@@ -1,6 +1,5 @@
 import Foundation
 import WhisperKit
-import AVFoundation
 
 enum EngineError: LocalizedError {
     case notLoaded
@@ -100,14 +99,6 @@ actor TranscriptionEngine {
         if loadedModel == name { whisperKit = nil; loadedModel = nil }
     }
 
-    /// Actual audio length in seconds (AVFoundation) — for the record's duration metadata.
-    /// nil if the file can't be opened (caller falls back to the last segment end).
-    private static func audioDuration(ofFileAt path: String) -> Double? {
-        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)) else { return nil }
-        let sr = file.fileFormat.sampleRate
-        return sr > 0 ? Double(file.length) / sr : nil
-    }
-
     func transcribe(wavPath: String, language: String?, model: String, translate: Bool = false) async throws -> EngineResult {
         if loadedModel != model || whisperKit == nil {
             try await ensureLoaded(model: model, progress: { _ in })
@@ -132,7 +123,7 @@ actor TranscriptionEngine {
         }
         // duration = the ACTUAL audio length, not the processing time (`elapsed`). Fall back to the
         // last segment end, then to elapsed, if the file can't be probed.
-        let audioLen = Self.audioDuration(ofFileAt: wavPath) ?? segs.map(\.end).max() ?? elapsed
+        let audioLen = AudioConverter.duration(of: wavPath) ?? segs.map(\.end).max() ?? elapsed
         return EngineResult(
             text: fullText,
             language: results.first?.language ?? (language ?? ""),

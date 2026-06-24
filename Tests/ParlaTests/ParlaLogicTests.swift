@@ -917,6 +917,15 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(AudioChunker.chapters(from: [], size: 120).isEmpty)
     }
 
+    func testChunkArgsAreQuiet() {
+        let args = AudioConverter.chunkArgs(src: "/in", segmentTime: 120, outPattern: "/out/chunk_%04d.wav")
+        XCTAssertTrue(args.contains("-hide_banner"))       // Tier-0 deadlock guard
+        XCTAssertTrue(args.contains("-nostats"))
+        XCTAssertTrue(args.contains("segment"))            // segment muxer
+        guard let i = args.firstIndex(of: "-segment_time") else { return XCTFail("-segment_time missing") }
+        XCTAssertEqual(args[i + 1], "120")
+    }
+
     // MARK: FolderWatcher teardown stress (P1.1)
 
     /// Exercises the passRetained/release teardown deterministically (no event-timing dependency):

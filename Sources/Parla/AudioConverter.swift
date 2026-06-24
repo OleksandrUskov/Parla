@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 
 /// Converts any audio/video to 16 kHz mono WAV via ffmpeg.
 /// Needed because Telegram serves .ogg/Opus, which AVFoundation (used by
@@ -78,5 +79,43 @@ enum AudioConverter {
         proc.arguments = m4aArgs(src: src.path, dest: dest.path)
         let (status, tail) = try runCapturingStderr(proc)
         guard status == 0 else { throw Failure.conversionFailed(tail) }
+    }
+
+    // MARK: Long-audio support
+
+    /// Actual audio length in seconds (AVFoundation). nil if the file can't be opened.
+    static func duration(of path: String) -> Double? {
+        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)) else { return nil }
+        let sr = file.fileFormat.sampleRate
+        return sr > 0 ? Double(file.length) / sr : nil
+    }
+
+    /// Whether an ffmpeg binary is resolvable right now — required to split long files into chunks.
+    static var isFFmpegAvailable: Bool { ffmpegURL() != nil }
+
+    /// ffmpeg args for the segment-muxer split into fixed-length 16 kHz mono WAV chunks.
+    /// Same quiet-flag guard as `wavArgs` (Tier-0 deadlock prevention).
+    static func chunkArgs(src: String, segmentTime: Int, outPattern: String) -> [String] {
+        ["-hide_banner", "-loglevel", "error", "-nostats", "-y", "-i", src,
+         "-f", "segment", "-segment_time", String(segmentTime),
+         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", outPattern]
+    }
+
+    /// Split audio into ~`chunkLength`-second 16 kHz mono WAV chunks via ffmpeg's segment muxer.
+    /// Returns the chunk URLs in order (all under one temp dir — the caller removes that dir).
+    /// Throws if ffmpeg is missing or the split fails.
+    static func splitIntoChunks(_ src: URL, chunkLength: Double) throws -> [URL] {
+        guard let ffmpeg = ffmpegURL() else { throw Failure.ffmpegNotFound }
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("parla-chunks-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let proc = Process()
+        proc.executableURL = ffmpeg
+        proc.arguments = chunkArgs(src: src.path, segmentTime: Int(chunkLength),
+                                   outPattern: dir.appendingPathComponent("chunk_%04d.wav").path)
+        let (status, tail) = try runCapturingStderr(proc)
+        guard status == 0 else { throw Failure.conversionFailed(tail) }
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "wav" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 }

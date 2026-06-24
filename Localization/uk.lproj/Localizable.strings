@@ -169,6 +169,8 @@
 /* Batch label */
 "batch.label.single" = "«%@»";
 "batch.label.multi"  = "«%1$@» (%2$lld з %3$lld)";
+"chunk.label"        = "Фрагмент %1$lld/%2$lld";
+"chunk.failed"       = "(фрагмент %lld не розпізнано)";
 
 /* Export + units */
 "export.menu.help" = "Експортувати запис";

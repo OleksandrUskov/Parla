@@ -122,6 +122,16 @@ extension AppModel {
         }
         defer { if let tempWav { try? FileManager.default.removeItem(at: tempWav) } }
 
+        // A long single-file recording → chunked pipeline: bounded memory + real per-chunk progress.
+        // Needs ffmpeg to split; folder batches and the no-ffmpeg case fall through to single-pass.
+        if batch == nil,
+           let dur = AudioConverter.duration(of: decodePath),
+           AudioChunker.isLong(durationSec: dur),
+           AudioConverter.isFFmpegAvailable {
+            return try await transcribeChunked(source: URL(fileURLWithPath: decodePath),
+                                               model: model, audioDuration: dur)
+        }
+
         phase = .loadingModel
         try await engine.ensureLoaded(model: model, progress: progressHandler())
 
@@ -129,6 +139,54 @@ extension AppModel {
         let lang = language.isEmpty ? nil : language
         return try await engine.transcribe(wavPath: decodePath, language: lang,
                                            model: model, translate: translateToEnglish)
+    }
+
+    /// Long-audio path: split into ~2-min chunks, transcribe each (per-chunk progress via the existing
+    /// BatchProgress bar), then stitch the per-chunk timecodes into one global timeline. One chunk is
+    /// in flight at a time → memory stays bounded regardless of total length. A failed chunk is recorded
+    /// as a placeholder so the rest of the transcript survives.
+    private func transcribeChunked(source: URL, model: String, audioDuration: Double) async throws -> EngineResult {
+        let chunks = try await Task.detached(priority: .userInitiated) {
+            try AudioConverter.splitIntoChunks(source, chunkLength: AudioChunker.chunkLengthSec)
+        }.value
+        let chunkDir = chunks.first?.deletingLastPathComponent()
+        defer { if let chunkDir { try? FileManager.default.removeItem(at: chunkDir) } }
+
+        phase = .loadingModel
+        try await engine.ensureLoaded(model: model, progress: progressHandler())
+        let lang = language.isEmpty ? nil : language
+
+        // Split produced nothing → fall back to a single pass on the whole file.
+        guard !chunks.isEmpty else {
+            phase = .transcribing(source.lastPathComponent)
+            return try await engine.transcribe(wavPath: source.path, language: lang,
+                                               model: model, translate: translateToEnglish)
+        }
+
+        let total = chunks.count
+        var perChunkSegments: [[Segment]] = []
+        var texts: [String] = []
+        for (k, chunk) in chunks.enumerated() {
+            phase = .transcribing(Lf("chunk.label", k + 1, total),
+                                  batch: BatchProgress(index: k + 1, total: total, done: k))
+            do {
+                let r = try await engine.transcribe(wavPath: chunk.path, language: lang,
+                                                    model: model, translate: translateToEnglish)
+                perChunkSegments.append(r.segments)
+                texts.append(r.text)
+            } catch {
+                // resilience: one bad chunk doesn't lose the whole transcript
+                perChunkSegments.append([Segment(start: 0, end: AudioChunker.chunkLengthSec,
+                                                 text: Lf("chunk.failed", k + 1))])
+                texts.append("")
+            }
+            try? FileManager.default.removeItem(at: chunk)   // free each chunk WAV as we go
+        }
+        let stitched = AudioChunker.stitch(chunkSegments: perChunkSegments,
+                                           chunkLength: AudioChunker.chunkLengthSec)
+        let fullText = texts.filter { !$0.isEmpty }.joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return EngineResult(text: fullText, language: lang ?? "", segments: stitched, duration: audioDuration)
     }
 
     private func progressHandler() -> @Sendable (ModelLoad) -> Void {

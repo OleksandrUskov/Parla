@@ -169,6 +169,8 @@
 /* Batch label */
 "batch.label.single" = "“%@”";
 "batch.label.multi"  = "“%1$@” (%2$lld of %3$lld)";
+"chunk.label"        = "Chunk %1$lld/%2$lld";
+"chunk.failed"       = "(chunk %lld failed)";
 
 /* Export + units */
 "export.menu.help" = "Export transcript";
