@@ -86,6 +86,8 @@ if [[ " $* " == *" --run "* ]]; then
     osascript -e "tell application \"$APP\" to quit" >/dev/null 2>&1 || true
   fi
   pkill -9 -x "$APP" 2>/dev/null || true
+  # дождаться полного выхода старого инстанса, иначе `open` ловит LSOpenURLs -600
+  for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x "$APP" >/dev/null || break; sleep 0.3; done
   open "$APPDIR"
   echo "↻ Перезапущено: $APPDIR"
 fi
