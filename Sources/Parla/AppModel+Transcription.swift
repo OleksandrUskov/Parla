@@ -61,6 +61,7 @@ extension AppModel {
         }
         refreshDownloaded()
         phase = failures.isEmpty ? .idle : .failed(Lf("error.transcribe.failed", failures.joined(separator: "; ")))
+        if soundOnComplete { failures.isEmpty ? CompletionSound.success() : CompletionSound.failure() }
 
         // Notification: only if the job «was worth the wait» and the window isn't frontmost.
         // Read frontmost at the END — switching away during the batch is exactly what should trigger a notification.

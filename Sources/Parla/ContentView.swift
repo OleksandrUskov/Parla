@@ -37,6 +37,7 @@ struct SidebarView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .help(Text(L("history.export.help")))
+                    .accessibilityLabel(Text(L("history.export.help")))
                 }
             }
             .padding(.horizontal, 16)

@@ -28,6 +28,7 @@ final class AppModel {
     var autoCopy: Bool { didSet { UserDefaults.standard.set(autoCopy, forKey: Keys.autoCopy) } }
     var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Keys.timestamps) } }
     var translateToEnglish: Bool { didSet { UserDefaults.standard.set(translateToEnglish, forKey: Keys.translate) } }
+    var soundOnComplete: Bool { didSet { UserDefaults.standard.set(soundOnComplete, forKey: Keys.sound) } }
 
     // Folder watching (feature 04) — same didSet pattern for mirroring into UserDefaults.
     var watchEnabled: Bool      { didSet { UserDefaults.standard.set(watchEnabled, forKey: Keys.watchEnabled); applyWatchToggle() } }
@@ -73,6 +74,7 @@ final class AppModel {
         static let language = "language"
         static let autoCopy = "autoCopy"
         static let timestamps = "timestamps"
+        static let sound = "soundOnComplete"
         static let translate = "translateToEnglish"
         static let watchEnabled = "watchEnabled"
         static let watchRecursive = "watchRecursive"
@@ -89,8 +91,9 @@ final class AppModel {
         selectedModel = d.string(forKey: Keys.model) ?? "openai_whisper-large-v3-v20240930"
         language = d.string(forKey: Keys.language) ?? ""
         autoCopy = (d.object(forKey: Keys.autoCopy) as? Bool) ?? true
-        showTimestamps = d.bool(forKey: Keys.timestamps)
+        showTimestamps = (d.object(forKey: Keys.timestamps) as? Bool) ?? true   // default ON: reveal the click-to-seek SegmentList
         translateToEnglish = d.bool(forKey: Keys.translate)
+        soundOnComplete = (d.object(forKey: Keys.sound) as? Bool) ?? true
         watchEnabled = d.bool(forKey: Keys.watchEnabled)
         watchRecursive = (d.object(forKey: Keys.watchRecursive) as? Bool) ?? true   // subfolders on by default
         watchWriteSidecar = d.bool(forKey: Keys.watchSidecar)

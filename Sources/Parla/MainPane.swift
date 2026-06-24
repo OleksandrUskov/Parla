@@ -59,6 +59,7 @@ struct BrandHeader: View {
                 Image(systemName: "gearshape.fill").font(.title3).foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text(L("a11y.settings")))
         }
     }
 }
@@ -172,6 +173,7 @@ struct ModelRow: View {
                 .buttonStyle(.borderless)
                 .tint(.secondary)
                 .help(Text(L("model.delete.help")))
+                .accessibilityLabel(Text(L("model.delete.help")))
                 .disabled(model.downloadingModel != nil || model.isBusy)
             }
         } else {
@@ -332,6 +334,7 @@ struct TranscriptCard: View {
                 }
                 .buttonStyle(.plain)
                 .help(Text(L("transcript.edit.help")))
+                .accessibilityLabel(Text(L("transcript.edit.help")))
             }
             Button { model.copyItem(item) } label: {
                 Label(justCopied ? L("common.copied") : L("common.copy"),
@@ -351,6 +354,7 @@ struct TranscriptCard: View {
                     .padding(9).background(.ultraThinMaterial, in: Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text(L("a11y.share")))
         }
     }
 
@@ -477,6 +481,7 @@ struct RetranscribeMenu: View {
         .help(Text(item.hasResolvableSource
               ? L("transcript.retranscribe.help")
               : L("transcript.source.unavailable")))
+        .accessibilityLabel(Text(L("transcript.retranscribe.help")))
     }
 }
 
@@ -498,6 +503,7 @@ struct TransportBar: View {
                         .background(Brand.gradient, in: Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text(player.isPlaying ? L("a11y.pause") : L("a11y.play")))
                 Slider(value: Binding(get: { player.currentTime },
                                       set: { player.scrub(to: $0) }),
                        in: 0...max(player.duration, 0.01))

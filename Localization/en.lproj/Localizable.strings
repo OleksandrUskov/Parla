@@ -122,6 +122,15 @@
 "settings.interface.language"   = "Interface language";
 "settings.interface.hint"       = "The app's language is separate from the speech-recognition language.";
 
+/* Accessibility (VoiceOver) + completion sound + retry */
+"a11y.settings"           = "Settings";
+"a11y.share"              = "Share";
+"a11y.play"               = "Play";
+"a11y.pause"              = "Pause";
+"a11y.dismiss"            = "Dismiss";
+"settings.behavior.sound" = "Play a sound on completion";
+"error.retry"             = "Try again";
+
 /* Toasts */
 "toast.busy"             = "Hold on — another task is running";
 "toast.clipboard.empty"  = "No audio file in the clipboard";

@@ -547,6 +547,7 @@ final class ParlaLogicTests: XCTestCase {
             let fake = FakeEngine(results: [EngineResult(text: "привет мир", language: "ru", segments: [], duration: 1.5)])
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
             m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }   // no ffmpeg
             m.autoCopy = false
@@ -571,6 +572,7 @@ final class ParlaLogicTests: XCTestCase {
             let fake = FakeEngine(throwOnTranscribe: true)
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
             m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
             let src = makeTempSource()
@@ -593,6 +595,7 @@ final class ParlaLogicTests: XCTestCase {
             ])
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
             m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
             m.autoCopy = false
@@ -613,6 +616,7 @@ final class ParlaLogicTests: XCTestCase {
             let fake = FakeEngine()
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
             let emptyDir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("empty-\(UUID().uuidString)", isDirectory: true)
@@ -632,6 +636,7 @@ final class ParlaLogicTests: XCTestCase {
             let fake = FakeEngine(results: [EngineResult(text: "text", language: "ru", segments: [], duration: 1)])
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
             m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
             m.autoCopy = false
@@ -815,6 +820,24 @@ final class ParlaLogicTests: XCTestCase {
         defer { try? fm.removeItem(at: root) }
         HistoryStore.migrateDir(target: target, legacy: root.appendingPathComponent("nope", isDirectory: true))
         XCTAssertFalse(fm.fileExists(atPath: target.path))   // nothing to copy → no target created
+    }
+
+    // MARK: Quick-win defaults (timestamps ON, sound ON)
+
+    @MainActor func testShowTimestampsDefaultsOnForFreshStore() {
+        UserDefaults.standard.removeObject(forKey: AppModel.Keys.timestamps)
+        XCTAssertTrue(AppModel().showTimestamps)   // reveal the click-to-seek SegmentList by default
+    }
+
+    @MainActor func testShowTimestampsRespectsExplicitFalse() {
+        UserDefaults.standard.set(false, forKey: AppModel.Keys.timestamps)
+        defer { UserDefaults.standard.removeObject(forKey: AppModel.Keys.timestamps) }
+        XCTAssertFalse(AppModel().showTimestamps)   // an explicit OFF choice is preserved
+    }
+
+    @MainActor func testSoundOnCompleteDefaultsOn() {
+        UserDefaults.standard.removeObject(forKey: AppModel.Keys.sound)
+        XCTAssertTrue(AppModel().soundOnComplete)
     }
 
     // MARK: Folder watching (feature 04)

@@ -122,6 +122,15 @@
 "settings.interface.language"   = "Мова інтерфейсу";
 "settings.interface.hint"       = "Мова застосунку окремо від мови розпізнавання мовлення.";
 
+/* Accessibility (VoiceOver) + completion sound + retry */
+"a11y.settings"           = "Налаштування";
+"a11y.share"              = "Поділитися";
+"a11y.play"               = "Відтворити";
+"a11y.pause"              = "Пауза";
+"a11y.dismiss"            = "Закрити";
+"settings.behavior.sound" = "Звук після завершення";
+"error.retry"             = "Повторити";
+
 /* Toasts */
 "toast.busy"             = "Зачекай — виконується інша задача";
 "toast.clipboard.empty"  = "У буфері немає аудіофайла";

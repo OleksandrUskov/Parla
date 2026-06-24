@@ -122,6 +122,15 @@
 "settings.interface.language"   = "Язык интерфейса";
 "settings.interface.hint"       = "Язык приложения отдельно от языка распознавания речи.";
 
+/* Accessibility (VoiceOver) + completion sound + retry */
+"a11y.settings"           = "Настройки";
+"a11y.share"              = "Поделиться";
+"a11y.play"               = "Воспроизвести";
+"a11y.pause"              = "Пауза";
+"a11y.dismiss"            = "Закрыть";
+"settings.behavior.sound" = "Звук по завершении";
+"error.retry"             = "Повторить";
+
 /* Toasts */
 "toast.busy"             = "Подожди — идёт другая задача";
 "toast.clipboard.empty"  = "В буфере нет аудиофайла";

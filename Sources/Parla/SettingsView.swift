@@ -46,6 +46,7 @@ struct SettingsView: View {
             Section(L("settings.section.behavior")) {
                 Toggle(L("settings.behavior.autocopy"), isOn: $model.autoCopy)
                 Toggle(L("settings.behavior.timestamps"), isOn: $model.showTimestamps)
+                Toggle(L("settings.behavior.sound"), isOn: $model.soundOnComplete)
             }
 
             Section(L("settings.section.folderwatch")) {
