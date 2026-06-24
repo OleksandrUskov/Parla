@@ -211,7 +211,7 @@ struct StatusBar: View {
         case .transcribing(let n, let b):
             progressChip(Lf("status.transcribing", batchLabel(n, b)), b)
         case .failed(let m):
-            chip(m, busy: false, error: true)
+            errorChip(m)
         }
     }
 
@@ -237,6 +237,28 @@ struct StatusBar: View {
                 .font(.callout)
                 .foregroundStyle(error ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
             Spacer()
+        }
+        .padding(.horizontal, 14).padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// Error chip with in-place recovery: «Try again» (re-run the last input) + a dismiss ✕.
+    private func errorChip(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Text(message)
+                .font(.callout).foregroundStyle(Color.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if model.canRetryLast {
+                Button(L("error.retry")) { model.retryLast() }
+                    .buttonStyle(.plain).font(.callout.weight(.medium)).foregroundStyle(Brand.accent)
+            }
+            Button { model.dismissError() } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(L("a11y.dismiss")))
         }
         .padding(.horizontal, 14).padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)

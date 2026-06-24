@@ -16,6 +16,7 @@ final class AppModel {
     var selection: TranscriptItem.ID?
     var availableModels: [String] = []
     var lastCopiedID: TranscriptItem.ID?
+    var lastAttemptedURLs: [URL] = []          // last input passed to transcribe — for «Try again» on failure
     var downloadingModel: String?
     var downloadProgress: Double = 0
     var searchQuery: String = ""

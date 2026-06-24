@@ -10,7 +10,20 @@ extension AppModel {
         Task { await transcribe(urls: urls) }
     }
 
+    /// Clear a stuck error chip (.failed → .idle). No-op otherwise.
+    func dismissError() { if case .failed = phase { phase = .idle } }
+
+    /// Whether «Try again» can re-run the last attempted input.
+    var canRetryLast: Bool { !lastAttemptedURLs.isEmpty && !isBusy && downloadingModel == nil }
+
+    /// Re-run the last attempted input after a failure — single-flight via handleDrop.
+    func retryLast() {
+        guard canRetryLast else { return }
+        handleDrop(urls: lastAttemptedURLs)
+    }
+
     func transcribe(urls: [URL]) async {
+        lastAttemptedURLs = urls   // remember for «Try again»
         var files: [URL] = []
         for url in urls {
             if url.hasDirectoryPath { files.append(contentsOf: Self.audioFiles(in: url)) }

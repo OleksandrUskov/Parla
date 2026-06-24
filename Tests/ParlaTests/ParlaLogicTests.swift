@@ -840,6 +840,26 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(AppModel().soundOnComplete)
     }
 
+    // MARK: Error chip recovery (dismiss + retry)
+
+    @MainActor func testDismissErrorClearsFailedPhase() {
+        let m = AppModel()
+        m.phase = .failed("boom")
+        m.dismissError()
+        if case .idle = m.phase {} else { XCTFail("dismissError should clear .failed → .idle") }
+        m.phase = .preparing("y")
+        m.dismissError()
+        if case .preparing = m.phase {} else { XCTFail("dismissError must not touch a non-failed phase") }
+    }
+
+    @MainActor func testCanRetryLastReflectsLastAttempt() {
+        let m = AppModel()
+        m.lastAttemptedURLs = []
+        XCTAssertFalse(m.canRetryLast)                                   // nothing attempted yet
+        m.lastAttemptedURLs = [URL(fileURLWithPath: "/tmp/x.ogg")]
+        XCTAssertTrue(m.canRetryLast)                                    // idle + has an input → retryable
+    }
+
     // MARK: Folder watching (feature 04)
 
     func testFolderScanIgnoresUnstable() {
