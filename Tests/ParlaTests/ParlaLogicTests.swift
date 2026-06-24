@@ -712,6 +712,52 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: History resilience — one corrupt record must NOT wipe the archive (data-loss fix)
+
+    private func validRecordJSON(text: String) -> String {
+        #"{"id":"\#(UUID().uuidString)","date":1,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"m","text":"\#(text)","segments":[]}"#
+    }
+    private var corruptSiblings: [URL] {
+        let dir = HistoryStore.fileURL.deletingLastPathComponent()
+        return (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil))?
+            .filter { $0.lastPathComponent.hasPrefix("history.corrupt-") } ?? []
+    }
+
+    func testFailableDecodableDropsBadElement() {
+        let json = "[\(validRecordJSON(text: "hi")),{\"language\":\"ru\"}]"   // one valid + one missing required keys
+        let arr = try? JSONDecoder().decode([FailableDecodable<TranscriptItem>].self, from: Data(json.utf8))
+        XCTAssertEqual(arr?.compactMap(\.value).count, 1)
+    }
+
+    func testLoadSkipsCorruptRecordKeepsValidOnes() {
+        withTemporaryHistoryStore {
+            let json = "[\(validRecordJSON(text: "hi")),{\"language\":\"ru\"}]"
+            try? Data(json.utf8).write(to: HistoryStore.fileURL)
+            let items = HistoryStore.load()
+            XCTAssertEqual(items.count, 1)               // valid record survived
+            XCTAssertEqual(items.first?.text, "hi")
+            XCTAssertFalse(corruptSiblings.isEmpty)       // raw bytes quarantined for recovery
+        }
+    }
+
+    func testLoadQuarantinesUnparseableFileAndReturnsEmpty() {
+        withTemporaryHistoryStore {
+            try? Data("this is not json at all".utf8).write(to: HistoryStore.fileURL)
+            let items = HistoryStore.load()
+            XCTAssertTrue(items.isEmpty)
+            XCTAssertFalse(corruptSiblings.isEmpty)       // unparseable bytes preserved, not silently lost
+        }
+    }
+
+    func testLoadEmptyArrayIsNotQuarantined() {
+        withTemporaryHistoryStore {
+            try? Data("[]".utf8).write(to: HistoryStore.fileURL)
+            let items = HistoryStore.load()
+            XCTAssertTrue(items.isEmpty)
+            XCTAssertTrue(corruptSiblings.isEmpty)        // a legitimately-empty history is NOT corruption
+        }
+    }
+
     // MARK: Folder watching (feature 04)
 
     func testFolderScanIgnoresUnstable() {

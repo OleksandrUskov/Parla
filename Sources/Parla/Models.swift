@@ -190,6 +190,13 @@ func pluralRu(_ n: Int, _ one: String, _ few: String, _ many: String) -> String 
 }
 
 /// History store in ~/Library/Application Support/Parla/history.json
+/// Decodes T, or holds nil if that one element is corrupt — so a single bad record can't abort the
+/// whole array decode (and wipe the archive). Used by HistoryStore.load's salvage path.
+struct FailableDecodable<T: Decodable>: Decodable {
+    let value: T?
+    init(from decoder: Decoder) throws { value = try? T(from: decoder) }
+}
+
 enum HistoryStore {
     /// Path to the history file in ~/Library/Application Support/Parla/.
     /// `var` (not `let`) is a test seam: tests swap the path for a temporary one so they don't touch
@@ -205,7 +212,29 @@ enum HistoryStore {
     static func load() -> [TranscriptItem] {
         migrateLegacyIfNeeded()
         guard let data = try? Data(contentsOf: fileURL) else { return [] }
-        return (try? JSONDecoder().decode([TranscriptItem].self, from: data)) ?? []
+        // Happy path: a clean array of records.
+        if let items = try? JSONDecoder().decode([TranscriptItem].self, from: data) { return items }
+        // Corrupt: salvage every still-decodable record so one bad element (truncated write, manual
+        // edit, a future-schema field the decoder rejects) never costs the whole archive.
+        if let salvaged = try? JSONDecoder().decode([FailableDecodable<TranscriptItem>].self, from: data) {
+            let items = salvaged.compactMap(\.value)
+            if items.count < salvaged.count {   // we actually dropped corrupt elements
+                quarantine()                    // move the original aside for manual recovery…
+                save(items)                     // …and persist the cleaned subset (no re-salvage next launch)
+            }
+            return items
+        }
+        // Not even a valid array → keep the bytes, start fresh — never silently clobbered by save().
+        quarantine()
+        return []
+    }
+
+    /// Move a corrupt history.json aside to history.corrupt-<ts>.json so the next save() can't
+    /// overwrite the user's only copy. Recovery artifact — never loaded by the app.
+    private static func quarantine() {
+        let ts = Int(Date().timeIntervalSince1970)
+        let dest = fileURL.deletingLastPathComponent().appendingPathComponent("history.corrupt-\(ts).json")
+        try? FileManager.default.moveItem(at: fileURL, to: dest)
     }
 
     /// One-time history migration from the old app name (Murmur → Parla).
