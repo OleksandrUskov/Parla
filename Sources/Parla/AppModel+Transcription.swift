@@ -65,8 +65,9 @@ extension AppModel {
         // Notification: only if the job «was worth the wait» and the window isn't frontmost.
         // Read frontmost at the END — switching away during the batch is exactly what should trigger a notification.
         let elapsed = Date().timeIntervalSince(jobStart)
-        if BatchNotifier.shouldNotify(total: total, elapsed: elapsed, frontmost: NSApp.isActive) {
-            await BatchNotifier.post(succeeded: succeeded, failed: failures.count)
+        // NSApplication.shared (not NSApp): the latter is nil until the app instance exists → would crash under tests.
+        if BatchNotifier.shouldNotify(total: total, elapsed: elapsed, frontmost: NSApplication.shared.isActive) {
+            await postNotification(succeeded, failures.count)
         }
 
         // Toast for quick mode (hotkey/menu bar) — the user has no open window with a chip.
@@ -87,8 +88,9 @@ extension AppModel {
     /// Shared path for a fresh drop and «re-transcribe».
     private func transcribeOne(url: URL, model: String, batch: BatchProgress? = nil) async throws -> EngineResult {
         phase = .preparing(url.lastPathComponent, batch: batch)
+        let convert = wavConverter      // capture the seam (real ffmpeg in production, stub in tests)
         let wav = try await Task.detached(priority: .userInitiated) {
-            try AudioConverter.toWav16k(url)
+            try convert(url)
         }.value
         defer { try? FileManager.default.removeItem(at: wav) }
 

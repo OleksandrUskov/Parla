@@ -49,7 +49,7 @@ extension AppModel {
         }.value
         // TOCTOU: while the off-main pass was running (the main actor was free), the user could have switched to an old
         // entry and hit play — exclude the currently displayed entry from eviction at the apply stage.
-        if let nowShown = selectedItem?.id { evicted.removeAll { $0 == nowShown } }
+        evicted = AudioStore.applyProtection(evicted, evicting: selectedItem?.id)
         guard !evicted.isEmpty else { return }
         let evictedSet = Set(evicted)
         for item in snapshot where evictedSet.contains(item.id) { AudioStore.remove(item) }   // delete files

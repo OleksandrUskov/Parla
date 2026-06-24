@@ -405,6 +405,14 @@ enum AudioStore {
         }
         return evict
     }
+
+    /// Pure TOCTOU re-check: drop the now-protected (displayed/playing) id from an eviction plan.
+    /// Applied AFTER the off-main pass, so the entry the user switched to mid-pass is never evicted.
+    /// nil protection → plan unchanged. Invariant: the protected id is never in the result.
+    static func applyProtection(_ plan: [UUID], evicting protectedNow: UUID?) -> [UUID] {
+        guard let p = protectedNow else { return plan }
+        return plan.filter { $0 != p }
+    }
 }
 
 /// Index of the segment whose [start, …) contains t (for highlighting the active segment during playback).

@@ -23,6 +23,14 @@ enum ModelLoad: Sendable, Equatable {
     case loading
 }
 
+/// Seam over the transcription backend so the drop→history orchestration is testable with a fake.
+/// The real `TranscriptionEngine` (WhisperKit) and test doubles both conform.
+protocol TranscribingEngine: Sendable {
+    func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws
+    func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult
+    func deleteModel(_ name: String) async throws
+}
+
 /// Thin wrapper around WhisperKit. Keeps the loaded model and reuses it.
 actor TranscriptionEngine {
     private var whisperKit: WhisperKit?
@@ -119,3 +127,5 @@ actor TranscriptionEngine {
         )
     }
 }
+
+extension TranscriptionEngine: TranscribingEngine {}

@@ -57,7 +57,16 @@ final class AppModel {
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys
     var processedSet: Set<String> = []                 // = Set(processedKeys), for O(1) lookups
 
-    let engine = TranscriptionEngine()                 // +Models (delete) / +Transcription (load+run)
+    let engine: any TranscribingEngine                 // +Models (delete) / +Transcription (load+run) — injectable (test seam)
+
+    /// WAV conversion (test seam): real ffmpeg by default; tests inject a stub to skip ffmpeg.
+    var wavConverter: @Sendable (URL) throws -> URL = { try AudioConverter.toWav16k($0) }
+
+    /// Completion-notification dispatch (test seam): real UNUserNotificationCenter in production;
+    /// tests inject a no-op so they don't touch the notification center (no bundle proxy under XCTest).
+    var postNotification: (_ succeeded: Int, _ failed: Int) async -> Void = {
+        await BatchNotifier.post(succeeded: $0, failed: $1)
+    }
 
     enum Keys {
         static let model = "model"
@@ -74,7 +83,8 @@ final class AppModel {
         static let uiLanguage = "uiLanguage"
     }
 
-    init() {
+    init(engine: any TranscribingEngine = TranscriptionEngine()) {
+        self.engine = engine
         let d = UserDefaults.standard
         selectedModel = d.string(forKey: Keys.model) ?? "openai_whisper-large-v3-v20240930"
         language = d.string(forKey: Keys.language) ?? ""

@@ -523,6 +523,126 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).body, "Готово: 1 розшифровка")
     }
 
+    // MARK: Audio-cache prune protection — TOCTOU (P0.2)
+
+    /// Pins the exact bug the review found: the displayed/playing entry is never evicted, and the
+    /// re-check is a pure function applied after the off-main pass.
+    func testApplyProtectionRemovesShownId() {
+        let a = UUID(), b = UUID(), c = UUID()
+        XCTAssertEqual(AudioStore.applyProtection([a, b, c], evicting: b), [a, c])       // shown id dropped
+        XCTAssertEqual(AudioStore.applyProtection([a, b, c], evicting: nil), [a, b, c])  // nil → passthrough
+        XCTAssertEqual(AudioStore.applyProtection([a, b], evicting: c), [a, b])          // not in plan → unchanged
+        XCTAssertEqual(AudioStore.applyProtection([], evicting: a), [])                  // empty plan
+        // Invariant: whatever the plan, the protected id is never in the result.
+        XCTAssertFalse(AudioStore.applyProtection([a, b, c], evicting: b).contains(b))
+    }
+
+    // MARK: Transcribe orchestration with a fake engine (P0.1)
+
+    @MainActor func testTranscribeSingleFileInsertsHistory() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "привет мир", language: "ru", segments: [], duration: 1.5)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
+            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }   // no ffmpeg
+            m.autoCopy = false
+            let src = makeTempSource()
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            await m.transcribe(urls: [src])
+
+            XCTAssertEqual(m.history.count, 1)
+            XCTAssertEqual(m.history.first?.text, "привет мир")
+            XCTAssertEqual(m.history.first?.language, "ru")
+            XCTAssertEqual(m.selection, m.history.first?.id)
+            if case .idle = m.phase {} else { XCTFail("phase should be .idle") }
+            XCTAssertEqual(fake.ensureLoadedCalls, 1)
+            XCTAssertEqual(fake.transcribeCalls, 1)
+            XCTAssertNotNil(m.history.first?.audioFile)   // keepAudio copied the source AFTER the insert (perf-fix path)
+        }
+    }
+
+    @MainActor func testTranscribeFailureRecordsAndLeavesHistory() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(throwOnTranscribe: true)
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
+            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
+            let src = makeTempSource()
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            await m.transcribe(urls: [src])
+
+            XCTAssertTrue(m.history.isEmpty)               // a failed file never lands in history
+            XCTAssertEqual(fake.transcribeCalls, 1)
+            if case .failed = m.phase {} else { XCTFail("phase should be .failed") }
+        }
+    }
+
+    @MainActor func testTranscribeBatchInsertsAllNewestFirst() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [
+                EngineResult(text: "one",   language: "en", segments: [], duration: 1),
+                EngineResult(text: "two",   language: "en", segments: [], duration: 1),
+                EngineResult(text: "three", language: "en", segments: [], duration: 1),
+            ])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
+            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
+            m.autoCopy = false
+            let srcs = [makeTempSource("a.m4a"), makeTempSource("b.m4a"), makeTempSource("c.m4a")]
+            defer { srcs.forEach { try? FileManager.default.removeItem(at: $0) } }
+
+            await m.transcribe(urls: srcs)
+
+            XCTAssertEqual(m.history.count, 3)
+            XCTAssertEqual(fake.transcribeCalls, 3)
+            XCTAssertEqual(m.history.first?.text, "three")   // insert(at:0) → last processed is newest
+            if case .idle = m.phase {} else { XCTFail("phase should be .idle") }
+        }
+    }
+
+    @MainActor func testTranscribeEmptyFolderFailsWithoutTouchingEngine() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine()
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
+            let emptyDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("empty-\(UUID().uuidString)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: emptyDir) }
+
+            await m.transcribe(urls: [emptyDir])
+
+            XCTAssertTrue(m.history.isEmpty)
+            XCTAssertEqual(fake.transcribeCalls, 0)          // no audio → engine never invoked
+            if case .failed = m.phase {} else { XCTFail("phase should be .failed (no audio)") }
+        }
+    }
+
+    @MainActor func testTranscribeMissingSourceStillSavesTranscript() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "text", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }   // don't touch the notification center in tests
+            m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
+            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
+            m.autoCopy = false
+            let ghost = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).m4a")
+
+            await m.transcribe(urls: [ghost])
+
+            XCTAssertEqual(m.history.count, 1)               // transcript is kept even if the source vanished
+            XCTAssertEqual(m.history.first?.text, "text")
+            XCTAssertNil(m.history.first?.audioFile)         // no source on disk → no player copy (graceful)
+            XCTAssertNil(m.history.first?.audioPlayable)
+        }
+    }
+
     // MARK: Folder watching (feature 04)
 
     func testFolderScanIgnoresUnstable() {
@@ -876,4 +996,57 @@ final class ParlaLogicTests: XCTestCase {
         }
         body()
     }
+
+    /// Async sibling of withTemporaryHistoryStore — for `await transcribe(...)` orchestration tests.
+    private func withTemporaryHistoryStoreAsync(_ body: () async -> Void) async {
+        let original = HistoryStore.fileURL
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ParlaTest-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        HistoryStore.fileURL = dir.appendingPathComponent("history.json")
+        defer {
+            HistoryStore.fileURL = original
+            try? FileManager.default.removeItem(at: dir)
+        }
+        await body()
+    }
+
+    /// A real, directly-playable (.m4a) temp source so keepAudio's copy succeeds without ffmpeg.
+    private func makeTempSource(_ name: String = "v.m4a") -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)-\(name)")
+        try? Data("audio".utf8).write(to: url)
+        return url
+    }
+}
+
+// MARK: - Test double for the transcription backend (P0.1 seam)
+
+/// Fake `TranscribingEngine`: returns canned results (or throws), counting calls. Single-flight in
+/// tests (each engine call is awaited in turn), so the unchecked Sendable is safe.
+private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
+    private let results: [EngineResult]
+    private let throwOnTranscribe: Bool
+    private var idx = 0
+    private(set) var ensureLoadedCalls = 0
+    private(set) var transcribeCalls = 0
+    private(set) var deletedModels: [String] = []
+
+    init(results: [EngineResult] = [], throwOnTranscribe: Bool = false) {
+        self.results = results
+        self.throwOnTranscribe = throwOnTranscribe
+    }
+
+    func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {
+        ensureLoadedCalls += 1
+    }
+
+    func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult {
+        transcribeCalls += 1
+        if throwOnTranscribe { throw EngineError.notLoaded }
+        let r = results.isEmpty ? EngineResult(text: "", language: "", segments: [], duration: 0)
+                                : results[min(idx, results.count - 1)]
+        idx += 1
+        return r
+    }
+
+    func deleteModel(_ name: String) async throws { deletedModels.append(name) }
 }
