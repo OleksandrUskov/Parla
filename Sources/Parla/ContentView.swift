@@ -22,7 +22,7 @@ struct SidebarView: View {
         @Bindable var model = model
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("История")
+                Text(L("history.title"))
                     .font(.system(.headline, design: .rounded))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -32,7 +32,7 @@ struct SidebarView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .help("Экспортировать историю в файл")
+                    .help(Text(L("history.export.help")))
                 }
             }
             .padding(.horizontal, 16)
@@ -40,7 +40,7 @@ struct SidebarView: View {
             .padding(.bottom, 8)
 
             if !model.history.isEmpty {
-                TextField("Поиск…", text: $model.searchQuery)
+                TextField(L("history.search"), text: $model.searchQuery)
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
@@ -50,13 +50,13 @@ struct SidebarView: View {
                 Spacer()
                 VStack(spacing: 10) {
                     Image(systemName: "tray").font(.system(size: 34)).foregroundStyle(.tertiary)
-                    Text("Пока пусто").foregroundStyle(.secondary).font(.callout)
+                    Text(L("history.empty")).foregroundStyle(.secondary).font(.callout)
                 }
                 .frame(maxWidth: .infinity)
                 Spacer()
             } else if model.filteredHistory.isEmpty {
                 Spacer()
-                Text("Ничего не найдено").foregroundStyle(.secondary).font(.callout)
+                Text(L("history.notfound")).foregroundStyle(.secondary).font(.callout)
                     .frame(maxWidth: .infinity)
                 Spacer()
             } else {
@@ -66,8 +66,8 @@ struct SidebarView: View {
                             SidebarRow(item: item, selected: model.selection == item.id)
                                 .onTapGesture { model.selection = item.id }
                                 .contextMenu {
-                                    Button("Скопировать") { model.copyItem(item) }
-                                    Button("Удалить", role: .destructive) { model.delete(item) }
+                                    Button(L("common.copy")) { model.copyItem(item) }
+                                    Button(L("common.delete"), role: .destructive) { model.delete(item) }
                                 }
                         }
                     }

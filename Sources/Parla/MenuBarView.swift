@@ -19,14 +19,14 @@ struct MenuBarView: View {
 
             // Быстрые действия — без разрешений. Перетащить файл можно в открытый поповер ниже.
             Button { model.quickTranscribeFromClipboard() } label: {
-                Label("Распознать из буфера", systemImage: "doc.on.clipboard")
+                Label(L("menu.transcribe.clipboard"), systemImage: "doc.on.clipboard")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
             .disabled(model.isBusy || model.downloadingModel != nil)
 
             Button { model.transcribeLast() } label: {
-                Label("Повторить последний файл", systemImage: "arrow.clockwise")
+                Label(L("menu.repeat.last"), systemImage: "arrow.clockwise")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
@@ -35,9 +35,9 @@ struct MenuBarView: View {
             Divider()
 
             if model.history.isEmpty {
-                Text("Пока нет расшифровок").font(.caption).foregroundStyle(.secondary)
+                Text(L("menu.empty")).font(.caption).foregroundStyle(.secondary)
             } else {
-                Text("Недавние (клик — скопировать)").font(.caption).foregroundStyle(.secondary)
+                Text(L("menu.recent")).font(.caption).foregroundStyle(.secondary)
                 ForEach(model.history.prefix(6)) { item in
                     Button { model.copyItem(item) } label: {
                         VStack(alignment: .leading, spacing: 1) {
@@ -57,19 +57,19 @@ struct MenuBarView: View {
                 openWindow(id: "main")
                 NSApp.activate()   // macOS 14: без ignoringOtherApps (deprecated)
             } label: {
-                Label("Открыть окно", systemImage: "macwindow").frame(maxWidth: .infinity, alignment: .leading)
+                Label(L("menu.openwindow"), systemImage: "macwindow").frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
 
             SettingsLink {
-                Label("Настройки…", systemImage: "gearshape").frame(maxWidth: .infinity, alignment: .leading)
+                Label(L("menu.settings"), systemImage: "gearshape").frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
 
             Button {
                 NSApp.terminate(nil)
             } label: {
-                Label("Выйти", systemImage: "power").frame(maxWidth: .infinity, alignment: .leading)
+                Label(L("menu.quit"), systemImage: "power").frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
         }

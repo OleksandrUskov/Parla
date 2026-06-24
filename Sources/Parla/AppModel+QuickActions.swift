@@ -6,16 +6,16 @@ extension AppModel {
     /// Триггер из хоткея или кнопки «Распознать из буфера»: берём аудиофайл из буфера и запускаем.
     func quickTranscribeFromClipboard() {
         guard !isBusy, downloadingModel == nil else {
-            QuickToast.shared.show("Подожди — идёт другая задача")
+            QuickToast.shared.show(L("toast.busy"))
             return
         }
         let urls = PasteboardReader.audioOnly(PasteboardReader.fileURLs())
         guard let first = urls.first else {
-            QuickToast.shared.show("В буфере нет аудиофайла")
+            QuickToast.shared.show(L("toast.clipboard.empty"))
             return
         }
         quickModeRun = true
-        QuickToast.shared.show("Распознаю «\(first.lastPathComponent)»…", sticky: true)
+        QuickToast.shared.show(Lf("toast.recognizing", first.lastPathComponent), sticky: true)
         handleDrop(urls: urls)   // существующий вход; гонку двойного запуска он уже закрывает
     }
 
@@ -23,11 +23,11 @@ extension AppModel {
     func transcribeLast() {
         guard !isBusy, downloadingModel == nil else { return }
         guard let url = resolveLastSource() else {
-            QuickToast.shared.show("Последний файл недоступен")
+            QuickToast.shared.show(L("toast.last.unavailable"))
             return
         }
         quickModeRun = true
-        QuickToast.shared.show("Повторяю «\(url.lastPathComponent)»…", sticky: true)
+        QuickToast.shared.show(Lf("toast.repeating", url.lastPathComponent), sticky: true)
         handleDrop(urls: [url])
     }
 

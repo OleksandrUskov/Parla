@@ -1,0 +1,169 @@
+/* Parla — English (development language / source). Keys are shared across en/ru/uk. */
+
+/* Common */
+"common.cancel"   = "Cancel";
+"common.done"     = "Done";
+"common.copy"     = "Copy";
+"common.copied"   = "Copied";
+"common.delete"   = "Delete";
+"common.download" = "Download";
+
+/* Speech-language picker */
+"lang.auto" = "Auto (detect)";
+
+/* History (sidebar) */
+"history.title"       = "History";
+"history.export.help" = "Export history to a file";
+"history.search"      = "Search…";
+"history.empty"       = "Nothing yet";
+"history.notfound"    = "Nothing found";
+
+/* Drop zone */
+"drop.working" = "Working…";
+"drop.prompt"  = "Drop a voice message here";
+"drop.choose"  = "or choose a file…";
+
+/* Header / watch chip */
+"header.translate.help"     = "The result is translated into English";
+"header.watch.help"         = "Watching the folder";
+"header.watch.help.queued"  = "Watching the folder · queued: %lld";
+
+/* Model manager */
+"model.chip.help"     = "Choose, download or delete a model";
+"model.manager.title" = "Transcription models";
+"model.manager.hint"  = "All offline, downloaded once. Click a row to select, “Download” to fetch ahead of time, 🗑 to remove from disk.";
+"model.disk.used"     = "Used on disk";
+"model.recommended"   = "recommended";
+"model.delete.help"   = "Delete the model from disk";
+"model.current.hint"  = "currently selected";
+
+/* Model tiers */
+"model.tier.tiny.hint"  = "very fast · draft";
+"model.tier.base.hint"  = "fast · basic quality";
+"model.tier.small.hint" = "balance of speed / accuracy";
+"model.tier.turbo.hint" = "fast, near-best · top for ru/uk";
+"model.tier.large.hint" = "best accuracy · slower";
+
+/* Model size estimates */
+"model.size.tiny"  = "~75 MB";
+"model.size.base"  = "~150 MB";
+"model.size.small" = "~500 MB";
+"model.size.turbo" = "~630 MB";
+"model.size.large" = "~1 GB";
+
+/* Status bar */
+"status.preparing"    = "Preparing %@…";
+"status.loadingmodel" = "Loading the model into memory… (slower the first time)";
+"status.transcribing" = "Transcribing %@…";
+"status.downloading"  = "Downloading the model (one-time)… %lld%%";
+
+/* Empty state */
+"empty.title"    = "Ready to go";
+"empty.subtitle" = "Drop a voice message from Telegram (or “choose a file”) — you'll get the text in a couple of seconds";
+
+/* Transcript card */
+"transcript.edited"           = "edited";
+"transcript.edited.at"        = "Edited %@";
+"transcript.edited.manually"  = "Text edited manually";
+"transcript.edit.help"        = "Edit text";
+"transcript.retranscribe.help"= "Re-transcribe with another model";
+"transcript.source.unavailable" = "Source file unavailable — drop it again";
+"transcript.meta.words"       = "%lld w";
+"transcript.silence"          = "(silence — nothing recognized)";
+"model.menu.current"          = "%@ — current";
+"model.menu.download"         = "%@ — download";
+
+/* Player */
+"player.unsupported" = "This audio can't be played by the built-in player (format not supported).";
+"player.noaudio"     = "Audio unavailable — the transcript text is saved.";
+
+/* Menu bar */
+"menu.transcribe.clipboard" = "Transcribe from clipboard";
+"menu.repeat.last"          = "Repeat the last file";
+"menu.empty"                = "No transcripts yet";
+"menu.recent"               = "Recent (click to copy)";
+"menu.openwindow"           = "Open window";
+"menu.settings"             = "Settings…";
+"menu.quit"                 = "Quit";
+
+/* Settings */
+"settings.section.model"        = "Model";
+"settings.model.hint"           = "Downloading and deleting models is handier from the model chip in the window header.";
+"settings.section.language"     = "Language";
+"settings.language.hint"        = "Whisper is multilingual (~99 languages). On “Auto” it detects the language itself — English and any other work out of the box, nothing extra to download. For Russian / Ukrainian / Surzhyk, “Auto” is the best choice.";
+"settings.section.translation"  = "Translation";
+"settings.translation.toggle"   = "Translate the result into English";
+"settings.translation.hint"     = "Whisper can not only transcribe but also translate speech in any language straight into English text.";
+"settings.section.behavior"     = "Behavior";
+"settings.behavior.autocopy"    = "Copy the result to the clipboard automatically";
+"settings.behavior.timestamps"  = "Show timestamps";
+"settings.section.folderwatch"  = "Folder watch";
+"settings.folderwatch.toggle"   = "Watch a folder";
+"settings.folderwatch.folder"   = "Folder";
+"settings.folderwatch.notchosen"= "not chosen";
+"settings.folderwatch.choose"   = "Choose…";
+"settings.folderwatch.subfolders"= "Include subfolders";
+"settings.folderwatch.sidecar"  = "Save a .txt next to the file";
+"settings.folderwatch.hint"     = "New audio files in the folder are transcribed automatically — like the old script, but locally. Only files that appear after you turn it on are transcribed; existing ones are ignored.";
+"settings.section.hotkey"       = "Hotkey";
+"settings.hotkey.toggle"        = "Global hotkey — transcribe audio from the clipboard";
+"settings.hotkey.recorder"      = "Shortcut:";
+"settings.hotkey.hint"          = "Works globally from any app — no Accessibility permission or system prompts. Click the field to rebind. The “Transcribe from clipboard” / “Repeat the last file” menu-bar buttons always work.";
+"settings.section.history"      = "History";
+"settings.history.export"       = "Export history…";
+"settings.history.clear"        = "Clear history";
+"settings.section.system"       = "System";
+"settings.system.ffmpeg.missing"= "not found — install: brew install ffmpeg";
+"settings.system.models"        = "Models on disk";
+"settings.system.audio"         = "Audio for the player";
+"settings.system.clearaudio"    = "Clear audio cache";
+"settings.system.audiohint"     = "Parla keeps audio copies for replay and automatically deletes the oldest when too many pile up. The transcript text is always kept.";
+"settings.section.interface"    = "Interface";
+"settings.interface.language"   = "Interface language";
+"settings.interface.system"     = "System";
+"settings.interface.hint"       = "The app's language is separate from the speech-recognition language.";
+
+/* Toasts */
+"toast.busy"             = "Hold on — another task is running";
+"toast.clipboard.empty"  = "No audio file in the clipboard";
+"toast.recognizing"      = "Transcribing “%@”…";
+"toast.last.unavailable" = "The last file is unavailable";
+"toast.repeating"        = "Repeating “%@”…";
+"toast.failed"           = "Couldn't transcribe";
+"toast.done.copied"      = "Done · copied to clipboard";
+"toast.done"             = "Done";
+
+/* Errors */
+"error.drop.failed"         = "Couldn't read the dropped file";
+"error.save.failed"         = "Couldn't save the file: %@";
+"error.model.download"      = "Couldn't download the model: %@";
+"error.model.delete"        = "Couldn't delete the model: %@";
+"error.noaudio"             = "No audio files found";
+"error.transcribe.failed"   = "Failed: %@";
+"error.source.missing"      = "Source file “%@” not found — drop it again";
+"error.retranscribe.failed" = "Couldn't re-transcribe: %@";
+"error.ffmpeg.missing"      = "ffmpeg not found. Install it with:  brew install ffmpeg";
+"error.decode.failed"       = "Couldn't decode the audio.\n%@";
+"error.model.notloaded"     = "The model didn't load";
+
+/* Folder picker */
+"folder.choose" = "Choose";
+
+/* Notifications */
+"notify.allfailed" = "Couldn't transcribe (%lld)";
+"notify.done"      = "Done: %lld %@";
+"notify.partial"   = "%1$lld of %2$lld done · %3$lld failed";
+
+/* Plural: transcription(s) */
+"word.transcription.one"  = "transcription";
+"word.transcription.few"  = "transcriptions";
+"word.transcription.many" = "transcriptions";
+
+/* Batch label */
+"batch.label.single" = "“%@”";
+"batch.label.multi"  = "“%1$@” (%2$lld of %3$lld)";
+
+/* Export + units */
+"export.title" = "# Parla — transcript history\n\n";
+"unit.gb.fmt"  = "%.1f GB";
+"unit.mb.fmt"  = "%.0f MB";

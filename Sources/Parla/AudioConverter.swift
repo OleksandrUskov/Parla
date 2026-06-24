@@ -11,9 +11,9 @@ enum AudioConverter {
         var errorDescription: String? {
             switch self {
             case .ffmpegNotFound:
-                return "Не найден ffmpeg. Установи его командой:  brew install ffmpeg"
+                return L("error.ffmpeg.missing")
             case .conversionFailed(let detail):
-                return "Не удалось декодировать аудио.\n\(detail)"
+                return Lf("error.decode.failed", detail)
             }
         }
     }

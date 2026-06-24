@@ -22,13 +22,12 @@ enum BatchNotifier {
     static func summary(succeeded: Int, failed: Int) -> (title: String, body: String) {
         let total = succeeded + failed
         if succeeded == 0 {
-            return ("Parla", "Не удалось распознать (\(total))")
+            return ("Parla", Lf("notify.allfailed", total))
         }
-        let word = pluralRu(succeeded, "расшифровка", "расшифровки", "расшифровок")
         if failed == 0 {
-            return ("Parla", "Готово: \(succeeded) \(word)")
+            return ("Parla", Lf("notify.done", succeeded, transcriptionsWord(succeeded)))
         }
-        return ("Parla", "\(succeeded) из \(total) готово · \(failed) не удал\(failed == 1 ? "ась" : "ось")")
+        return ("Parla", Lf("notify.partial", succeeded, total, failed))
     }
 
     /// Запросить разрешение лениво (на первой реальной отправке) и доставить уведомление.

@@ -41,6 +41,12 @@ if [ -f "Resources/AppIcon.icns" ]; then
   ICON_LINE="<key>CFBundleIconFile</key><string>AppIcon</string>"
 fi
 
+# Локализации интерфейса (en/ru/uk) → Bundle.main, чтобы рантайм-переключатель языка
+# (Localized.setLanguage) находил нужный .lproj. Источник правды — Localization/ в корне репо.
+if compgen -G "Localization/*.lproj" > /dev/null; then
+  cp -R Localization/*.lproj "$APPDIR/Contents/Resources/"
+fi
+
 cat > "$APPDIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -57,6 +63,8 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>ru</string><string>uk</string></array>
   $ICON_LINE
 </dict>
 </plist>

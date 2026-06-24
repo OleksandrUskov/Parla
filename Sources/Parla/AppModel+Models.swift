@@ -46,7 +46,7 @@ extension AppModel {
                 Task { @MainActor in self?.downloadProgress = p.fractionCompleted }
             })
         } catch {
-            phase = .failed("Не удалось скачать модель: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+            phase = .failed(Lf("error.model.download", (error as? LocalizedError)?.errorDescription ?? error.localizedDescription))
         }
         downloadingModel = nil
         refreshDownloaded()
@@ -58,7 +58,7 @@ extension AppModel {
             try await engine.deleteModel(name)
             refreshDownloaded()
         } catch {
-            phase = .failed("Не удалось удалить модель: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+            phase = .failed(Lf("error.model.delete", (error as? LocalizedError)?.errorDescription ?? error.localizedDescription))
         }
     }
 
@@ -76,18 +76,18 @@ extension AppModel {
                 tiers.append(ModelTier(title: title, hint: hint, estimate: estimate, name: n, recommended: rec))
             }
         }
-        add("Tiny", "очень быстро · черновик", "~75 МБ", ["openai_whisper-tiny"])
-        add("Base", "быстро · базовое качество", "~150 МБ", ["openai_whisper-base"])
-        add("Small", "баланс скорость / точность", "~500 МБ", ["openai_whisper-small"])
-        add("Large v3 turbo", "быстро, почти максимум · топ для ru/uk", "~630 МБ",
+        add("Tiny", L("model.tier.tiny.hint"), L("model.size.tiny"), ["openai_whisper-tiny"])
+        add("Base", L("model.tier.base.hint"), L("model.size.base"), ["openai_whisper-base"])
+        add("Small", L("model.tier.small.hint"), L("model.size.small"), ["openai_whisper-small"])
+        add("Large v3 turbo", L("model.tier.turbo.hint"), L("model.size.turbo"),
             ["openai_whisper-large-v3-v20240930_626MB",
              "openai_whisper-large-v3-v20240930",
              "openai_whisper-large-v3-v20240930_turbo_632MB",
              "openai_whisper-large-v3-v20240930_turbo"], rec: true)
-        add("Large v3", "максимум точности · медленнее", "~1 ГБ",
+        add("Large v3", L("model.tier.large.hint"), L("model.size.large"),
             ["openai_whisper-large-v3", "openai_whisper-large-v3_947MB"])
         if !tiers.contains(where: { $0.name == selectedModel }) {
-            tiers.append(ModelTier(title: friendlyModel(selectedModel), hint: "текущая выбранная",
+            tiers.append(ModelTier(title: friendlyModel(selectedModel), hint: L("model.current.hint"),
                                    estimate: "", name: selectedModel, recommended: false))
         }
         return tiers

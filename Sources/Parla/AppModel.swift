@@ -35,6 +35,17 @@ final class AppModel {
     var watchWriteSidecar: Bool { didSet { UserDefaults.standard.set(watchWriteSidecar, forKey: Keys.watchSidecar) } }
     var globalHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(globalHotkeyEnabled, forKey: Keys.hotkey) } }
 
+    /// Язык интерфейса — отдельно от языка распознавания речи (`language`). `.system` следует за ОС.
+    var uiLanguage: UILanguage {
+        didSet {
+            UserDefaults.standard.set(uiLanguage.rawValue, forKey: Keys.uiLanguage)
+            Localized.setLanguage(uiLanguage.code)
+        }
+    }
+
+    /// Локаль для SwiftUI `environment(\.locale)` (форматирование + системные контролы).
+    var resolvedLocale: Locale { uiLanguage.locale }
+
     var watchedFolderURL: URL?          // резолвится из bookmark — для отображения пути
     var watchQueueCount: Int = 0        // сколько файлов ждут в очереди (для статус-чипа)
 
@@ -60,6 +71,7 @@ final class AppModel {
         static let watchBookmark = "watchBookmark"
         static let hotkey = "globalHotkeyEnabled"
         static let lastBookmark = "lastSourceBookmark"
+        static let uiLanguage = "uiLanguage"
     }
 
     init() {
@@ -73,6 +85,8 @@ final class AppModel {
         watchRecursive = (d.object(forKey: Keys.watchRecursive) as? Bool) ?? true   // подпапки по умолчанию вкл.
         watchWriteSidecar = d.bool(forKey: Keys.watchSidecar)
         globalHotkeyEnabled = d.bool(forKey: Keys.hotkey)   // opt-in, по умолчанию выкл.
+        uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .system
+        Localized.setLanguage(uiLanguage.code)              // применить выбранный язык интерфейса до первой строки
         processedKeys = ProcessedStore.load()
         processedSet = Set(processedKeys)
         availableModels = [

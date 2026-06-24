@@ -141,10 +141,10 @@ func filterHistory(_ items: [TranscriptItem], query: String) -> [TranscriptItem]
 
 /// Вся история в один markdown-текст (для экспорта/бэкапа).
 func exportText(_ items: [TranscriptItem]) -> String {
-    var out = "# Parla — история расшифровок\n\n"
+    var out = L("export.title")
     for it in items {
         out += "## \(it.sourceName)\n"
-        let editedMark = it.isEdited ? " · изменено" : ""
+        let editedMark = it.isEdited ? " · " + L("transcript.edited") : ""
         out += "_\(it.date.formatted(date: .abbreviated, time: .shortened)) · \(it.language.uppercased()) · \(friendlyModel(it.model))\(editedMark)_\n\n"
         out += it.text + "\n\n---\n\n"
     }
@@ -154,8 +154,8 @@ func exportText(_ items: [TranscriptItem]) -> String {
 func formatBytes(_ bytes: Int64) -> String {
     if bytes <= 0 { return "—" }
     let mb = Double(bytes) / 1_048_576
-    if mb >= 1024 { return String(format: "%.1f ГБ", mb / 1024) }
-    return String(format: "%.0f МБ", mb)
+    if mb >= 1024 { return Lf("unit.gb.fmt", mb / 1024) }
+    return Lf("unit.mb.fmt", mb)
 }
 
 /// Позиция в пакетной обработке: «index из total». Только для дропа папки / нескольких файлов.
@@ -176,8 +176,8 @@ enum EnginePhase: Equatable {
 
 /// «msg.ogg» (3 из 12)» для батча, или просто «msg.ogg» для одиночного файла.
 func batchLabel(_ name: String, _ b: BatchProgress?) -> String {
-    guard let b, b.total > 1 else { return "«\(name)»" }
-    return "«\(name)» (\(b.index) из \(b.total))"
+    guard let b, b.total > 1 else { return Lf("batch.label.single", name) }
+    return Lf("batch.label.multi", name, b.index, b.total)
 }
 
 /// Русская плюрализация (1 файл / 2 файла / 5 файлов).

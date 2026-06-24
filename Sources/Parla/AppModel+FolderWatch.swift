@@ -16,7 +16,7 @@ extension AppModel {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "Выбрать"
+        panel.prompt = L("folder.choose")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // Обычный bookmark: приложение не в песочнице. При будущей сэндбоксации (App Store)
         // заменить на .withSecurityScope + start/stopAccessingSecurityScopedResource.

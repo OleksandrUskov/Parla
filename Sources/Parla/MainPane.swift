@@ -37,7 +37,7 @@ struct BrandHeader: View {
                     .padding(.horizontal, 7).padding(.vertical, 3)
                     .background(Brand.accent.opacity(0.25), in: Capsule())
                     .foregroundStyle(Brand.accent)
-                    .help("Результат переводится в английский")
+                    .help(Text(L("header.translate.help")))
             }
             if model.watchEnabled {
                 HStack(spacing: 4) {
@@ -49,9 +49,9 @@ struct BrandHeader: View {
                 .padding(.horizontal, 7).padding(.vertical, 3)
                 .background(Brand.accent.opacity(0.2), in: Capsule())
                 .foregroundStyle(Brand.accent)
-                .help(model.watchQueueCount > 0
-                      ? "Слежу за папкой · в очереди: \(model.watchQueueCount)"
-                      : "Слежу за папкой")
+                .help(Text(model.watchQueueCount > 0
+                      ? Lf("header.watch.help.queued", model.watchQueueCount)
+                      : L("header.watch.help")))
             }
             Spacer()
             ModelButton()
@@ -84,7 +84,7 @@ struct ModelButton: View {
             .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
         }
         .buttonStyle(.plain)
-        .help("Выбрать, скачать или удалить модель")
+        .help(Text(L("model.chip.help")))
         .popover(isPresented: $show, arrowEdge: .bottom) {
             ModelManagerView()
         }
@@ -96,8 +96,8 @@ struct ModelManagerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Модели распознавания").font(.system(.headline, design: .rounded))
-            Text("Все офлайн, качаются один раз. Клик по строке — выбрать, «Скачать» — загрузить заранее, 🗑 — удалить с диска.")
+            Text(L("model.manager.title")).font(.system(.headline, design: .rounded))
+            Text(L("model.manager.hint"))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider()
@@ -108,7 +108,7 @@ struct ModelManagerView: View {
             }
             Divider()
             HStack {
-                Text("Занято на диске").font(.caption).foregroundStyle(.secondary)
+                Text(L("model.disk.used")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Text(formatBytes(model.totalModelsBytes)).font(.caption.weight(.medium)).foregroundStyle(.secondary)
             }
@@ -136,7 +136,7 @@ struct ModelRow: View {
                         .font(.callout.weight(isSelected ? .semibold : .regular))
                         .lineLimit(1)
                     if tier.recommended {
-                        Text("рекомендую").font(.caption2.weight(.bold)).foregroundStyle(Brand.accent)
+                        Text(L("model.recommended")).font(.caption2.weight(.bold)).foregroundStyle(Brand.accent)
                     }
                 }
                 Text(tier.hint).font(.caption2).foregroundStyle(.secondary)
@@ -171,7 +171,7 @@ struct ModelRow: View {
                 }
                 .buttonStyle(.borderless)
                 .tint(.secondary)
-                .help("Удалить модель с диска")
+                .help(Text(L("model.delete.help")))
                 .disabled(model.downloadingModel != nil || model.isBusy)
             }
         } else {
@@ -180,7 +180,7 @@ struct ModelRow: View {
                     Text(tier.estimate).font(.caption2).foregroundStyle(.secondary)
                 }
                 Button { Task { await model.downloadModel(tier.name) } } label: {
-                    Label("Скачать", systemImage: "arrow.down.circle")
+                    Label(L("common.download"), systemImage: "arrow.down.circle")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -201,13 +201,13 @@ struct StatusBar: View {
         case .idle:
             EmptyView()
         case .preparing(let n, let b):
-            progressChip("Готовлю \(batchLabel(n, b))…", b)
+            progressChip(Lf("status.preparing", batchLabel(n, b)), b)
         case .downloadingModel(let p):
             downloadChip(p)
         case .loadingModel:
-            chip("Загружаю модель в память… (первый раз — дольше)", busy: true)
+            chip(L("status.loadingmodel"), busy: true)
         case .transcribing(let n, let b):
-            progressChip("Распознаю \(batchLabel(n, b))…", b)
+            progressChip(Lf("status.transcribing", batchLabel(n, b)), b)
         case .failed(let m):
             chip(m, busy: false, error: true)
         }
@@ -245,7 +245,7 @@ struct StatusBar: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.down.circle").foregroundStyle(Brand.accent)
-                Text("Скачиваю модель (один раз)… \(Int(p * 100))%").font(.callout)
+                Text(Lf("status.downloading", Int(p * 100))).font(.callout)
                 Spacer()
             }
             ProgressView(value: p).tint(Brand.accent)
@@ -263,9 +263,9 @@ struct EmptyState: View {
                 .font(.system(size: 48))
                 .foregroundStyle(Brand.gradient)
                 .opacity(0.85)
-            Text("Готов к работе")
+            Text(L("empty.title"))
                 .font(.system(.title3, design: .rounded).weight(.semibold))
-            Text("Перетащи голосовое из Telegram (или «выбери файл») — получишь текст за пару секунд")
+            Text(L("empty.subtitle"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -331,10 +331,10 @@ struct TranscriptCard: View {
                         .padding(9).background(.ultraThinMaterial, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .help("Редактировать текст")
+                .help(Text(L("transcript.edit.help")))
             }
             Button { model.copyItem(item) } label: {
-                Label(justCopied ? "Скопировано" : "Копировать",
+                Label(justCopied ? L("common.copied") : L("common.copy"),
                       systemImage: justCopied ? "checkmark" : "doc.on.doc")
                     .font(.callout.weight(.medium))
                     .padding(.horizontal, 14).padding(.vertical, 8)
@@ -357,7 +357,7 @@ struct TranscriptCard: View {
     private var editActions: some View {
         HStack(spacing: 8) {
             Button { cancelEdit() } label: {
-                Text("Отмена")
+                Text(L("common.cancel"))
                     .font(.callout.weight(.medium))
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .foregroundStyle(.secondary)
@@ -365,7 +365,7 @@ struct TranscriptCard: View {
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)   // Esc
             Button { commitEdit() } label: {
-                Label("Готово", systemImage: "checkmark")
+                Label(L("common.done"), systemImage: "checkmark")
                     .font(.callout.weight(.semibold))
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(Brand.gradient, in: Capsule())
@@ -377,13 +377,13 @@ struct TranscriptCard: View {
     }
 
     private var editedChip: some View {
-        Text("изменено")
+        Text(L("transcript.edited"))
             .font(.caption2.weight(.medium))
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Brand.accent.opacity(0.18), in: Capsule())
             .foregroundStyle(Brand.accent)
-            .help(item.editedAt.map { "Отредактировано \($0.formatted(date: .abbreviated, time: .shortened))" }
-                  ?? "Текст изменён вручную")
+            .help(Text(item.editedAt.map { Lf("transcript.edited.at", $0.formatted(date: .abbreviated, time: .shortened)) }
+                  ?? L("transcript.edited.manually")))
     }
 
     // MARK: Тело — текст (чтение) или редактор (правка)
@@ -441,7 +441,7 @@ struct TranscriptCard: View {
 
     private var meta: String {
         let lang = item.language.isEmpty ? "?" : item.language.uppercased()
-        return "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(friendlyModel(item.model)) · \(Int(item.durationSec))s · \(item.wordCount) сл."
+        return "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(friendlyModel(item.model)) · \(Int(item.durationSec))s · \(Lf("transcript.meta.words", item.wordCount))"
     }
 }
 
@@ -456,9 +456,9 @@ struct RetranscribeMenu: View {
             ForEach(model.modelTiers) { tier in
                 Button { model.retranscribe(item, with: tier.name) } label: {
                     if tier.name == item.model {
-                        Label("\(tier.title) — текущая", systemImage: "checkmark")
+                        Label(Lf("model.menu.current", tier.title), systemImage: "checkmark")
                     } else if !model.isDownloaded(tier.name) {
-                        Label("\(tier.title) — скачать", systemImage: "arrow.down.circle")
+                        Label(Lf("model.menu.download", tier.title), systemImage: "arrow.down.circle")
                     } else {
                         Text(tier.title)
                     }
@@ -474,9 +474,9 @@ struct RetranscribeMenu: View {
         .buttonStyle(.plain)
         .fixedSize()
         .disabled(!model.canRetranscribe(item))
-        .help(item.hasResolvableSource
-              ? "Перераспознать другой моделью"
-              : "Исходный файл недоступен — перетащи его заново")
+        .help(Text(item.hasResolvableSource
+              ? L("transcript.retranscribe.help")
+              : L("transcript.source.unavailable")))
     }
 }
 
@@ -508,9 +508,9 @@ struct TransportBar: View {
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         } else if hasAudio {
-            note("Это аудио нельзя проиграть встроенным плеером (формат не поддержан).")
+            note(L("player.unsupported"))
         } else {
-            note("Аудио недоступно — текст расшифровки сохранён.")
+            note(L("player.noaudio"))
         }
     }
 

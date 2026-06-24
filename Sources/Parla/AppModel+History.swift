@@ -61,7 +61,7 @@ extension AppModel {
         do {
             try Data(exportText(history).utf8).write(to: url)
         } catch {
-            phase = .failed("Не удалось сохранить файл: \(error.localizedDescription)")
+            phase = .failed(Lf("error.save.failed", error.localizedDescription))
         }
     }
 }

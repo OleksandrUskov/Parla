@@ -19,10 +19,10 @@ struct DropZoneView: View {
                     .font(.system(size: 40, weight: .semibold))
                     .foregroundStyle(Brand.gradient)
                     .symbolEffect(.pulse, isActive: model.isBusy || targeted)
-                Text(model.isBusy ? "Работаю…" : "Перетащи голосовое сюда")
+                Text(model.isBusy ? L("drop.working") : L("drop.prompt"))
                     .font(.system(.headline, design: .rounded))
                 if !model.isBusy {
-                    Button("или выбери файл…") { showImporter = true }
+                    Button(L("drop.choose")) { showImporter = true }
                         .buttonStyle(.plain)
                         .font(.subheadline)
                         .foregroundStyle(Brand.accent)
@@ -38,7 +38,7 @@ struct DropZoneView: View {
                     if let url = await Self.loadFileURL(provider) { urls.append(url) }
                 }
                 if urls.isEmpty {
-                    model.phase = .failed("Не смог получить файл из перетаскивания")
+                    model.phase = .failed(L("error.drop.failed"))
                 } else {
                     model.handleDrop(urls: urls)
                 }

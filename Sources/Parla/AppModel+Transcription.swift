@@ -17,7 +17,7 @@ extension AppModel {
             else { files.append(url) }
         }
         guard !files.isEmpty else {
-            phase = .failed("Не нашёл аудиофайлов")
+            phase = .failed(L("error.noaudio"))
             return
         }
         let total = files.count
@@ -34,7 +34,7 @@ extension AppModel {
                     language: r.language,
                     durationSec: r.duration,
                     model: selectedModel,
-                    text: r.text.isEmpty ? "(тишина — ничего не распознано)" : r.text,
+                    text: r.text.isEmpty ? L("transcript.silence") : r.text,
                     segments: r.segments,
                     sourcePath: url.path,                       // запоминаем исходник для «перераспознать»
                     sourceBookmark: makeSourceBookmark(url)
@@ -60,7 +60,7 @@ extension AppModel {
             }
         }
         refreshDownloaded()
-        phase = failures.isEmpty ? .idle : .failed("Не удалось: \(failures.joined(separator: "; "))")
+        phase = failures.isEmpty ? .idle : .failed(Lf("error.transcribe.failed", failures.joined(separator: "; ")))
 
         // Уведомление: только если задание «стоило ожидания» и окно не на переднем плане.
         // Frontmost читаем в КОНЦЕ — переключение во время батча как раз и должно уведомить.
@@ -73,9 +73,9 @@ extension AppModel {
         if quickModeRun {
             quickModeRun = false
             if !failures.isEmpty {
-                QuickToast.shared.show("Не удалось распознать")
+                QuickToast.shared.show(L("toast.failed"))
             } else {
-                QuickToast.shared.show(autoCopy ? "Готово · скопировано в буфер" : "Готово")
+                QuickToast.shared.show(autoCopy ? L("toast.done.copied") : L("toast.done"))
             }
         }
 
@@ -132,7 +132,7 @@ extension AppModel {
         // Резолвим исходник ВНУТРИ задачи: файл мог исчезнуть между открытием меню и подтверждением.
         switch item.resolveSource() {
         case .missing:
-            phase = .failed("Файл-источник «\(item.sourceName)» не найден — перетащи его заново")
+            phase = .failed(Lf("error.source.missing", item.sourceName))
         case .found(let url, let scoped):
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
@@ -150,7 +150,7 @@ extension AppModel {
                     updated.language    = r.language
                     updated.durationSec = r.duration
                     updated.model       = model
-                    updated.text        = r.text.isEmpty ? "(тишина — ничего не распознано)" : r.text
+                    updated.text        = r.text.isEmpty ? L("transcript.silence") : r.text
                     updated.segments    = r.segments
                     updated.date        = Date()
                     updated.edited      = nil   // свежее распознавание → сбрасываем флаг ручной правки (таймкоды снова валидны)
@@ -167,7 +167,7 @@ extension AppModel {
                 phase = .idle
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                phase = .failed("Не удалось перераспознать: \(msg)")
+                phase = .failed(Lf("error.retranscribe.failed", msg))
             }
         }
         refreshDownloaded()   // целевая модель могла только что скачаться

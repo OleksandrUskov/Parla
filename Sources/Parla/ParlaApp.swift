@@ -12,6 +12,7 @@ struct ParlaApp: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(model)
+                .environment(\.locale, model.resolvedLocale)   // чтение resolvedLocale в App.body → ре-рендер при смене языка
                 .task {
                     NotificationClickHandler.install()   // клик по уведомлению о завершении → окно вперёд
                     installHotkeyOnce()                  // обработчик хоткея + привести вкл/выкл к настройке
@@ -25,13 +26,16 @@ struct ParlaApp: App {
         .defaultSize(width: 980, height: 660)
 
         MenuBarExtra("Parla", systemImage: model.isBusy ? "waveform.circle.fill" : "waveform") {
-            MenuBarView().environment(model)
+            MenuBarView()
+                .environment(model)
+                .environment(\.locale, model.resolvedLocale)
         }
         .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView()
                 .environment(model)
+                .environment(\.locale, model.resolvedLocale)
                 .frame(width: 500)
                 .preferredColorScheme(.dark)
         }

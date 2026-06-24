@@ -7,87 +7,97 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var model = model
         Form {
-            Section("Модель") {
-                Picker("Модель", selection: $model.selectedModel) {
+            Section(L("settings.section.interface")) {
+                Picker(L("settings.interface.language"), selection: $model.uiLanguage) {
+                    ForEach(UILanguage.allCases) { lang in
+                        Text(lang.pickerLabel).tag(lang)
+                    }
+                }
+                Text(L("settings.interface.hint"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section(L("settings.section.model")) {
+                Picker(L("settings.section.model"), selection: $model.selectedModel) {
                     ForEach(model.availableModels, id: \.self) { name in
                         Text(friendlyModel(name)).tag(name)
                     }
                 }
-                Text("Качать и удалять модели удобнее через чип модели в шапке окна.")
+                Text(L("settings.model.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Язык") {
-                Picker("Язык", selection: $model.language) {
+            Section(L("settings.section.language")) {
+                Picker(L("settings.section.language"), selection: $model.language) {
                     ForEach(whisperLanguages, id: \.code) { lang in
-                        Text(lang.name).tag(lang.code)
+                        Text(lang.code.isEmpty ? L("lang.auto") : lang.name).tag(lang.code)
                     }
                 }
-                Text("Whisper мультиязычный (~99 языков). На «Авто» язык определяется сам — английский и любой другой работают сходу, доскачивать ничего не нужно. Для русского / украинского / суржика «Авто» — лучший выбор.")
+                Text(L("settings.language.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Перевод") {
-                Toggle("Переводить результат в английский", isOn: $model.translateToEnglish)
-                Text("Whisper умеет не только расшифровывать, но и переводить речь любого языка сразу в английский текст.")
+            Section(L("settings.section.translation")) {
+                Toggle(L("settings.translation.toggle"), isOn: $model.translateToEnglish)
+                Text(L("settings.translation.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Поведение") {
-                Toggle("Копировать результат в буфер автоматически", isOn: $model.autoCopy)
-                Toggle("Показывать таймкоды", isOn: $model.showTimestamps)
+            Section(L("settings.section.behavior")) {
+                Toggle(L("settings.behavior.autocopy"), isOn: $model.autoCopy)
+                Toggle(L("settings.behavior.timestamps"), isOn: $model.showTimestamps)
             }
 
-            Section("Слежение за папкой") {
-                Toggle("Следить за папкой", isOn: $model.watchEnabled)
-                LabeledContent("Папка") {
+            Section(L("settings.section.folderwatch")) {
+                Toggle(L("settings.folderwatch.toggle"), isOn: $model.watchEnabled)
+                LabeledContent(L("settings.folderwatch.folder")) {
                     HStack(spacing: 8) {
-                        Text(model.watchedFolderURL?.path ?? "не выбрана")
+                        Text(model.watchedFolderURL?.path ?? L("settings.folderwatch.notchosen"))
                             .font(.caption)
                             .foregroundStyle(model.watchedFolderURL == nil ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                             .lineLimit(1).truncationMode(.middle)
-                        Button("Выбрать…") { model.pickWatchFolder() }
+                        Button(L("settings.folderwatch.choose")) { model.pickWatchFolder() }
                     }
                 }
-                Toggle("Включая подпапки", isOn: $model.watchRecursive)
-                Toggle("Сохранять .txt рядом с файлом", isOn: $model.watchWriteSidecar)
-                Text("Новые аудиофайлы в папке распознаются сами — как старый скрипт, но локально. Транскрибируются только файлы, появившиеся после включения; уже лежащие игнорируются.")
+                Toggle(L("settings.folderwatch.subfolders"), isOn: $model.watchRecursive)
+                Toggle(L("settings.folderwatch.sidecar"), isOn: $model.watchWriteSidecar)
+                Text(L("settings.folderwatch.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Горячая клавиша") {
-                Toggle("Глобальный хоткей — распознать аудио из буфера", isOn: $model.globalHotkeyEnabled)
+            Section(L("settings.section.hotkey")) {
+                Toggle(L("settings.hotkey.toggle"), isOn: $model.globalHotkeyEnabled)
                 if model.globalHotkeyEnabled {
-                    KeyboardShortcuts.Recorder("Комбинация:", name: .quickTranscribe)
+                    KeyboardShortcuts.Recorder(L("settings.hotkey.recorder"), name: .quickTranscribe)
                 }
-                Text("Работает глобально из любого приложения — без «Универсального доступа» и системных запросов. Кликни по полю, чтобы переназначить. Кнопки «Распознать из буфера» / «Повторить последний файл» в меню-баре работают всегда.")
+                Text(L("settings.hotkey.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("История") {
-                Button("Экспортировать историю…") { model.exportHistory() }
+            Section(L("settings.section.history")) {
+                Button(L("settings.history.export")) { model.exportHistory() }
                     .disabled(model.history.isEmpty)
-                Button("Очистить историю", role: .destructive) { model.clearHistory() }
+                Button(L("settings.history.clear"), role: .destructive) { model.clearHistory() }
                     .disabled(model.history.isEmpty)
             }
 
-            Section("Система") {
+            Section(L("settings.section.system")) {
                 LabeledContent("ffmpeg") {
                     if let p = AudioConverter.ffmpegURL() {
                         Text(p.path).foregroundStyle(.secondary).font(.caption)
                     } else {
-                        Text("не найден — установи: brew install ffmpeg")
+                        Text(L("settings.system.ffmpeg.missing"))
                             .foregroundStyle(.orange).font(.caption)
                     }
                 }
-                LabeledContent("Модели на диске") {
+                LabeledContent(L("settings.system.models")) {
                     Text(formatBytes(model.totalModelsBytes)).foregroundStyle(.secondary).font(.caption)
                 }
-                LabeledContent("Аудио для плеера") {
+                LabeledContent(L("settings.system.audio")) {
                     Text(formatBytes(AudioStore.totalBytes())).foregroundStyle(.secondary).font(.caption)
                 }
-                Button("Очистить аудио-кэш", role: .destructive) { model.clearAudioCache() }
-                Text("Parla хранит копии аудио для повторного прослушивания и автоматически удаляет самые старые, когда их набирается слишком много. Текст расшифровок при этом сохраняется всегда.")
+                Button(L("settings.system.clearaudio"), role: .destructive) { model.clearAudioCache() }
+                Text(L("settings.system.audiohint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

@@ -6,6 +6,27 @@ import XCTest
 /// размеры/пути моделей, сбор аудиофайлов, форматирование, языки.
 final class ParlaLogicTests: XCTestCase {
 
+    // MARK: Локализация (тест-шов)
+
+    /// Корень репозитория, выведенный из пути этого файла (Tests/ParlaTests/…→ ../../..).
+    private var repoRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    }
+
+    /// Указать `Localized` на реальный `.lproj` из репо (детерминированно, без Bundle.main).
+    private func activateLocalization(_ lang: String) {
+        let lproj = repoRoot.appendingPathComponent("Localization/\(lang).lproj")
+        Localized.bundle = Bundle(path: lproj.path) ?? .main
+        Localized.currentCode = lang
+    }
+
+    /// По умолчанию все тесты идут на русском (исторические ожидания = русский исходный текст).
+    override func setUp() {
+        super.setUp()
+        activateLocalization("ru")
+    }
+
     // MARK: Имена моделей
 
     func testPrettyModel() {
@@ -451,7 +472,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(BatchNotifier.summary(succeeded: 0, failed: 4).body, "Не удалось распознать (4)")
     }
     func testSummaryMixed() {
-        XCTAssertEqual(BatchNotifier.summary(succeeded: 11, failed: 1).body, "11 из 12 готово · 1 не удалась")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 11, failed: 1).body, "11 из 12 готово · 1 не удалось")
         XCTAssertEqual(BatchNotifier.summary(succeeded: 8,  failed: 4).body, "8 из 12 готово · 4 не удалось")
     }
     func testSummaryTitleAlwaysParla() {
@@ -466,6 +487,40 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(pluralRu(11, "ф", "ф2", "ф5"), "ф5")   // 11–14 → many
         XCTAssertEqual(pluralRu(21, "ф", "ф2", "ф5"), "ф")    // 21 → one
         XCTAssertEqual(pluralRu(0,  "ф", "ф2", "ф5"), "ф5")
+    }
+
+    func testPluralEn() {
+        XCTAssertEqual(pluralEn(1, "file", "files"), "file")
+        XCTAssertEqual(pluralEn(2, "file", "files"), "files")
+        XCTAssertEqual(pluralEn(21, "file", "files"), "files")   // english: 1 → one, всё прочее → other
+        XCTAssertEqual(pluralEn(0, "file", "files"), "files")
+    }
+
+    /// Все три каталога (en/ru/uk) обязаны иметь ОДИНАКОВЫЙ набор ключей — ловит пропуски перевода.
+    func testLocalizationKeyParity() {
+        func keys(_ lang: String) -> Set<String> {
+            let url = repoRoot.appendingPathComponent("Localization/\(lang).lproj/Localizable.strings")
+            let dict = NSDictionary(contentsOf: url) as? [String: String] ?? [:]
+            return Set(dict.keys)
+        }
+        let en = keys("en"), ru = keys("ru"), uk = keys("uk")
+        XCTAssertGreaterThan(en.count, 100, "english catalog looks empty/unreadable")
+        XCTAssertEqual(en, ru, "ru differs from en: \(en.symmetricDifference(ru).sorted())")
+        XCTAssertEqual(en, uk, "uk differs from en: \(en.symmetricDifference(uk).sorted())")
+    }
+
+    /// Рантайм-переключение языка реально меняет вывод локализованных функций.
+    func testLocalizationLanguageSwitch() {
+        activateLocalization("en")
+        XCTAssertEqual(formatBytes(500 * 1_048_576), "500 MB")
+        XCTAssertEqual(batchLabel("a.ogg", BatchProgress(index: 3, total: 12, done: 2)), "“a.ogg” (3 of 12)")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).body, "Done: 1 transcription")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 5, failed: 0).body, "Done: 5 transcriptions")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 21, failed: 0).body, "Done: 21 transcriptions") // англ. 21 → other
+
+        activateLocalization("uk")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 5, failed: 0).body, "Готово: 5 розшифровок")
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).body, "Готово: 1 розшифровка")
     }
 
     // MARK: Слежение за папкой (фича 04)

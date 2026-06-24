@@ -1,0 +1,169 @@
+/* Parla — Russian. */
+
+/* Common */
+"common.cancel"   = "Отмена";
+"common.done"     = "Готово";
+"common.copy"     = "Копировать";
+"common.copied"   = "Скопировано";
+"common.delete"   = "Удалить";
+"common.download" = "Скачать";
+
+/* Speech-language picker */
+"lang.auto" = "Авто (определять)";
+
+/* History (sidebar) */
+"history.title"       = "История";
+"history.export.help" = "Экспортировать историю в файл";
+"history.search"      = "Поиск…";
+"history.empty"       = "Пока пусто";
+"history.notfound"    = "Ничего не найдено";
+
+/* Drop zone */
+"drop.working" = "Работаю…";
+"drop.prompt"  = "Перетащи голосовое сюда";
+"drop.choose"  = "или выбери файл…";
+
+/* Header / watch chip */
+"header.translate.help"     = "Результат переводится в английский";
+"header.watch.help"         = "Слежу за папкой";
+"header.watch.help.queued"  = "Слежу за папкой · в очереди: %lld";
+
+/* Model manager */
+"model.chip.help"     = "Выбрать, скачать или удалить модель";
+"model.manager.title" = "Модели распознавания";
+"model.manager.hint"  = "Все офлайн, качаются один раз. Клик по строке — выбрать, «Скачать» — загрузить заранее, 🗑 — удалить с диска.";
+"model.disk.used"     = "Занято на диске";
+"model.recommended"   = "рекомендую";
+"model.delete.help"   = "Удалить модель с диска";
+"model.current.hint"  = "текущая выбранная";
+
+/* Model tiers */
+"model.tier.tiny.hint"  = "очень быстро · черновик";
+"model.tier.base.hint"  = "быстро · базовое качество";
+"model.tier.small.hint" = "баланс скорость / точность";
+"model.tier.turbo.hint" = "быстро, почти максимум · топ для ru/uk";
+"model.tier.large.hint" = "максимум точности · медленнее";
+
+/* Model size estimates */
+"model.size.tiny"  = "~75 МБ";
+"model.size.base"  = "~150 МБ";
+"model.size.small" = "~500 МБ";
+"model.size.turbo" = "~630 МБ";
+"model.size.large" = "~1 ГБ";
+
+/* Status bar */
+"status.preparing"    = "Готовлю %@…";
+"status.loadingmodel" = "Загружаю модель в память… (первый раз — дольше)";
+"status.transcribing" = "Распознаю %@…";
+"status.downloading"  = "Скачиваю модель (один раз)… %lld%%";
+
+/* Empty state */
+"empty.title"    = "Готов к работе";
+"empty.subtitle" = "Перетащи голосовое из Telegram (или «выбери файл») — получишь текст за пару секунд";
+
+/* Transcript card */
+"transcript.edited"            = "изменено";
+"transcript.edited.at"         = "Отредактировано %@";
+"transcript.edited.manually"   = "Текст изменён вручную";
+"transcript.edit.help"         = "Редактировать текст";
+"transcript.retranscribe.help" = "Перераспознать другой моделью";
+"transcript.source.unavailable"= "Исходный файл недоступен — перетащи его заново";
+"transcript.meta.words"        = "%lld сл.";
+"transcript.silence"           = "(тишина — ничего не распознано)";
+"model.menu.current"           = "%@ — текущая";
+"model.menu.download"          = "%@ — скачать";
+
+/* Player */
+"player.unsupported" = "Это аудио нельзя проиграть встроенным плеером (формат не поддержан).";
+"player.noaudio"     = "Аудио недоступно — текст расшифровки сохранён.";
+
+/* Menu bar */
+"menu.transcribe.clipboard" = "Распознать из буфера";
+"menu.repeat.last"          = "Повторить последний файл";
+"menu.empty"                = "Пока нет расшифровок";
+"menu.recent"               = "Недавние (клик — скопировать)";
+"menu.openwindow"           = "Открыть окно";
+"menu.settings"             = "Настройки…";
+"menu.quit"                 = "Выйти";
+
+/* Settings */
+"settings.section.model"        = "Модель";
+"settings.model.hint"           = "Качать и удалять модели удобнее через чип модели в шапке окна.";
+"settings.section.language"     = "Язык";
+"settings.language.hint"        = "Whisper мультиязычный (~99 языков). На «Авто» язык определяется сам — английский и любой другой работают сходу, доскачивать ничего не нужно. Для русского / украинского / суржика «Авто» — лучший выбор.";
+"settings.section.translation"  = "Перевод";
+"settings.translation.toggle"   = "Переводить результат в английский";
+"settings.translation.hint"     = "Whisper умеет не только расшифровывать, но и переводить речь любого языка сразу в английский текст.";
+"settings.section.behavior"     = "Поведение";
+"settings.behavior.autocopy"    = "Копировать результат в буфер автоматически";
+"settings.behavior.timestamps"  = "Показывать таймкоды";
+"settings.section.folderwatch"  = "Слежение за папкой";
+"settings.folderwatch.toggle"   = "Следить за папкой";
+"settings.folderwatch.folder"   = "Папка";
+"settings.folderwatch.notchosen"= "не выбрана";
+"settings.folderwatch.choose"   = "Выбрать…";
+"settings.folderwatch.subfolders"= "Включая подпапки";
+"settings.folderwatch.sidecar"  = "Сохранять .txt рядом с файлом";
+"settings.folderwatch.hint"     = "Новые аудиофайлы в папке распознаются сами — как старый скрипт, но локально. Транскрибируются только файлы, появившиеся после включения; уже лежащие игнорируются.";
+"settings.section.hotkey"       = "Горячая клавиша";
+"settings.hotkey.toggle"        = "Глобальный хоткей — распознать аудио из буфера";
+"settings.hotkey.recorder"      = "Комбинация:";
+"settings.hotkey.hint"          = "Работает глобально из любого приложения — без «Универсального доступа» и системных запросов. Кликни по полю, чтобы переназначить. Кнопки «Распознать из буфера» / «Повторить последний файл» в меню-баре работают всегда.";
+"settings.section.history"      = "История";
+"settings.history.export"       = "Экспортировать историю…";
+"settings.history.clear"        = "Очистить историю";
+"settings.section.system"       = "Система";
+"settings.system.ffmpeg.missing"= "не найден — установи: brew install ffmpeg";
+"settings.system.models"        = "Модели на диске";
+"settings.system.audio"         = "Аудио для плеера";
+"settings.system.clearaudio"    = "Очистить аудио-кэш";
+"settings.system.audiohint"     = "Parla хранит копии аудио для повторного прослушивания и автоматически удаляет самые старые, когда их набирается слишком много. Текст расшифровок при этом сохраняется всегда.";
+"settings.section.interface"    = "Интерфейс";
+"settings.interface.language"   = "Язык интерфейса";
+"settings.interface.system"     = "Системный";
+"settings.interface.hint"       = "Язык приложения отдельно от языка распознавания речи.";
+
+/* Toasts */
+"toast.busy"             = "Подожди — идёт другая задача";
+"toast.clipboard.empty"  = "В буфере нет аудиофайла";
+"toast.recognizing"      = "Распознаю «%@»…";
+"toast.last.unavailable" = "Последний файл недоступен";
+"toast.repeating"        = "Повторяю «%@»…";
+"toast.failed"           = "Не удалось распознать";
+"toast.done.copied"      = "Готово · скопировано в буфер";
+"toast.done"             = "Готово";
+
+/* Errors */
+"error.drop.failed"         = "Не смог получить файл из перетаскивания";
+"error.save.failed"         = "Не удалось сохранить файл: %@";
+"error.model.download"      = "Не удалось скачать модель: %@";
+"error.model.delete"        = "Не удалось удалить модель: %@";
+"error.noaudio"             = "Не нашёл аудиофайлов";
+"error.transcribe.failed"   = "Не удалось: %@";
+"error.source.missing"      = "Файл-источник «%@» не найден — перетащи его заново";
+"error.retranscribe.failed" = "Не удалось перераспознать: %@";
+"error.ffmpeg.missing"      = "Не найден ffmpeg. Установи его командой:  brew install ffmpeg";
+"error.decode.failed"       = "Не удалось декодировать аудио.\n%@";
+"error.model.notloaded"     = "Модель не загрузилась";
+
+/* Folder picker */
+"folder.choose" = "Выбрать";
+
+/* Notifications */
+"notify.allfailed" = "Не удалось распознать (%lld)";
+"notify.done"      = "Готово: %lld %@";
+"notify.partial"   = "%1$lld из %2$lld готово · %3$lld не удалось";
+
+/* Plural: transcription(s) */
+"word.transcription.one"  = "расшифровка";
+"word.transcription.few"  = "расшифровки";
+"word.transcription.many" = "расшифровок";
+
+/* Batch label */
+"batch.label.single" = "«%@»";
+"batch.label.multi"  = "«%1$@» (%2$lld из %3$lld)";
+
+/* Export + units */
+"export.title" = "# Parla — история расшифровок\n\n";
+"unit.gb.fmt"  = "%.1f ГБ";
+"unit.mb.fmt"  = "%.0f МБ";

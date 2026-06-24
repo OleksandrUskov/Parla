@@ -5,7 +5,7 @@ enum EngineError: LocalizedError {
     case notLoaded
     var errorDescription: String? {
         switch self {
-        case .notLoaded: return "Модель не загрузилась"
+        case .notLoaded: return L("error.model.notloaded")
         }
     }
 }
