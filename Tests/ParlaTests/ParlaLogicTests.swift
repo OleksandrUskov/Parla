@@ -863,6 +863,60 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(exportVTT(item).contains("startoftranscript"))
     }
 
+    // MARK: Long-audio chunking — planning + stitching + chapters (AudioChunker)
+
+    func testChunkCount() {
+        XCTAssertEqual(AudioChunker.chunkCount(durationSec: 0), 1)                        // empty → 1
+        XCTAssertEqual(AudioChunker.chunkCount(durationSec: 120, chunkLength: 120), 1)    // exact 1
+        XCTAssertEqual(AudioChunker.chunkCount(durationSec: 121, chunkLength: 120), 2)    // +1s → 2
+        XCTAssertEqual(AudioChunker.chunkCount(durationSec: 240, chunkLength: 120), 2)    // exact 2
+        XCTAssertEqual(AudioChunker.chunkCount(durationSec: 2400, chunkLength: 120), 20)  // 40 min → 20
+    }
+
+    func testIsLong() {
+        XCTAssertFalse(AudioChunker.isLong(durationSec: 600))   // exactly 10 min is NOT long (strict >)
+        XCTAssertTrue(AudioChunker.isLong(durationSec: 601))
+        XCTAssertFalse(AudioChunker.isLong(durationSec: 0))
+    }
+
+    func testOffsetSegments() {
+        let segs = [Segment(start: 0, end: 5, text: "a"), Segment(start: 5, end: 10, text: "b")]
+        let offset = AudioChunker.offsetSegments(segs, chunkIndex: 2, chunkLength: 120)
+        XCTAssertEqual(offset[0].start, 240)   // 2 * 120
+        XCTAssertEqual(offset[0].end, 245)
+        XCTAssertEqual(offset[1].start, 245)
+        XCTAssertEqual(offset[0].text, "a")    // text unchanged
+    }
+
+    func testStitch() {
+        let chunk0 = [Segment(start: 0, end: 60, text: "c0a"), Segment(start: 60, end: 119, text: "c0b")]
+        let chunk1 = [Segment(start: 0, end: 60, text: "c1a")]
+        let stitched = AudioChunker.stitch(chunkSegments: [chunk0, chunk1], chunkLength: 120)
+        XCTAssertEqual(stitched.count, 3)
+        XCTAssertEqual(stitched.map(\.text), ["c0a", "c0b", "c1a"])   // sorted by global start
+        XCTAssertEqual(stitched[2].start, 120)                        // chunk1's local 0 → global 120
+    }
+
+    func testChapters() {
+        let segs = [
+            Segment(start: 0, end: 60, text: "a"),
+            Segment(start: 90, end: 119, text: "b"),     // same 0–120 window as "a"
+            Segment(start: 130, end: 180, text: "c"),    // 120–240 window
+        ]
+        let chs = AudioChunker.chapters(from: segs, size: 120)
+        XCTAssertEqual(chs.count, 2)
+        XCTAssertEqual(chs[0].segments.map(\.text), ["a", "b"])
+        XCTAssertEqual(chs[0].startSec, 0)
+        XCTAssertEqual(chs[0].rangeLabel, "[00:00–02:00]")
+        XCTAssertEqual(chs[1].segments.map(\.text), ["c"])
+        XCTAssertEqual(chs[1].startSec, 120)
+        XCTAssertEqual(chs[1].index, 1)
+    }
+
+    func testChaptersEmpty() {
+        XCTAssertTrue(AudioChunker.chapters(from: [], size: 120).isEmpty)
+    }
+
     // MARK: FolderWatcher teardown stress (P1.1)
 
     /// Exercises the passRetained/release teardown deterministically (no event-timing dependency):

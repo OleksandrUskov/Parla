@@ -1,0 +1,70 @@
+import Foundation
+
+/// Pure planning + stitching for the chunked long-audio pipeline. **No I/O** — the actual ffmpeg
+/// split and per-chunk transcription live in the caller; this computes the chunk count, decides when
+/// to chunk, reassembles per-chunk timecodes into one global timeline, and buckets segments into
+/// chapters for the long-recording view. All deterministic + unit-testable in the pure-logic style.
+enum AudioChunker {
+    /// Recordings longer than this (seconds) use the chunked pipeline; shorter ones stay single-pass.
+    static let longThresholdSec: Double = 600    // 10 min
+
+    /// Each chunk's wall length (seconds). ~2 min keeps one chunk's WAV + samples small in memory.
+    static let chunkLengthSec: Double = 120      // 2 min
+
+    /// Default chapter-bucket width for the long-recording view.
+    static let chapterSizeSec: Double = 120      // 2 min
+
+    /// Whether a recording of this length should use the chunked pipeline.
+    static func isLong(durationSec: Double, threshold: Double = longThresholdSec) -> Bool {
+        durationSec > threshold
+    }
+
+    /// Number of chunks for a given duration (always ≥ 1).
+    static func chunkCount(durationSec: Double, chunkLength: Double = chunkLengthSec) -> Int {
+        guard durationSec > 0, chunkLength > 0 else { return 1 }
+        return max(1, Int((durationSec / chunkLength).rounded(.up)))
+    }
+
+    /// Offset one chunk's segments into the global timeline: chunk `k` covers `[k*chunkLength, …)`,
+    /// so every local timecode shifts by `k*chunkLength`.
+    static func offsetSegments(_ segs: [Segment], chunkIndex k: Int,
+                               chunkLength: Double = chunkLengthSec) -> [Segment] {
+        let shift = Double(k) * chunkLength
+        return segs.map { Segment(start: $0.start + shift, end: $0.end + shift, text: $0.text) }
+    }
+
+    /// Stitch per-chunk segment arrays (in chunk order, index 0…N-1) into one global, sorted list.
+    static func stitch(chunkSegments: [[Segment]], chunkLength: Double = chunkLengthSec) -> [Segment] {
+        chunkSegments.enumerated()
+            .flatMap { k, segs in offsetSegments(segs, chunkIndex: k, chunkLength: chunkLength) }
+            .sorted { $0.start < $1.start }
+    }
+
+    /// Bucket already-global (stitched) segments into fixed `size`-second windows for the chapter view.
+    /// A pure function of the segments + size — no persisted state. Empty windows are skipped (a
+    /// chapter only exists where there's speech); chapters are renumbered 1…M for display.
+    static func chapters(from segments: [Segment], size: Double = chapterSizeSec) -> [Chapter] {
+        guard !segments.isEmpty, size > 0 else { return [] }
+        let grouped = Dictionary(grouping: segments) { max(0, Int($0.start / size)) }
+        return grouped.keys.sorted().enumerated().map { displayIdx, bucket in
+            let segs = (grouped[bucket] ?? []).sorted { $0.start < $1.start }
+            return Chapter(index: displayIdx,
+                           startSec: Double(bucket) * size,
+                           endSec: Double(bucket + 1) * size,
+                           segments: segs)
+        }
+    }
+}
+
+/// One chapter of a long recording: a `size`-second window of the timeline plus the segments in it.
+/// Derived at render time from `segments` — never persisted (see LONG_AUDIO_CHUNKING blueprint §4).
+struct Chapter: Identifiable, Equatable {
+    let index: Int          // 0-based display order
+    let startSec: Double    // window start (bucket * size)
+    let endSec: Double      // window end
+    let segments: [Segment]
+    var id: Int { index }
+
+    /// `[mm:ss–mm:ss]` window label.
+    var rangeLabel: String { "[\(fmtTime(startSec))–\(fmtTime(endSec))]" }
+}
