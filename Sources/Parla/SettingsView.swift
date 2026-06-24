@@ -67,9 +67,9 @@ struct SettingsView: View {
 
             Section(L("settings.section.hotkey")) {
                 Toggle(L("settings.hotkey.toggle"), isOn: $model.globalHotkeyEnabled)
-                if model.globalHotkeyEnabled {
-                    KeyboardShortcuts.Recorder(L("settings.hotkey.recorder"), name: .quickTranscribe)
-                }
+                // Always visible so the user sees the current binding (default ⌃⌥⌘T) and can rebind
+                // it any time; the toggle above only enables/disables firing it globally.
+                KeyboardShortcuts.Recorder(L("settings.hotkey.recorder"), name: .quickTranscribe)
                 Text(L("settings.hotkey.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }

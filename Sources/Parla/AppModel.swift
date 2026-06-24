@@ -95,7 +95,7 @@ final class AppModel {
         watchRecursive = (d.object(forKey: Keys.watchRecursive) as? Bool) ?? true   // subfolders on by default
         watchWriteSidecar = d.bool(forKey: Keys.watchSidecar)
         globalHotkeyEnabled = d.bool(forKey: Keys.hotkey)   // opt-in, off by default
-        uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .system
+        uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()
         processedSet = Set(processedKeys)

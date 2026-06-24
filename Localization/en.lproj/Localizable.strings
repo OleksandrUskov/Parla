@@ -108,7 +108,7 @@
 "settings.section.hotkey"       = "Hotkey";
 "settings.hotkey.toggle"        = "Global hotkey — transcribe audio from the clipboard";
 "settings.hotkey.recorder"      = "Shortcut:";
-"settings.hotkey.hint"          = "Works globally from any app — no Accessibility permission or system prompts. Click the field to rebind. The “Transcribe from clipboard” / “Repeat the last file” menu-bar buttons always work.";
+"settings.hotkey.hint"          = "The field below shows the current shortcut (default ⌃⌥⌘T) — click it and press a new key combo to rebind (⌫ clears it). Turn the switch on to make the hotkey fire globally from any app — no Accessibility permission or system prompts. The menu-bar buttons “Transcribe from clipboard” / “Repeat the last file” always work.";
 "settings.section.history"      = "History";
 "settings.history.export"       = "Export history…";
 "settings.history.clear"        = "Clear history";
