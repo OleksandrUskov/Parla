@@ -571,7 +571,7 @@ struct SegmentList: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
-                    if !seg.text.isEmpty {
+                    if !seg.cleanText.isEmpty {
                         SegmentRow(seg: seg, active: i == activeIdx, tappable: tappable)
                             .contentShape(Rectangle())
                             .onTapGesture { if tappable { player.seek(to: seg.start) } }
@@ -594,7 +594,7 @@ struct SegmentRow: View {
             Text("[\(fmtTime(seg.start))]")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(active || tappable ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.tertiary))
-            Text(seg.text)
+            Text(seg.cleanText)
                 .font(.system(.body, design: .rounded))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)

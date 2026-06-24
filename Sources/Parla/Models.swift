@@ -5,6 +5,22 @@ struct Segment: Codable, Hashable {
     var start: Double
     var end: Double
     var text: String
+
+    /// Display/export text with WhisperKit special tokens removed. No-op on already-clean segments
+    /// (new recordings — the engine strips at the source), so it's safe to use everywhere text is
+    /// shown or exported, and it also cleans up older records saved before the engine fix.
+    var cleanText: String { stripWhisperTokens(text) }
+}
+
+/// Strip WhisperKit special tokens from a segment's raw text: control tokens
+/// (`<|startoftranscript|>`, `<|ru|>`, `<|transcribe|>`, `<|endoftext|>`) and inline timestamp
+/// tokens (`<|8.52|>`). WhisperKit's per-segment `.text` carries these verbatim (the overall
+/// `.text` does not), so without this they leak into the UI and every export. Collapses the
+/// double spaces the removed tokens leave behind and trims.
+func stripWhisperTokens(_ s: String) -> String {
+    s.replacingOccurrences(of: #"<\|[^|]*\|>"#, with: "", options: .regularExpression)
+        .replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 /// A single transcript in the history.
@@ -33,8 +49,9 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     func display(timestamps: Bool) -> String {
         guard timestamps, !isEdited, !segments.isEmpty else { return text }
         return segments
-            .filter { !$0.text.isEmpty }
-            .map { "[\(fmtTime($0.start))] \($0.text)" }
+            .map { (time: fmtTime($0.start), text: $0.cleanText) }
+            .filter { !$0.text.isEmpty }   // a tokens-only segment becomes empty after cleaning → drop it
+            .map { "[\($0.time)] \($0.text)" }
             .joined(separator: "\n")
     }
 

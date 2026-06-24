@@ -68,11 +68,11 @@ func subtitleCues(_ item: TranscriptItem) -> [(start: Double, end: Double, text:
         return [(0, max(0, item.durationSec), text)]
     }
     return item.segments
-        .filter { !$0.text.isEmpty }
-        .map { seg in
+        .map { seg -> (start: Double, end: Double, text: String) in
             let start = max(0, seg.start)
-            return (start: start, end: max(start, seg.end), text: seg.text)
+            return (start: start, end: max(start, seg.end), text: seg.cleanText)   // strip WhisperKit tokens
         }
+        .filter { !$0.text.isEmpty }   // a tokens-only segment becomes empty after cleaning → drop it
 }
 
 // MARK: - Formatters (pure)
@@ -104,9 +104,11 @@ func exportVTT(_ item: TranscriptItem) -> String {
 /// JSON over the REAL `Codable` model (no parallel DTO that could drift). Pretty + sorted keys →
 /// deterministic bytes; default date encoding → exact round-trip.
 func exportJSON(_ item: TranscriptItem) throws -> Data {
+    var clean = item
+    clean.segments = item.segments.map { Segment(start: $0.start, end: $0.end, text: $0.cleanText) }
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    return try encoder.encode(item)
+    return try encoder.encode(clean)
 }
 
 /// Plain text — flat (`item.text`) or timestamped (`[mm:ss] line`), via the existing `display`.

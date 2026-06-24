@@ -1,5 +1,6 @@
 import Foundation
 import WhisperKit
+import AVFoundation
 
 enum EngineError: LocalizedError {
     case notLoaded
@@ -99,6 +100,14 @@ actor TranscriptionEngine {
         if loadedModel == name { whisperKit = nil; loadedModel = nil }
     }
 
+    /// Actual audio length in seconds (AVFoundation) — for the record's duration metadata.
+    /// nil if the file can't be opened (caller falls back to the last segment end).
+    private static func audioDuration(ofFileAt path: String) -> Double? {
+        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)) else { return nil }
+        let sr = file.fileFormat.sampleRate
+        return sr > 0 ? Double(file.length) / sr : nil
+    }
+
     func transcribe(wavPath: String, language: String?, model: String, translate: Bool = false) async throws -> EngineResult {
         if loadedModel != model || whisperKit == nil {
             try await ensureLoaded(model: model, progress: { _ in })
@@ -115,15 +124,20 @@ actor TranscriptionEngine {
 
         let fullText = results.map { $0.text }.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // WhisperKit's per-segment `.text` carries raw special tokens (<|startoftranscript|>, <|ru|>,
+        // <|8.52|>, …) that the overall `.text` doesn't — strip them at the source so storage, UI and
+        // every export are clean.
         let segs = results.flatMap { $0.segments }.map {
-            Segment(start: Double($0.start), end: Double($0.end),
-                    text: $0.text.trimmingCharacters(in: .whitespaces))
+            Segment(start: Double($0.start), end: Double($0.end), text: stripWhisperTokens($0.text))
         }
+        // duration = the ACTUAL audio length, not the processing time (`elapsed`). Fall back to the
+        // last segment end, then to elapsed, if the file can't be probed.
+        let audioLen = Self.audioDuration(ofFileAt: wavPath) ?? segs.map(\.end).max() ?? elapsed
         return EngineResult(
             text: fullText,
             language: results.first?.language ?? (language ?? ""),
             segments: segs,
-            duration: elapsed
+            duration: audioLen
         )
     }
 }

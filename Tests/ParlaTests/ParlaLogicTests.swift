@@ -831,6 +831,38 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(exportSRT(item), "1\n00:00:05,000 --> 00:00:05,000\nreversed\n\n")
     }
 
+    // MARK: WhisperKit token cleanup (transcript display correctness)
+
+    func testStripWhisperTokens() {
+        XCTAssertEqual(stripWhisperTokens("<|startoftranscript|><|ru|><|transcribe|><|0.00|> привет мир<|8.52|>"), "привет мир")
+        XCTAssertEqual(stripWhisperTokens("чисто без токенов"), "чисто без токенов")   // no-op on clean text
+        XCTAssertEqual(stripWhisperTokens("<|endoftext|>"), "")                          // tokens-only → empty
+        XCTAssertEqual(stripWhisperTokens("a<|1.0|>  b"), "a b")                         // collapses doubled spaces
+        XCTAssertEqual(stripWhisperTokens("  <|x|> trim "), "trim")
+    }
+
+    func testSegmentCleanText() {
+        XCTAssertEqual(Segment(start: 0, end: 1, text: "<|0.00|> привет<|8.52|>").cleanText, "привет")
+        XCTAssertEqual(Segment(start: 0, end: 1, text: "чисто").cleanText, "чисто")
+    }
+
+    func testDisplayStripsWhisperTokens() {
+        let item = makeItem(text: "привет мир", segments: [
+            Segment(start: 0, end: 1, text: "<|0.00|> привет<|1.0|>"),
+            Segment(start: 1, end: 2, text: "<|1.0|> мир<|2.0|>"),
+        ])
+        XCTAssertEqual(item.display(timestamps: true), "[00:00] привет\n[00:01] мир")
+    }
+
+    func testExportStripsWhisperTokens() {
+        let item = makeItem(text: "full", segments: [
+            Segment(start: 0, end: 2, text: "<|startoftranscript|><|0.00|> hello<|2.0|>"),
+        ])
+        XCTAssertEqual(exportSRT(item), "1\n00:00:00,000 --> 00:00:02,000\nhello\n\n")
+        XCTAssertTrue(exportVTT(item).contains("hello"))
+        XCTAssertFalse(exportVTT(item).contains("startoftranscript"))
+    }
+
     // MARK: FolderWatcher teardown stress (P1.1)
 
     /// Exercises the passRetained/release teardown deterministically (no event-timing dependency):
