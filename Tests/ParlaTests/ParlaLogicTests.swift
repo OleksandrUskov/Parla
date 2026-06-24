@@ -549,8 +549,10 @@ final class ParlaLogicTests: XCTestCase {
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
             m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
-            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }   // no ffmpeg
             m.autoCopy = false
+            // src is .m4a → AVFoundation path: the ffmpeg converter is intentionally NOT involved.
+            // No stub on purpose — if a regression routed .m4a through ffmpeg, the real converter would
+            // hit this fake 5-byte file and FAIL the test. The converter path is covered by testTranscribeUsesConverterForOpus.
             let src = makeTempSource()
             defer { try? FileManager.default.removeItem(at: src) }
 
@@ -574,7 +576,7 @@ final class ParlaLogicTests: XCTestCase {
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
             m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
-            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
+            // src is .m4a → AVFoundation path: no converter involved (the engine throws before any audio work).
             let src = makeTempSource()
             defer { try? FileManager.default.removeItem(at: src) }
 
@@ -597,8 +599,8 @@ final class ParlaLogicTests: XCTestCase {
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
             m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
-            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
             m.autoCopy = false
+            // all .m4a → AVFoundation path: no converter involved (covered for ffmpeg by testTranscribeUsesConverterForOpus).
             let srcs = [makeTempSource("a.m4a"), makeTempSource("b.m4a"), makeTempSource("c.m4a")]
             defer { srcs.forEach { try? FileManager.default.removeItem(at: $0) } }
 
@@ -638,8 +640,9 @@ final class ParlaLogicTests: XCTestCase {
             m.postNotification = { _, _ in }   // don't touch the notification center in tests
             m.soundOnComplete = false          // no completion beeps during tests
             m.history = []                     // ignore any legacy Murmur history migrated on the dev machine
-            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
             m.autoCopy = false
+            // ghost .m4a → AVFoundation path: the engine still runs (it doesn't read the file), keepAudio
+            // gracefully no-ops on the missing source. No converter stub — none is reached.
             let ghost = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString).m4a")
 
             await m.transcribe(urls: [ghost])
