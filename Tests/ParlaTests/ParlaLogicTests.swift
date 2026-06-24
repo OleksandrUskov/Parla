@@ -651,6 +651,74 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: AVFoundation-direct decode path (BUNDLE_FFMPEG P0)
+
+    func testAvDecodableMirrorsDirectlyPlayable() {
+        // v1 is the exact mirror of the prod-proven playback set — keep them in lock-step.
+        XCTAssertEqual(AppModel.avDecodable, AudioStore.directlyPlayable)
+    }
+
+    func testAvDecodableIsSubsetOfAudioExts() {
+        XCTAssertTrue(AppModel.avDecodable.isSubset(of: AppModel.audioExts))
+    }
+
+    func testAvDecodableExcludesFfmpegOnlyFormats() {
+        for ext in ["ogg", "oga", "opus", "amr", "webm", "3gp", "flac", "wma"] {
+            XCTAssertFalse(AppModel.avDecodable.contains(ext), "\(ext) must route through ffmpeg")
+        }
+    }
+
+    func testFfmpegArgsAreQuiet() {
+        // The Tier-0 deadlock guard: without these flags ffmpeg floods stderr on a long file and hangs.
+        for args in [AudioConverter.wavArgs(src: "/in", out: "/out"),
+                     AudioConverter.m4aArgs(src: "/in", dest: "/out")] {
+            XCTAssertTrue(args.contains("-hide_banner"))
+            XCTAssertTrue(args.contains("-nostats"))
+            guard let i = args.firstIndex(of: "-loglevel") else { return XCTFail("-loglevel missing") }
+            XCTAssertEqual(args[i + 1], "error")
+        }
+    }
+
+    /// An AVFoundation format (.m4a) must NOT spawn ffmpeg — the source path goes straight to the engine.
+    @MainActor func testTranscribeSkipsConverterForAvFormat() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "ok", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            // If the converter ran, the engine would receive THIS sentinel instead of the source path.
+            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/CONVERTER-RAN.wav") }
+            let src = makeTempSource("voice.m4a")
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            await m.transcribe(urls: [src])
+
+            XCTAssertEqual(fake.transcribedPaths.first, src.path)                      // original handed straight to the engine
+            XCTAssertFalse(fake.transcribedPaths.contains("/tmp/CONVERTER-RAN.wav"))   // ffmpeg never ran
+        }
+    }
+
+    /// A non-AVFoundation format (.opus) must still go through the ffmpeg converter.
+    @MainActor func testTranscribeUsesConverterForOpus() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "ok", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
+            let src = makeTempSource("voice.opus")   // .opus ∉ avDecodable → must route through ffmpeg
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            await m.transcribe(urls: [src])
+
+            XCTAssertEqual(fake.transcribedPaths.first, "/tmp/fake.wav")   // engine got the converted WAV
+        }
+    }
+
     // MARK: FolderWatcher teardown stress (P1.1)
 
     /// Exercises the passRetained/release teardown deterministically (no event-timing dependency):
@@ -1245,6 +1313,7 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     private var idx = 0
     private(set) var ensureLoadedCalls = 0
     private(set) var transcribeCalls = 0
+    private(set) var transcribedPaths: [String] = []   // the decode path handed to each transcribe call
     private(set) var deletedModels: [String] = []
 
     init(results: [EngineResult] = [], throwOnTranscribe: Bool = false) {
@@ -1258,6 +1327,7 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
 
     func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult {
         transcribeCalls += 1
+        transcribedPaths.append(wavPath)
         if throwOnTranscribe { throw EngineError.notLoaded }
         let r = results.isEmpty ? EngineResult(text: "", language: "", segments: [], duration: 0)
                                 : results[min(idx, results.count - 1)]

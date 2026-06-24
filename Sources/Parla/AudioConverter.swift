@@ -40,6 +40,20 @@ enum AudioConverter {
         return nil
     }
 
+    /// ffmpeg args for the 16 kHz mono WAV decode. Pure (no I/O) so a test can assert the quiet
+    /// flags are present — they're the Tier-0 deadlock guard (`-loglevel error`/`-nostats` keep the
+    /// stderr stream small enough that `runCapturingStderr` never blocks). Don't drop them.
+    static func wavArgs(src: String, out: String) -> [String] {
+        ["-hide_banner", "-loglevel", "error", "-nostats",
+         "-y", "-i", src, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", out]
+    }
+
+    /// ffmpeg args for the AAC .m4a playback rendition. Same quiet-flag guard as `wavArgs`.
+    static func m4aArgs(src: String, dest: String) -> [String] {
+        ["-hide_banner", "-loglevel", "error", "-nostats",
+         "-y", "-i", src, "-vn", "-c:a", "aac", "-b:a", "96k", dest]
+    }
+
     static func toWav16k(_ src: URL) throws -> URL {
         guard let ffmpeg = ffmpegURL() else { throw Failure.ffmpegNotFound }
 
@@ -48,8 +62,7 @@ enum AudioConverter {
 
         let proc = Process()
         proc.executableURL = ffmpeg
-        proc.arguments = ["-hide_banner", "-loglevel", "error", "-nostats",
-                          "-y", "-i", src.path, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", out.path]
+        proc.arguments = wavArgs(src: src.path, out: out.path)
         let (status, tail) = try runCapturingStderr(proc)
         guard status == 0 else { throw Failure.conversionFailed(tail) }
         return out
@@ -62,8 +75,7 @@ enum AudioConverter {
 
         let proc = Process()
         proc.executableURL = ffmpeg
-        proc.arguments = ["-hide_banner", "-loglevel", "error", "-nostats",
-                          "-y", "-i", src.path, "-vn", "-c:a", "aac", "-b:a", "96k", dest.path]
+        proc.arguments = m4aArgs(src: src.path, dest: dest.path)
         let (status, tail) = try runCapturingStderr(proc)
         guard status == 0 else { throw Failure.conversionFailed(tail) }
     }

@@ -130,6 +130,14 @@ final class AppModel {
         "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac",
         "mp4", "mov", "m4v", "webm", "3gp", "amr", "wma", "aiff", "aif", "caf",
     ]
+
+    /// Formats AVFoundation opens directly — WhisperKit loads audio via `AVAudioFile(forReading:)` and
+    /// resamples to 16 kHz itself, so these can go straight to the engine with NO ffmpeg re-encode.
+    /// Conservative v1 = the EXACT mirror of the prod-proven `AudioStore.directlyPlayable` (pure-audio
+    /// containers). Video containers (mp4/mov/m4v) deliberately stay on the ffmpeg path — `AVAudioFile`
+    /// is unreliable for them. Must remain a strict subset of `audioExts` (pinned by test): a format
+    /// wrongly listed here would hard-fail instead of routing through ffmpeg.
+    nonisolated static let avDecodable: Set<String> = ["m4a", "mp3", "wav", "aac", "caf", "aiff", "aif"]
     nonisolated static func audioFiles(in dir: URL) -> [URL] {
         let fm = FileManager.default
         guard let en = fm.enumerator(at: dir, includingPropertiesForKeys: nil) else { return [] }

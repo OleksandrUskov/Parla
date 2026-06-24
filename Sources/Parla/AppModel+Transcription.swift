@@ -102,18 +102,32 @@ extension AppModel {
     /// Shared path for a fresh drop and «re-transcribe».
     private func transcribeOne(url: URL, model: String, batch: BatchProgress? = nil) async throws -> EngineResult {
         phase = .preparing(url.lastPathComponent, batch: batch)
-        let convert = wavConverter      // capture the seam (real ffmpeg in production, stub in tests)
-        let wav = try await Task.detached(priority: .userInitiated) {
-            try convert(url)
-        }.value
-        defer { try? FileManager.default.removeItem(at: wav) }
+
+        // AVFoundation opens these containers directly (WhisperKit loads via AVAudioFile + resamples to
+        // 16 kHz itself) → hand the engine the ORIGINAL file and skip the ffmpeg re-encode entirely.
+        // Everything else (Ogg/Opus, amr, webm, flac, video, …) still goes through ffmpeg as before.
+        // NOTE: `wavPath:` is a historical name — for an AVFoundation format it's the source path, not a WAV.
+        let decodePath: String
+        let tempWav: URL?
+        if Self.avDecodable.contains(url.pathExtension.lowercased()) {
+            decodePath = url.path
+            tempWav = nil
+        } else {
+            let convert = wavConverter      // capture the seam (real ffmpeg in production, stub in tests)
+            let wav = try await Task.detached(priority: .userInitiated) {
+                try convert(url)
+            }.value
+            decodePath = wav.path
+            tempWav = wav
+        }
+        defer { if let tempWav { try? FileManager.default.removeItem(at: tempWav) } }
 
         phase = .loadingModel
         try await engine.ensureLoaded(model: model, progress: progressHandler())
 
         phase = .transcribing(url.lastPathComponent, batch: batch)
         let lang = language.isEmpty ? nil : language
-        return try await engine.transcribe(wavPath: wav.path, language: lang,
+        return try await engine.transcribe(wavPath: decodePath, language: lang,
                                            model: model, translate: translateToEnglish)
     }
 
