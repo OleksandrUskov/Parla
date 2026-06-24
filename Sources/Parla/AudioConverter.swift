@@ -18,6 +18,20 @@ enum AudioConverter {
         }
     }
 
+    /// Run a Process, draining stderr to EOF *before* waitUntilExit so a flood can't fill the pipe
+    /// buffer and deadlock the process; stdout → /dev/null. Returns (exit status, last 3 stderr lines).
+    static func runCapturingStderr(_ proc: Process) throws -> (status: Int32, stderrTail: String) {
+        let errPipe = Pipe()
+        proc.standardError = errPipe
+        proc.standardOutput = FileHandle.nullDevice
+        try proc.run()
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()   // drains until the child closes stderr (on exit)
+        proc.waitUntilExit()
+        let err = String(data: errData, encoding: .utf8) ?? ""
+        let tail = err.split(separator: "\n").suffix(3).joined(separator: "\n")
+        return (proc.terminationStatus, tail)
+    }
+
     static func ffmpegURL() -> URL? {
         let candidates = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
         for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
@@ -34,19 +48,10 @@ enum AudioConverter {
 
         let proc = Process()
         proc.executableURL = ffmpeg
-        proc.arguments = ["-y", "-i", src.path, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", out.path]
-        let errPipe = Pipe()
-        proc.standardError = errPipe
-        proc.standardOutput = Pipe()
-
-        try proc.run()
-        proc.waitUntilExit()
-
-        guard proc.terminationStatus == 0 else {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let tail = err.split(separator: "\n").suffix(3).joined(separator: "\n")
-            throw Failure.conversionFailed(tail)
-        }
+        proc.arguments = ["-hide_banner", "-loglevel", "error", "-nostats",
+                          "-y", "-i", src.path, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", out.path]
+        let (status, tail) = try runCapturingStderr(proc)
+        guard status == 0 else { throw Failure.conversionFailed(tail) }
         return out
     }
 
@@ -57,18 +62,9 @@ enum AudioConverter {
 
         let proc = Process()
         proc.executableURL = ffmpeg
-        proc.arguments = ["-y", "-i", src.path, "-vn", "-c:a", "aac", "-b:a", "96k", dest.path]
-        let errPipe = Pipe()
-        proc.standardError = errPipe
-        proc.standardOutput = Pipe()
-
-        try proc.run()
-        proc.waitUntilExit()
-
-        guard proc.terminationStatus == 0 else {
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let tail = err.split(separator: "\n").suffix(3).joined(separator: "\n")
-            throw Failure.conversionFailed(tail)
-        }
+        proc.arguments = ["-hide_banner", "-loglevel", "error", "-nostats",
+                          "-y", "-i", src.path, "-vn", "-c:a", "aac", "-b:a", "96k", dest.path]
+        let (status, tail) = try runCapturingStderr(proc)
+        guard status == 0 else { throw Failure.conversionFailed(tail) }
     }
 }

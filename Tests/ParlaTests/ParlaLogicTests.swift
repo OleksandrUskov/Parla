@@ -758,6 +758,27 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: ffmpeg process drain — no deadlock on a stderr flood (long-file hang fix)
+
+    /// A child that floods >64 KB to stderr then exits. The OLD "read stderr after waitUntilExit"
+    /// pattern deadlocked here (pipe buffer fills → child blocks on write → waitUntilExit hangs).
+    /// runCapturingStderr drains concurrently, so it must finish. Run on a thread with a timeout so
+    /// a regression FAILS the test instead of hanging the suite forever.
+    func testRunCapturingStderrDrainsFloodWithoutDeadlock() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", "i=0; while [ $i -lt 6000 ]; do echo 'xxxxxxxxxxxxxxxxxxxxxxxxxx' 1>&2; i=$((i+1)); done; exit 3"]
+        let exp = expectation(description: "drain completes")
+        let box = NSMutableArray()   // thread-safe handoff of the status
+        Thread.detachNewThread {
+            let r = try? AudioConverter.runCapturingStderr(p)
+            box.add(r?.status ?? -1)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 15)
+        XCTAssertEqual((box.firstObject as? NSNumber)?.int32Value, 3)   // completed (not deadlocked), exit code preserved
+    }
+
     // MARK: Folder watching (feature 04)
 
     func testFolderScanIgnoresUnstable() {
