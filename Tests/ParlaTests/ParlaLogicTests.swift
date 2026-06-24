@@ -643,6 +643,75 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: FolderWatcher teardown stress (P1.1)
+
+    /// Exercises the passRetained/release teardown deterministically (no event-timing dependency):
+    /// a UAF or over-release in start()/stop() would trap, so reaching the end is the assertion.
+    @MainActor func testFolderWatcherStartStopStressNoCrash() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("watch-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let w = FolderWatcher(folder: dir, recursive: true, debounce: 0.05) {}
+        for _ in 0..<8 { w.start(); w.stop() }   // each start +1 (passRetained), each stop releases the stream → balanced
+        w.start(); w.stop()
+        w.stop()                                  // double stop is a safe no-op
+        XCTAssertTrue(true)
+    }
+
+    @MainActor func testFolderWatcherPollingStartStopNoCrash() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("watch-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let w = FolderWatcher(folder: dir, recursive: false, usePolling: true, debounce: 0.05) {}
+        w.start()   // schedules the poll timer on main
+        w.stop()    // invalidates it
+        XCTAssertTrue(true)
+    }
+
+    // MARK: AudioStore round-trip (P1.2)
+
+    func testAudioStorePlayableURLPrefersRendition() {
+        withTemporaryHistoryStore {
+            let id = UUID()
+            let folder = AudioStore.folder
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let orig = folder.appendingPathComponent("\(id).m4a")
+            let rendition = folder.appendingPathComponent("\(id)-r.m4a")
+            try? Data("o".utf8).write(to: orig)
+            try? Data("r".utf8).write(to: rendition)
+            var item = makeItem(text: "t")
+            item.audioFile = orig.lastPathComponent
+            item.audioPlayable = rendition.lastPathComponent
+
+            // Prefers the m4a rendition (audioPlayable) when present…
+            XCTAssertEqual(AudioStore.playableURL(for: item)?.lastPathComponent, rendition.lastPathComponent)
+            // …and falls back to the original copy when the rendition is gone.
+            try? FileManager.default.removeItem(at: rendition)
+            XCTAssertEqual(AudioStore.playableURL(for: item)?.lastPathComponent, orig.lastPathComponent)
+        }
+    }
+
+    func testAudioStorePruneOrphansRemovesUnreferenced() {
+        withTemporaryHistoryStore {
+            let folder = AudioStore.folder
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let kept = UUID(), orphan = UUID()
+            let keptFile = folder.appendingPathComponent("\(kept).m4a")
+            let orphanFile = folder.appendingPathComponent("\(orphan).m4a")
+            try? Data("k".utf8).write(to: keptFile)
+            try? Data("o".utf8).write(to: orphanFile)
+            var item = makeItem(text: "t")
+            item.audioFile = keptFile.lastPathComponent
+
+            AudioStore.pruneOrphans(keeping: [item])
+
+            XCTAssertTrue(FileManager.default.fileExists(atPath: keptFile.path))     // referenced → kept
+            XCTAssertFalse(FileManager.default.fileExists(atPath: orphanFile.path))  // unreferenced → removed
+        }
+    }
+
     // MARK: Folder watching (feature 04)
 
     func testFolderScanIgnoresUnstable() {
