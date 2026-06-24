@@ -926,6 +926,21 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(args[i + 1], "120")
     }
 
+    func testFfmpegResolverPrefersBundled() {
+        // bundled present + executable → wins over system (real executables that exist on macOS)
+        XCTAssertEqual(AudioConverter.resolveFfmpeg(bundled: URL(fileURLWithPath: "/bin/sh"),
+                                                    systemCandidates: ["/bin/echo"])?.path, "/bin/sh")
+        // no bundled → first executable system candidate
+        XCTAssertEqual(AudioConverter.resolveFfmpeg(bundled: nil,
+                                                    systemCandidates: ["/nonexistent", "/bin/echo"])?.path, "/bin/echo")
+        // bundled path not executable → falls through to system
+        XCTAssertEqual(AudioConverter.resolveFfmpeg(bundled: URL(fileURLWithPath: "/nope"),
+                                                    systemCandidates: ["/bin/echo"])?.path, "/bin/echo")
+        // neither → nil
+        XCTAssertNil(AudioConverter.resolveFfmpeg(bundled: URL(fileURLWithPath: "/nope"),
+                                                  systemCandidates: ["/also/nope"]))
+    }
+
     // MARK: FolderWatcher teardown stress (P1.1)
 
     /// Exercises the passRetained/release teardown deterministically (no event-timing dependency):

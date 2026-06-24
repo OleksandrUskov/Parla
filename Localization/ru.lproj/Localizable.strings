@@ -113,6 +113,7 @@
 "settings.history.export"       = "Экспортировать историю…";
 "settings.history.clear"        = "Очистить историю";
 "settings.section.system"       = "Система";
+"settings.system.ffmpeg.bundled"= "встроенный";
 "settings.system.ffmpeg.missing"= "не найден — установи: brew install ffmpeg";
 "settings.system.models"        = "Модели на диске";
 "settings.system.audio"         = "Аудио для плеера";

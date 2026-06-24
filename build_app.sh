@@ -74,6 +74,17 @@ PLIST
 # Для UNUserNotificationCenter ad-hoc подписи достаточно при запуске собранного .app;
 # уведомления НЕ доставляются при запуске вне бандла (swift run) или из карантина/translocated —
 # поэтому в приложении они best-effort, а основной сигнал готовности это чип/прогресс в окне.
+# Vendored LGPL ffmpeg (optional) → Contents/Resources/Helpers/ffmpeg, so Telegram Ogg/Opus works
+# WITHOUT a user-installed brew ffmpeg. Sign the nested binary BEFORE the outer app (inside-out;
+# `--deep` is unreliable for nested executables).
+if [ -f "Vendor/ffmpeg/ffmpeg" ]; then
+  mkdir -p "$APPDIR/Contents/Resources/Helpers"
+  cp "Vendor/ffmpeg/ffmpeg" "$APPDIR/Contents/Resources/Helpers/ffmpeg"
+  chmod +x "$APPDIR/Contents/Resources/Helpers/ffmpeg"
+  codesign --force --options runtime --sign - "$APPDIR/Contents/Resources/Helpers/ffmpeg" >/dev/null 2>&1 || true
+  echo "• Вшит LGPL ffmpeg → Helpers/ffmpeg"
+fi
+
 codesign --force --deep --sign - "$APPDIR" >/dev/null 2>&1 || true
 
 echo "✅ Готово: $(pwd)/$APPDIR"

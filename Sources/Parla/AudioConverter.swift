@@ -33,12 +33,34 @@ enum AudioConverter {
         return (proc.terminationStatus, tail)
     }
 
+    /// System ffmpeg install locations (Homebrew/standard) — dev machines, `swift run`.
+    static let systemFfmpegCandidates = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
+
+    /// The vendored LGPL binary inside the app bundle (Contents/Resources/Helpers/ffmpeg), or nil
+    /// when running outside a bundle (e.g. `swift run`) or before one is shipped.
+    static func bundledFfmpegURL() -> URL? {
+        Bundle.main.url(forResource: "ffmpeg", withExtension: nil, subdirectory: "Helpers")
+    }
+
+    /// Resolve ffmpeg: the bundled binary (zero user setup) first, else a system install.
     static func ffmpegURL() -> URL? {
-        let candidates = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]
-        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+        resolveFfmpeg(bundled: bundledFfmpegURL(), systemCandidates: systemFfmpegCandidates)
+    }
+
+    /// Pure resolver (testable): bundled wins when present + executable, else the first executable
+    /// system candidate, else nil.
+    static func resolveFfmpeg(bundled: URL?, systemCandidates: [String]) -> URL? {
+        if let bundled, FileManager.default.isExecutableFile(atPath: bundled.path) { return bundled }
+        for path in systemCandidates where FileManager.default.isExecutableFile(atPath: path) {
             return URL(fileURLWithPath: path)
         }
         return nil
+    }
+
+    /// Whether the resolved ffmpeg is the bundled one (drives the Settings "bundled vs system" label).
+    static var isUsingBundledFfmpeg: Bool {
+        guard let resolved = ffmpegURL(), let bundled = bundledFfmpegURL() else { return false }
+        return resolved.path == bundled.path
     }
 
     /// ffmpeg args for the 16 kHz mono WAV decode. Pure (no I/O) so a test can assert the quiet

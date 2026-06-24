@@ -85,7 +85,8 @@ struct SettingsView: View {
             Section(L("settings.section.system")) {
                 LabeledContent("ffmpeg") {
                     if let p = AudioConverter.ffmpegURL() {
-                        Text(p.path).foregroundStyle(.secondary).font(.caption)
+                        Text(AudioConverter.isUsingBundledFfmpeg ? L("settings.system.ffmpeg.bundled") : p.path)
+                            .foregroundStyle(.secondary).font(.caption)
                     } else {
                         Text(L("settings.system.ffmpeg.missing"))
                             .foregroundStyle(.orange).font(.caption)

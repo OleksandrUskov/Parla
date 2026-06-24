@@ -113,6 +113,7 @@
 "settings.history.export"       = "Export history…";
 "settings.history.clear"        = "Clear history";
 "settings.section.system"       = "System";
+"settings.system.ffmpeg.bundled"= "bundled";
 "settings.system.ffmpeg.missing"= "not found — install: brew install ffmpeg";
 "settings.system.models"        = "Models on disk";
 "settings.system.audio"         = "Audio for the player";
