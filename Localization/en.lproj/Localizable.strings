@@ -120,7 +120,6 @@
 "settings.system.audiohint"     = "Parla keeps audio copies for replay and automatically deletes the oldest when too many pile up. The transcript text is always kept.";
 "settings.section.interface"    = "Interface";
 "settings.interface.language"   = "Interface language";
-"settings.interface.system"     = "System";
 "settings.interface.hint"       = "The app's language is separate from the speech-recognition language.";
 
 /* Toasts */

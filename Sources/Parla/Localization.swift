@@ -57,25 +57,25 @@ func Lf(_ key: String, _ args: CVarArg...) -> String { Localized.format(key, arg
 
 // MARK: - UI language choice
 
-/// User-selectable interface language. `.system` follows the OS; the rest force a specific bundle.
+/// User-selectable interface language — only the languages we actually ship. No "System" option:
+/// an Italian-system user choosing "System" would silently get the English fallback (misleading).
 /// Independent of the speech-recognition `AppModel.language` (that one is the spoken language).
 enum UILanguage: String, CaseIterable, Identifiable {
-    case system, en, ru, uk
+    case en, ru, uk
     var id: String { rawValue }
 
-    /// `nil` for `.system`; otherwise the BCP-47 code matching the `.lproj` folder.
-    var code: String? { self == .system ? nil : rawValue }
+    /// BCP-47 code matching the `.lproj` folder.
+    var code: String { rawValue }
 
     /// Locale for SwiftUI `environment(\.locale)` (formatting + system controls).
-    var locale: Locale { code.map(Locale.init(identifier:)) ?? .autoupdatingCurrent }
+    var locale: Locale { Locale(identifier: rawValue) }
 
-    /// Picker label. Endonyms stay untranslated (each language names itself); "System" localizes.
+    /// Picker label — each language names itself (endonym).
     var pickerLabel: String {
         switch self {
-        case .system: return L("settings.interface.system")
-        case .en:     return "English"
-        case .ru:     return "Русский"
-        case .uk:     return "Українська"
+        case .en: return "English"
+        case .ru: return "Русский"
+        case .uk: return "Українська"
         }
     }
 }

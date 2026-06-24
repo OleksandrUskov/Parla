@@ -120,7 +120,6 @@
 "settings.system.audiohint"     = "Parla хранит копии аудио для повторного прослушивания и автоматически удаляет самые старые, когда их набирается слишком много. Текст расшифровок при этом сохраняется всегда.";
 "settings.section.interface"    = "Интерфейс";
 "settings.interface.language"   = "Язык интерфейса";
-"settings.interface.system"     = "Системный";
 "settings.interface.hint"       = "Язык приложения отдельно от языка распознавания речи.";
 
 /* Toasts */
