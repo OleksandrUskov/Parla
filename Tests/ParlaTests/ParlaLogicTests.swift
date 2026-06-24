@@ -719,6 +719,115 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: Export formats — SRT / VTT / JSON / TXT / MD (EXPORT_FORMATS P1)
+
+    func testSRTTimecode() {
+        XCTAssertEqual(srtTimecode(0), "00:00:00,000")
+        XCTAssertEqual(srtTimecode(3661.5), "01:01:01,500")
+        XCTAssertEqual(srtTimecode(-5), "00:00:00,000")        // negatives clamp
+        XCTAssertEqual(srtTimecode(1.2345), "00:00:01,235")    // rounds, not floors (1234.5 → 1235)
+    }
+
+    func testVTTTimecode() {
+        XCTAssertEqual(vttTimecode(0), "00:00:00.000")
+        XCTAssertEqual(vttTimecode(3661.5), "01:01:01.500")
+    }
+
+    func testExportSRT() {
+        let item = makeItem(text: "full", segments: [
+            Segment(start: 0, end: 2, text: "first"),
+            Segment(start: 2, end: 4, text: "second"),
+        ])
+        XCTAssertEqual(exportSRT(item),
+            "1\n00:00:00,000 --> 00:00:02,000\nfirst\n\n" +
+            "2\n00:00:02,000 --> 00:00:04,000\nsecond\n\n")
+    }
+
+    func testExportSRTSkipsEmptySegments() {
+        let item = makeItem(text: "full", segments: [
+            Segment(start: 0, end: 1, text: "a"),
+            Segment(start: 1, end: 2, text: ""),       // dropped
+            Segment(start: 2, end: 3, text: "b"),
+        ])
+        let srt = exportSRT(item)
+        XCTAssertTrue(srt.contains("1\n00:00:00,000 --> 00:00:01,000\na\n\n"))
+        XCTAssertTrue(srt.contains("2\n00:00:02,000 --> 00:00:03,000\nb\n\n"))
+        XCTAssertFalse(srt.contains("3\n"))            // indices stay contiguous 1,2 (not 1,3)
+    }
+
+    func testExportVTT() {
+        let item = makeItem(text: "full", segments: [Segment(start: 0, end: 2, text: "hi")])
+        let vtt = exportVTT(item)
+        XCTAssertTrue(vtt.hasPrefix("WEBVTT\n\n"))
+        XCTAssertTrue(vtt.contains("00:00:00.000 --> 00:00:02.000\nhi\n"))
+        XCTAssertFalse(vtt.contains("\n1\n"))          // no integer cue index in VTT
+    }
+
+    func testExportJSONRoundtrips() throws {
+        let item = makeItem(text: "data", segments: [Segment(start: 0, end: 1, text: "x")], edited: true)
+        let data = try exportJSON(item)
+        let back = try JSONDecoder().decode(TranscriptItem.self, from: data)
+        XCTAssertEqual(back, item)                      // real Codable round-trip (default date enc → exact)
+        XCTAssertEqual(try exportJSON(item), data)      // deterministic bytes (sorted keys)
+    }
+
+    func testExportPlainTXTFlatVsTimestamped() {
+        let item = makeItem(text: "привет мир", segments: [
+            Segment(start: 0, end: 1, text: "привет"),
+            Segment(start: 1, end: 2, text: "мир"),
+        ])
+        XCTAssertEqual(exportPlainTXT(item, timestamps: false), "привет мир")
+        XCTAssertEqual(exportPlainTXT(item, timestamps: true), "[00:00] привет\n[00:01] мир")
+    }
+
+    func testExportMarkdownSingleItem() {
+        let item = makeItem(name: "talk.ogg", text: "body", lang: "ru", model: "openai_whisper-large-v3")
+        let md = exportMarkdown(item)
+        XCTAssertTrue(md.hasPrefix("## talk.ogg\n"))
+        XCTAssertTrue(md.contains("· RU · Large v3"))
+        XCTAssertTrue(md.contains("\n\nbody\n"))
+        XCTAssertFalse(md.contains("---"))             // no between-records separator for a single item
+    }
+
+    func testExportEditedRecordDegrades() {
+        // text ≠ segments → one full-text cue [0, durationSec=1], never the stale segment timecodes
+        let item = makeItem(text: "edited full text",
+                            segments: [Segment(start: 0, end: 1, text: "stale"),
+                                       Segment(start: 1, end: 2, text: "old")],
+                            edited: true)
+        XCTAssertEqual(exportSRT(item), "1\n00:00:00,000 --> 00:00:01,000\nedited full text\n\n")
+        XCTAssertTrue(exportVTT(item).contains("00:00:00.000 --> 00:00:01.000\nedited full text\n"))
+        XCTAssertFalse(exportSRT(item).contains("stale"))
+    }
+
+    func testExportEmptySegments() {
+        // no segments, not edited → degrade to one full-text cue [0, duration]
+        let item = makeItem(text: "только текст", segments: [])
+        XCTAssertEqual(exportSRT(item), "1\n00:00:00,000 --> 00:00:01,000\nтолько текст\n\n")
+        // truly empty (no text either) → empty SRT, valid-but-empty VTT — never 0-cue garbage
+        let blank = makeItem(text: "", segments: [])
+        XCTAssertEqual(exportSRT(blank), "")
+        XCTAssertEqual(exportVTT(blank), "WEBVTT\n\n")
+    }
+
+    func testExportFormatMetadata() {
+        XCTAssertEqual(ExportFormat.allCases.count, 5)
+        let exts = ExportFormat.allCases.map(\.fileExtension)
+        XCTAssertEqual(Set(exts).count, exts.count)    // unique extensions
+        XCTAssertEqual(ExportFormat.srt.fileExtension, "srt")
+        XCTAssertEqual(ExportFormat.markdown.fileExtension, "md")
+        XCTAssertTrue(ExportFormat.json.supportsWholeHistory)
+        XCTAssertFalse(ExportFormat.srt.supportsWholeHistory)
+        XCTAssertFalse(ExportFormat.vtt.supportsWholeHistory)
+        XCTAssertTrue(ExportFormat.allCases.allSatisfy { !$0.displayName.isEmpty })
+    }
+
+    func testSRTClampsEndBeforeStart() {
+        let item = makeItem(text: "x", segments: [Segment(start: 5, end: 2, text: "reversed")])
+        // end clamped to start → never a reversed `-->` range
+        XCTAssertEqual(exportSRT(item), "1\n00:00:05,000 --> 00:00:05,000\nreversed\n\n")
+    }
+
     // MARK: FolderWatcher teardown stress (P1.1)
 
     /// Exercises the passRetained/release teardown deterministically (no event-timing dependency):
