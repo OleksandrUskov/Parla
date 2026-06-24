@@ -25,6 +25,9 @@ final class ParlaLogicTests: XCTestCase {
     override func setUp() {
         super.setUp()
         activateLocalization("ru")
+        // Point legacy migration at a non-existent dir so tests never copy the real ~/…/Murmur dataset.
+        HistoryStore.legacyBase = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ParlaTests-NoLegacy-\(UUID().uuidString)")
     }
 
     // MARK: Model names
@@ -777,6 +780,41 @@ final class ParlaLogicTests: XCTestCase {
         }
         wait(for: [exp], timeout: 15)
         XCTAssertEqual((box.firstObject as? NSNumber)?.int32Value, 3)   // completed (not deadlocked), exit code preserved
+    }
+
+    // MARK: Sidecar identity + migration completeness (C, D)
+
+    func testSidecarMatchesBySourcePathNotName() {
+        var a = makeItem(name: "voice.ogg", text: "AAA"); a.sourcePath = "/a/voice.ogg"
+        var b = makeItem(name: "voice.ogg", text: "BBB"); b.sourcePath = "/b/voice.ogg"
+        let history = [b, a]   // same filename, different folders; newest first (would mis-match by name)
+        XCTAssertEqual(AppModel.sidecarTarget(in: history, for: URL(fileURLWithPath: "/b/voice.ogg"))?.text, "BBB")
+        XCTAssertEqual(AppModel.sidecarTarget(in: history, for: URL(fileURLWithPath: "/a/voice.ogg"))?.text, "AAA")
+        XCTAssertNil(AppModel.sidecarTarget(in: history, for: URL(fileURLWithPath: "/c/voice.ogg")))
+    }
+
+    func testMigrateDirCopiesWhenTargetMissingAndIsIdempotent() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("mig-\(UUID().uuidString)")
+        let legacy = root.appendingPathComponent("audio", isDirectory: true)
+        let target = root.appendingPathComponent("Parla/audio", isDirectory: true)
+        try fm.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: legacy.appendingPathComponent("a.m4a"))
+        defer { try? fm.removeItem(at: root) }
+
+        HistoryStore.migrateDir(target: target, legacy: legacy)
+        XCTAssertTrue(fm.fileExists(atPath: target.appendingPathComponent("a.m4a").path))   // dir copied
+        HistoryStore.migrateDir(target: target, legacy: legacy)                              // re-run = no-op
+        XCTAssertTrue(fm.fileExists(atPath: target.appendingPathComponent("a.m4a").path))
+    }
+
+    func testMigrateDirNoopWhenLegacyMissing() {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("mig-\(UUID().uuidString)")
+        let target = root.appendingPathComponent("Parla/audio", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        HistoryStore.migrateDir(target: target, legacy: root.appendingPathComponent("nope", isDirectory: true))
+        XCTAssertFalse(fm.fileExists(atPath: target.path))   // nothing to copy → no target created
     }
 
     // MARK: Folder watching (feature 04)

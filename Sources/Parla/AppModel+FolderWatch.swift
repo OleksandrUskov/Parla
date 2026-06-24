@@ -97,8 +97,14 @@ extension AppModel {
         ProcessedStore.save(processedKeys)
     }
 
+    /// Find the record produced for `url` by its UNIQUE absolute path, not its (non-unique across
+    /// subfolders) filename — so recursive watch can't write the wrong record's text to a .txt.
+    nonisolated static func sidecarTarget(in history: [TranscriptItem], for url: URL) -> TranscriptItem? {
+        history.first { $0.sourcePath == url.path }
+    }
+
     private func writeSidecar(for src: URL) {
-        guard let item = history.first(where: { $0.sourceName == src.lastPathComponent }) else { return }
+        guard let item = Self.sidecarTarget(in: history, for: src) else { return }
         let txt = src.deletingPathExtension().appendingPathExtension("txt")
         try? Data(item.display(timestamps: showTimestamps).utf8).write(to: txt, options: .atomic)
     }

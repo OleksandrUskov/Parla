@@ -237,17 +237,37 @@ enum HistoryStore {
         try? FileManager.default.moveItem(at: fileURL, to: dest)
     }
 
-    /// One-time history migration from the old app name (Murmur → Parla).
+    /// Legacy app-support dir (the old "Murmur" name) to migrate from. `var` test-seam so unit tests
+    /// never touch the real ~/Library/Application Support/Murmur.
+    static var legacyBase: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Murmur", isDirectory: true)
+
+    /// One-time migration from the old app name (Murmur → Parla). Copies history.json AND the player
+    /// audio dir AND the folder-watch dedup set — so migrated records keep playback and the watched
+    /// folder doesn't re-transcribe everything once. All guarded by "target missing" → idempotent.
     private static func migrateLegacyIfNeeded() {
-        let legacy = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Murmur/history.json")
-        migrate(target: fileURL, legacy: legacy)
+        let parla = fileURL.deletingLastPathComponent()
+        migrate(target: fileURL, legacy: legacyBase.appendingPathComponent("history.json"))
+        migrate(target: parla.appendingPathComponent("processed.json"),
+                legacy: legacyBase.appendingPathComponent("processed.json"))
+        migrateDir(target: parla.appendingPathComponent("audio", isDirectory: true),
+                   legacy: legacyBase.appendingPathComponent("audio", isDirectory: true))
     }
 
-    /// Pure testable logic: copy legacy → target if target doesn't have a file yet.
+    /// Pure testable logic: copy a legacy FILE → target if target doesn't have a file yet.
     static func migrate(target: URL, legacy: URL) {
         let fm = FileManager.default
         guard !fm.fileExists(atPath: target.path), fm.fileExists(atPath: legacy.path) else { return }
+        try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? fm.copyItem(at: legacy, to: target)
+    }
+
+    /// Copy a legacy DIRECTORY → target if target doesn't exist yet (idempotent, best-effort).
+    static func migrateDir(target: URL, legacy: URL) {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        guard !fm.fileExists(atPath: target.path),
+              fm.fileExists(atPath: legacy.path, isDirectory: &isDir), isDir.boolValue else { return }
         try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? fm.copyItem(at: legacy, to: target)
     }
