@@ -77,3 +77,15 @@ PLIST
 codesign --force --deep --sign - "$APPDIR" >/dev/null 2>&1 || true
 
 echo "✅ Готово: $(pwd)/$APPDIR"
+
+# Опционально перезапустить (--run). Старый и новый бинарь имеют ОДИН bundle ID, поэтому при
+# уже запущенном инстансе `open` просто вынесет вперёд СТАРЫЙ процесс из памяти, а не подхватит
+# пересобранный файл. Поэтому: закрыть запущенный инстанс, затем открыть свежий.
+if [[ " $* " == *" --run "* ]]; then
+  if pgrep -x "$APP" >/dev/null; then
+    osascript -e "tell application \"$APP\" to quit" >/dev/null 2>&1 || true
+  fi
+  pkill -9 -x "$APP" 2>/dev/null || true
+  open "$APPDIR"
+  echo "↻ Перезапущено: $APPDIR"
+fi

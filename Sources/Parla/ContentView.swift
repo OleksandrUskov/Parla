@@ -12,6 +12,10 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 580)
+        // Rebuild the tree on a UI-language switch so the verbatim L() strings re-resolve live.
+        // (Text(L("key")) is verbatim and doesn't depend on environment(\.locale), so .id forces it;
+        // model-held state — history/selection/search — survives, only transient @State resets.)
+        .id(model.uiLanguage)
     }
 }
 

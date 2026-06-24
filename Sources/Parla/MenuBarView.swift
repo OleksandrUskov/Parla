@@ -75,6 +75,7 @@ struct MenuBarView: View {
         }
         .padding(12)
         .frame(width: 300)
+        .id(model.uiLanguage)   // re-resolve verbatim L() strings live on a UI-language switch
         // Dropping a file into the OPEN popover (macOS doesn't support dropping onto the closed icon — see blueprint).
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             Task { @MainActor in
