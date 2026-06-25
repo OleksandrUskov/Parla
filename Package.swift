@@ -30,6 +30,15 @@ let package = Package(
             path: "Sources/ParlaSmoke",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // RU/UK streaming-vs-offline WER harness (dev tool, MIC_DICTATION P3 gate).
+        .executableTarget(
+            name: "ParlaStreamEval",
+            dependencies: [
+                .product(name: "WhisperKit", package: "WhisperKit"),
+            ],
+            path: "Sources/ParlaStreamEval",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         .testTarget(
             name: "ParlaTests",
             dependencies: ["Parla"],
