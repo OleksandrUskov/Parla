@@ -32,6 +32,16 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
             .disabled(model.isBusy || model.downloadingModel != nil)
 
+            // Dictate with the mic — enabled to STOP while recording, blocked only while another job runs.
+            Button { model.toggleDictation() } label: {
+                Label(model.isRecordingDictation ? L("menu.dictation.stop") : L("menu.dictation.start"),
+                      systemImage: model.isRecordingDictation ? "stop.circle.fill" : "mic.circle")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(model.isRecordingDictation ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+            }
+            .buttonStyle(.plain)
+            .disabled((model.isBusy && !model.isRecordingDictation) || model.downloadingModel != nil)
+
             Divider()
 
             if model.history.isEmpty {

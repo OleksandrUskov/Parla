@@ -75,6 +75,14 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section(L("settings.section.dictation")) {
+                Toggle(L("settings.dictation.toggle"), isOn: $model.dictationHotkeyEnabled)
+                KeyboardShortcuts.Recorder(L("settings.dictation.recorder"), name: .dictate)
+                Toggle(L("settings.dictation.keepaudio"), isOn: $model.keepDictationAudio)
+                Text(L("settings.dictation.hint"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section(L("settings.section.history")) {
                 Button(L("settings.history.export")) { model.exportHistory() }
                     .disabled(model.history.isEmpty)

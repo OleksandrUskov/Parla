@@ -141,6 +141,22 @@
 "toast.done.copied"      = "Done · copied to clipboard";
 "toast.done"             = "Done";
 
+/* Dictation (MIC_DICTATION) */
+"dictation.label"              = "Dictation";
+"dictation.title"              = "Dictation · %@";
+"dictation.recording"          = "Recording %@";
+"dictation.stop"               = "Stop";
+"menu.dictation.start"         = "Start dictation";
+"menu.dictation.stop"          = "Stop dictation";
+"toast.mic.denied"             = "Microphone access is off — turn it on in System Settings › Privacy & Security › Microphone";
+"toast.dictation.failed"       = "Couldn't start the microphone";
+"error.dictation.empty"        = "Didn't catch anything — try again";
+"settings.section.dictation"   = "Dictation";
+"settings.dictation.toggle"    = "Global hotkey — dictate with your voice";
+"settings.dictation.recorder"  = "Shortcut:";
+"settings.dictation.keepaudio" = "Keep the recorded audio for playback";
+"settings.dictation.hint"      = "Press the shortcut (default ⌃⌥⌘D) to start recording from your microphone, press it again to stop — Parla transcribes on-device and copies the text. Audio never leaves your Mac. Dictation uses only the Microphone permission (no Accessibility).";
+
 /* Errors */
 "error.drop.failed"         = "Couldn't read the dropped file";
 "error.save.failed"         = "Couldn't save the file: %@";

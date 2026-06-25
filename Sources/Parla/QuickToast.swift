@@ -10,6 +10,7 @@ final class QuickToast {
     private var hideTask: Task<Void, Never>?
 
     func show(_ text: String, sticky: Bool = false) {
+        guard NSClassFromString("XCTestCase") == nil else { return }   // never spawn a panel under unit tests
         let host = NSHostingView(rootView: ToastView(text: text))
         host.frame = NSRect(x: 0, y: 0, width: 300, height: 48)
 

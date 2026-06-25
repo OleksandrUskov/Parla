@@ -669,6 +669,81 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: Dictation orchestration (MIC_DICTATION P1)
+
+    @MainActor func testDictationInsertsHistoryRecord() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "надиктованный текст", language: "ru", segments: [], duration: 2)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            // 5-byte stub .wav → AudioConverter.duration is nil → the short-clip guard is skipped and the
+            // FakeEngine runs. The live mic capture itself is manual-only; this drives the result back-half.
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.finishDictation(wav: wav)
+
+            XCTAssertEqual(m.history.count, 1)
+            XCTAssertEqual(m.history.first?.text, "надиктованный текст")
+            XCTAssertNil(m.history.first?.sourcePath)               // dictation → no re-transcribable source
+            XCTAssertFalse(m.canRetranscribe(m.history.first!))     // → re-transcribe stays disabled
+            XCTAssertEqual(fake.transcribeCalls, 1)
+            if case .idle = m.phase {} else { XCTFail("phase should be .idle") }
+        }
+    }
+
+    @MainActor func testDictationEmptyTextDropsRecord() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "   ", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.finishDictation(wav: wav)
+
+            XCTAssertTrue(m.history.isEmpty)                        // blank dictation → no note inserted
+            if case .idle = m.phase {} else { XCTFail("phase should be .idle") }
+        }
+    }
+
+    @MainActor func testDictationBypassesWavConverter() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "ok", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            m.wavConverter = { _ in throw AudioConverter.Failure.ffmpegNotFound }   // would fail if dictation used it
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.finishDictation(wav: wav)
+
+            XCTAssertEqual(m.history.count, 1)                      // succeeded → wavConverter was never called
+            XCTAssertEqual(m.history.first?.text, "ok")
+        }
+    }
+
+    @MainActor func testDictationSingleFlightGate() {
+        let m = AppModel(engine: FakeEngine())
+        m.history = []
+        XCTAssertTrue(m.canDictate)            // idle → can start
+        m.phase = .transcribing("x")
+        XCTAssertFalse(m.canDictate)           // a job is running → blocked
+        m.phase = .idle
+        m.recordingStartedAt = Date()
+        XCTAssertTrue(m.isRecordingDictation)
+        XCTAssertTrue(m.isBusy)                // recording folds into isBusy (blocks drops/quick actions)
+        XCTAssertFalse(m.canDictate)           // already recording → can't start another
+    }
+
     // MARK: AVFoundation-direct decode path (BUNDLE_FFMPEG P0)
 
     func testAvDecodableMirrorsDirectlyPlayable() {

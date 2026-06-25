@@ -13,4 +13,9 @@ extension KeyboardShortcuts.Name {
     /// Quick transcription of an audio file from the clipboard. Defaults to ⌃⌥⌘T; rebindable in Settings.
     static let quickTranscribe = Self("quickTranscribe",
                                       default: .init(.t, modifiers: [.control, .option, .command]))
+
+    /// Live mic dictation: press to start recording, press again to stop + transcribe. Defaults to
+    /// ⌃⌥⌘D; rebindable in Settings. Opt-in, disabled by default (Microphone permission, no Accessibility).
+    static let dictate = Self("dictate",
+                              default: .init(.d, modifiers: [.control, .option, .command]))
 }

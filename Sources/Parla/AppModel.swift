@@ -37,6 +37,10 @@ final class AppModel {
     var watchWriteSidecar: Bool { didSet { UserDefaults.standard.set(watchWriteSidecar, forKey: Keys.watchSidecar) } }
     var globalHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(globalHotkeyEnabled, forKey: Keys.hotkey) } }
 
+    // Dictation (feature MIC_DICTATION) — opt-in hotkey + whether to keep the recorded audio.
+    var dictationHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(dictationHotkeyEnabled, forKey: Keys.dictationHotkey) } }
+    var keepDictationAudio: Bool { didSet { UserDefaults.standard.set(keepDictationAudio, forKey: Keys.keepDictationAudio) } }
+
     /// UI language — separate from the speech-recognition language (`language`). `.system` follows the OS.
     var uiLanguage: UILanguage {
         didSet {
@@ -54,6 +58,8 @@ final class AppModel {
     // State shared with the extensions (can't be in an extension → internal, not private).
     var quickModeRun = false                          // launched from hotkey/menu bar → toast on completion (+Transcription/+QuickActions)
     var watcher: FolderWatcher?                        // +FolderWatch
+    var recorder: MicRecorder?                         // +Dictation (live mic capture)
+    var recordingStartedAt: Date?                      // +Dictation: non-nil while recording (drives isBusy + the chip timer)
     var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys
@@ -82,6 +88,8 @@ final class AppModel {
         static let watchSidecar = "watchWriteSidecar"
         static let watchBookmark = "watchBookmark"
         static let hotkey = "globalHotkeyEnabled"
+        static let dictationHotkey = "dictationHotkeyEnabled"
+        static let keepDictationAudio = "keepDictationAudio"
         static let lastBookmark = "lastSourceBookmark"
         static let uiLanguage = "uiLanguage"
     }
@@ -99,6 +107,8 @@ final class AppModel {
         watchRecursive = (d.object(forKey: Keys.watchRecursive) as? Bool) ?? true   // subfolders on by default
         watchWriteSidecar = d.bool(forKey: Keys.watchSidecar)
         globalHotkeyEnabled = d.bool(forKey: Keys.hotkey)   // opt-in, off by default
+        dictationHotkeyEnabled = d.bool(forKey: Keys.dictationHotkey)   // opt-in, off by default
+        keepDictationAudio = d.bool(forKey: Keys.keepDictationAudio)    // off — dictation audio is throwaway
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()
@@ -113,6 +123,7 @@ final class AppModel {
     }
 
     var isBusy: Bool {
+        if recordingStartedAt != nil { return true }   // recording a dictation blocks other jobs (single-flight)
         switch phase { case .idle, .failed: return false; default: return true }
     }
 

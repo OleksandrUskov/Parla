@@ -141,6 +141,22 @@
 "toast.done.copied"      = "Готово · скопировано в буфер";
 "toast.done"             = "Готово";
 
+/* Dictation (MIC_DICTATION) */
+"dictation.label"              = "Диктовка";
+"dictation.title"              = "Диктовка · %@";
+"dictation.recording"          = "Запись %@";
+"dictation.stop"               = "Стоп";
+"menu.dictation.start"         = "Начать диктовку";
+"menu.dictation.stop"          = "Остановить диктовку";
+"toast.mic.denied"             = "Доступ к микрофону выключен — включи его в Системных настройках › Конфиденциальность и безопасность › Микрофон";
+"toast.dictation.failed"       = "Не удалось включить микрофон";
+"error.dictation.empty"        = "Ничего не расслышал — попробуй ещё раз";
+"settings.section.dictation"   = "Диктовка";
+"settings.dictation.toggle"    = "Глобальная горячая клавиша — диктовать голосом";
+"settings.dictation.recorder"  = "Сочетание:";
+"settings.dictation.keepaudio" = "Сохранять записанное аудио для прослушивания";
+"settings.dictation.hint"      = "Нажми сочетание (по умолчанию ⌃⌥⌘D), чтобы начать запись с микрофона, нажми ещё раз — чтобы остановить. Parla распознаёт текст на устройстве и копирует его. Аудио не покидает твой Mac. Диктовке нужен только доступ к Микрофону (без Универсального доступа).";
+
 /* Errors */
 "error.drop.failed"         = "Не смог получить файл из перетаскивания";
 "error.save.failed"         = "Не удалось сохранить файл: %@";

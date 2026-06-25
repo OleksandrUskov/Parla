@@ -206,7 +206,7 @@ extension AppModel {
                             segments: stitched, duration: audioDuration)
     }
 
-    private func progressHandler() -> @Sendable (ModelLoad) -> Void {
+    func progressHandler() -> @Sendable (ModelLoad) -> Void {   // internal: also reused by +Dictation
         { [weak self] load in
             Task { @MainActor in
                 guard let self else { return }

@@ -39,6 +39,7 @@ struct ParlaApp: App {
                     await model.refreshModels()
                 }
                 .onChange(of: model.globalHotkeyEnabled) { _, _ in syncHotkey() }
+                .onChange(of: model.dictationHotkeyEnabled) { _, _ in syncHotkey() }
                 .preferredColorScheme(.dark)
         }
         .defaultSize(width: 980, height: 660)
@@ -65,14 +66,17 @@ struct ParlaApp: App {
         if !hotkeyInstalled {
             hotkeyInstalled = true
             KeyboardShortcuts.onKeyUp(for: .quickTranscribe) { model.quickTranscribeFromClipboard() }
+            KeyboardShortcuts.onKeyUp(for: .dictate) { model.toggleDictation() }
         }
         syncHotkey()
     }
 
-    /// Enable/disable the global hotkey to follow the toggle (Carbon, no «Accessibility» permission).
+    /// Enable/disable each global hotkey to follow its toggle (Carbon, no «Accessibility» permission).
     @MainActor private func syncHotkey() {
         if model.globalHotkeyEnabled { KeyboardShortcuts.enable(.quickTranscribe) }
         else { KeyboardShortcuts.disable(.quickTranscribe) }
+        if model.dictationHotkeyEnabled { KeyboardShortcuts.enable(.dictate) }
+        else { KeyboardShortcuts.disable(.dictate) }
     }
 }
 

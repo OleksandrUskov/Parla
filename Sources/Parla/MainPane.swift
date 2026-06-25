@@ -209,6 +209,32 @@ struct StatusBar: View {
     }
 
     @ViewBuilder private var phaseView: some View {
+        if model.isRecordingDictation {
+            recordingChip
+        } else {
+            phaseChip
+        }
+    }
+
+    /// Live recording indicator (dictation): a red dot + running timer + Stop. The timer re-renders
+    /// every second via TimelineView (no model churn). Shown in place of the idle/empty status.
+    private var recordingChip: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            HStack(spacing: 10) {
+                Circle().fill(.red).frame(width: 10, height: 10)
+                Text(Lf("dictation.recording", fmtTime(model.recordingElapsed)))
+                    .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                Spacer()
+                Button(L("dictation.stop")) { model.stopAndTranscribeDictation() }
+                    .buttonStyle(.plain).font(.callout.weight(.medium)).foregroundStyle(Brand.accent)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    @ViewBuilder private var phaseChip: some View {
         switch model.phase {
         case .idle:
             EmptyView()
