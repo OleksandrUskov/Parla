@@ -1088,6 +1088,21 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(AppModel.sidecarTarget(in: history, for: URL(fileURLWithPath: "/c/voice.ogg")))
     }
 
+    func testSidecarURLKeepsAudioExtension() {
+        // voice.ogg → voice.ogg.txt (not voice.txt): distinct per audio file, can't hit a user's voice.txt
+        XCTAssertEqual(AppModel.sidecarURL(for: URL(fileURLWithPath: "/w/voice.ogg")).lastPathComponent, "voice.ogg.txt")
+        // same basename, different audio extension → DISTINCT sidecars (no last-writer-wins collision)
+        XCTAssertNotEqual(AppModel.sidecarURL(for: URL(fileURLWithPath: "/w/voice.ogg")),
+                          AppModel.sidecarURL(for: URL(fileURLWithPath: "/w/voice.opus")))
+    }
+
+    func testSidecarPlanNeverClobbersExisting() {
+        // target already exists (a user's own file) → skip, return nil (no overwrite)
+        XCTAssertNil(AppModel.sidecarPlan(text: "transcript", targetExists: true))
+        // no file there → write the transcript
+        XCTAssertEqual(AppModel.sidecarPlan(text: "transcript", targetExists: false), Data("transcript".utf8))
+    }
+
     func testMigrateDirCopiesWhenTargetMissingAndIsIdempotent() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("mig-\(UUID().uuidString)")

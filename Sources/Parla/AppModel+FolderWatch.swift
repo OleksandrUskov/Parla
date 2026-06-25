@@ -103,10 +103,26 @@ extension AppModel {
         history.first { $0.sourcePath == url.path }
     }
 
+    /// Sidecar path for a transcribed file: the FULL source name + ".txt" (voice.ogg → voice.ogg.txt).
+    /// Keeping the audio extension means two same-basename files (voice.ogg + voice.opus) get DISTINCT
+    /// sidecars instead of both clobbering one voice.txt, and a transcript can't land on a user's own
+    /// hand-written "voice.txt".
+    nonisolated static func sidecarURL(for src: URL) -> URL { src.appendingPathExtension("txt") }
+
+    /// What to write for a sidecar — or nil to skip. Pure (testable). NEVER clobber a file Parla
+    /// didn't create: a pre-existing file at the path is the user's, so skip. Folder-watch writes each
+    /// file's sidecar once (the dedup set gates re-processing), so skip-if-exists loses nothing of ours.
+    nonisolated static func sidecarPlan(text: String, targetExists: Bool) -> Data? {
+        targetExists ? nil : Data(text.utf8)
+    }
+
     private func writeSidecar(for src: URL) {
         guard let item = Self.sidecarTarget(in: history, for: src) else { return }
-        let txt = src.deletingPathExtension().appendingPathExtension("txt")
-        try? Data(item.display(timestamps: showTimestamps).utf8).write(to: txt, options: .atomic)
+        let txt = Self.sidecarURL(for: src)
+        let exists = FileManager.default.fileExists(atPath: txt.path)
+        guard let data = Self.sidecarPlan(text: item.display(timestamps: showTimestamps), targetExists: exists)
+        else { return }
+        try? data.write(to: txt, options: .atomic)
     }
 
     /// Folder snapshot: audio files + their size/mtime. `nonisolated` — the heavy walk can run off main.
