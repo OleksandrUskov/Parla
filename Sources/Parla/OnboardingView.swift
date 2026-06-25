@@ -75,15 +75,14 @@ struct OnboardingView: View {
         }
     }
 
+    // ffmpeg is ALWAYS bundled in the built .app (build_app.sh copies the vendored binary), so there is
+    // no "missing" case to handle here — just confirm it's built in.
     private var ffmpegStep: some View {
-        let bundled = AudioConverter.isUsingBundledFfmpeg
-        return HStack(alignment: .top, spacing: 14) {
-            Image(systemName: bundled ? "checkmark.seal" : "exclamationmark.triangle")
-                .font(.title2).foregroundStyle(bundled ? AnyShapeStyle(.green) : AnyShapeStyle(.orange))
-                .frame(width: 30)
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "checkmark.seal").font(.title2).foregroundStyle(.green).frame(width: 30)
             VStack(alignment: .leading, spacing: 4) {
                 Text(L("onboarding.ffmpeg.title")).font(.headline)
-                Text(bundled ? L("onboarding.ffmpeg.bundled") : L("onboarding.ffmpeg.missing"))
+                Text(L("onboarding.ffmpeg.bundled"))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

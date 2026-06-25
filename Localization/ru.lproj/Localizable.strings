@@ -196,6 +196,5 @@
 "onboarding.model.body"     = "Больше = точнее, но дольше качать. Turbo — рекомендуемый баланс; поменять можно потом в настройках.";
 "onboarding.ffmpeg.title"   = "Готов к аудио из Telegram";
 "onboarding.ffmpeg.bundled" = "ffmpeg уже встроен — ставить ничего не надо. Ogg/Opus, m4a, mp3, wav и другое работают сразу.";
-"onboarding.ffmpeg.missing" = "ffmpeg не найден. m4a/mp3/wav работают; для Ogg/Opus установи ffmpeg.";
 "onboarding.start"          = "Начать";
 "status.loadingmodel.firstrun" = "Первый запуск компилирует модель для Apple Neural Engine — это разово, дальше загрузка мгновенная.";

@@ -196,6 +196,5 @@
 "onboarding.model.body"     = "Bigger = more accurate but slower to download. Turbo is the recommended balance; you can change it later in Settings.";
 "onboarding.ffmpeg.title"   = "Ready for Telegram audio";
 "onboarding.ffmpeg.bundled" = "ffmpeg is built in — nothing to install. Ogg/Opus, m4a, mp3, wav and more just work.";
-"onboarding.ffmpeg.missing" = "ffmpeg wasn't found. m4a/mp3/wav still work; install ffmpeg for Ogg/Opus.";
 "onboarding.start"          = "Get started";
 "status.loadingmodel.firstrun" = "First run compiles the model for the Apple Neural Engine — one-time only, later launches are instant.";
