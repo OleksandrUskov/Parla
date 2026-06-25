@@ -79,7 +79,7 @@ extension AppModel {
         watchQueueCount = watchQueue.count
         phase = .preparing(next.lastPathComponent)   // claim the phase synchronously → closes the double-start race
         Task {
-            await transcribe(urls: [next])           // THE SAME path as manual drop
+            await transcribe(urls: [next], isWatcherRun: true)   // THE SAME path as manual drop; coalesce the beep
             if watchWriteSidecar { writeSidecar(for: next) }
             drainQueue()                             // pull the next one once we're free again
         }

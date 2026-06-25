@@ -22,7 +22,13 @@ extension AppModel {
         handleDrop(urls: lastAttemptedURLs)
     }
 
-    func transcribe(urls: [URL]) async {
+    /// Whether a finished run plays the completion sound: user-initiated runs always do (when enabled);
+    /// the folder watcher only when nothing else is queued — so a burst of N files beeps ONCE, not N times.
+    nonisolated static func shouldPlayCompletionSound(soundEnabled: Bool, isWatcherRun: Bool, watchQueueEmpty: Bool) -> Bool {
+        soundEnabled && (!isWatcherRun || watchQueueEmpty)
+    }
+
+    func transcribe(urls: [URL], isWatcherRun: Bool = false) async {
         lastAttemptedURLs = urls   // remember for «Try again»
         var files: [URL] = []
         for url in urls {
@@ -74,7 +80,10 @@ extension AppModel {
         }
         refreshDownloaded()
         phase = failures.isEmpty ? .idle : .failed(Lf("error.transcribe.failed", failures.joined(separator: "; ")))
-        if soundOnComplete { failures.isEmpty ? CompletionSound.success() : CompletionSound.failure() }
+        if Self.shouldPlayCompletionSound(soundEnabled: soundOnComplete, isWatcherRun: isWatcherRun,
+                                          watchQueueEmpty: watchQueue.isEmpty) {
+            failures.isEmpty ? CompletionSound.success() : CompletionSound.failure()
+        }
 
         // Notification: only if the job «was worth the wait» and the window isn't frontmost.
         // Read frontmost at the END — switching away during the batch is exactly what should trigger a notification.

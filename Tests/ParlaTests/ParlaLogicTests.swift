@@ -1224,6 +1224,15 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(AppModel().showTimestamps)   // an explicit OFF choice is preserved
     }
 
+    func testShouldPlayCompletionSound() {
+        // user-initiated run → always plays when enabled
+        XCTAssertTrue(AppModel.shouldPlayCompletionSound(soundEnabled: true, isWatcherRun: false, watchQueueEmpty: false))
+        XCTAssertFalse(AppModel.shouldPlayCompletionSound(soundEnabled: false, isWatcherRun: false, watchQueueEmpty: true))
+        // watcher mid-burst (more queued) → silent; only the last of the burst beeps once
+        XCTAssertFalse(AppModel.shouldPlayCompletionSound(soundEnabled: true, isWatcherRun: true, watchQueueEmpty: false))
+        XCTAssertTrue(AppModel.shouldPlayCompletionSound(soundEnabled: true, isWatcherRun: true, watchQueueEmpty: true))
+    }
+
     @MainActor func testSoundOnCompleteDefaultsOn() {
         UserDefaults.standard.removeObject(forKey: AppModel.Keys.sound)
         XCTAssertTrue(AppModel().soundOnComplete)
