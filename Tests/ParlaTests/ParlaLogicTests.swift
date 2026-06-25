@@ -1171,6 +1171,22 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(AppModel.sidecarPlan(text: "transcript", targetExists: false), Data("transcript".utf8))
     }
 
+    func testMigrateClearsStaleStagingAndCopiesFresh() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("mig-\(UUID().uuidString)")
+        let legacy = root.appendingPathComponent("history.json")
+        let target = root.appendingPathComponent("Parla/history.json")
+        try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("real".utf8).write(to: legacy)
+        let stale = target.appendingPathExtension("migrating")
+        try Data("garbage from a prior crash".utf8).write(to: stale)   // leftover partial copy
+        defer { try? fm.removeItem(at: root) }
+
+        HistoryStore.migrate(target: target, legacy: legacy)
+        XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "real")   // fresh copy, not the stale partial
+        XCTAssertFalse(fm.fileExists(atPath: stale.path))                          // staging cleaned up after rename
+    }
+
     func testMigrateDirCopiesWhenTargetMissingAndIsIdempotent() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("mig-\(UUID().uuidString)")

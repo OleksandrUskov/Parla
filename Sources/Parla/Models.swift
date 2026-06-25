@@ -271,22 +271,38 @@ enum HistoryStore {
                    legacy: legacyBase.appendingPathComponent("audio", isDirectory: true))
     }
 
-    /// Pure testable logic: copy a legacy FILE → target if target doesn't have a file yet.
+    /// Crash-safe copy: stage to a temp sibling, then atomically rename into place. A crash (or full
+    /// disk) mid-copy leaves only the `.migrating` staging file — NEVER a truncated `target` — so the
+    /// "target missing" guard correctly retries next launch instead of treating a partial file as
+    /// already-migrated. Any stale staging from a prior crash is cleared first.
+    private static func atomicCopy(_ legacy: URL, to target: URL) {
+        let fm = FileManager.default
+        let staging = target.appendingPathExtension("migrating")
+        try? fm.removeItem(at: staging)
+        do {
+            try fm.copyItem(at: legacy, to: staging)
+            try fm.moveItem(at: staging, to: target)
+        } catch {
+            try? fm.removeItem(at: staging)
+        }
+    }
+
+    /// Pure testable logic: copy a legacy FILE → target if target doesn't have a file yet (atomic).
     static func migrate(target: URL, legacy: URL) {
         let fm = FileManager.default
         guard !fm.fileExists(atPath: target.path), fm.fileExists(atPath: legacy.path) else { return }
         try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? fm.copyItem(at: legacy, to: target)
+        atomicCopy(legacy, to: target)
     }
 
-    /// Copy a legacy DIRECTORY → target if target doesn't exist yet (idempotent, best-effort).
+    /// Copy a legacy DIRECTORY → target if target doesn't exist yet (idempotent, best-effort, atomic).
     static func migrateDir(target: URL, legacy: URL) {
         let fm = FileManager.default
         var isDir: ObjCBool = false
         guard !fm.fileExists(atPath: target.path),
               fm.fileExists(atPath: legacy.path, isDirectory: &isDir), isDir.boolValue else { return }
         try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? fm.copyItem(at: legacy, to: target)
+        atomicCopy(legacy, to: target)
     }
 
     static func save(_ items: [TranscriptItem]) {
