@@ -122,12 +122,11 @@ extension AppModel {
         }
         defer { if let tempWav { try? FileManager.default.removeItem(at: tempWav) } }
 
-        // A long single-file recording → chunked pipeline: bounded memory + real per-chunk progress.
-        // Needs ffmpeg to split; folder batches and the no-ffmpeg case fall through to single-pass.
-        if batch == nil,
-           let dur = AudioConverter.duration(of: decodePath),
-           AudioChunker.isLong(durationSec: dur),
-           AudioConverter.isFFmpegAvailable {
+        // A long recording → chunked pipeline: bounded memory + real per-chunk progress, EVEN inside a
+        // folder batch (a long file mustn't bypass chunking just because it was dropped with others).
+        // Needs ffmpeg to split; the no-ffmpeg / unknown-duration cases fall through to single-pass.
+        if let dur = AudioConverter.duration(of: decodePath),
+           AudioChunker.shouldChunk(durationSec: dur, ffmpegAvailable: AudioConverter.isFFmpegAvailable) {
             return try await transcribeChunked(source: URL(fileURLWithPath: decodePath),
                                                model: model, audioDuration: dur)
         }

@@ -19,6 +19,13 @@ enum AudioChunker {
         durationSec > threshold
     }
 
+    /// Whether to use the chunked pipeline: a long recording with ffmpeg available. Deliberately
+    /// INDEPENDENT of batch membership — a long file dropped alongside others must still be chunked
+    /// (bounded memory), not run whole in a single pass.
+    static func shouldChunk(durationSec: Double, ffmpegAvailable: Bool) -> Bool {
+        ffmpegAvailable && isLong(durationSec: durationSec)
+    }
+
     /// Number of chunks for a given duration (always ≥ 1).
     static func chunkCount(durationSec: Double, chunkLength: Double = chunkLengthSec) -> Int {
         guard durationSec > 0, chunkLength > 0 else { return 1 }

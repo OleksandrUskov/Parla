@@ -902,6 +902,12 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(AudioChunker.isLong(durationSec: 0))
     }
 
+    func testShouldChunkIsBatchIndependent() {
+        XCTAssertTrue(AudioChunker.shouldChunk(durationSec: 700, ffmpegAvailable: true))    // long + ffmpeg → chunk (even in a batch)
+        XCTAssertFalse(AudioChunker.shouldChunk(durationSec: 700, ffmpegAvailable: false))  // no ffmpeg → single-pass
+        XCTAssertFalse(AudioChunker.shouldChunk(durationSec: 300, ffmpegAvailable: true))   // short → single-pass
+    }
+
     func testOffsetSegments() {
         let segs = [Segment(start: 0, end: 5, text: "a"), Segment(start: 5, end: 10, text: "b")]
         let offset = AudioChunker.offsetSegments(segs, chunkIndex: 2, chunkLength: 120)
