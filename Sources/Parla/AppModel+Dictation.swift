@@ -21,6 +21,34 @@ extension AppModel {
         else { startDictation() }
     }
 
+    // MARK: Hotkey routing (toggle vs hold-to-talk)
+
+    enum DictationKeyEdge { case down, up }
+    enum DictationAction: Equatable { case start, stop, toggle, ignore }
+
+    /// Pure routing (unit-tested): which action a hotkey edge maps to under the current mode.
+    /// Toggle mode acts on key-UP (press to start/stop); hold mode starts on key-DOWN, stops on key-UP.
+    nonisolated static func dictationAction(for edge: DictationKeyEdge, mode: DictationMode) -> DictationAction {
+        switch (edge, mode) {
+        case (.down, .hold):   return .start
+        case (.down, .toggle): return .ignore
+        case (.up, .hold):     return .stop
+        case (.up, .toggle):   return .toggle
+        }
+    }
+
+    func dictationKeyDown() { perform(Self.dictationAction(for: .down, mode: dictationMode)) }
+    func dictationKeyUp()   { perform(Self.dictationAction(for: .up, mode: dictationMode)) }
+
+    private func perform(_ action: DictationAction) {
+        switch action {
+        case .start:  startDictation()
+        case .stop:   stopAndTranscribeDictation()
+        case .toggle: toggleDictation()
+        case .ignore: break
+        }
+    }
+
     /// Begin recording after a mic-permission check. Single-flight: refuses while busy/downloading.
     func startDictation() {
         guard canDictate else { QuickToast.shared.show(L("toast.busy")); return }

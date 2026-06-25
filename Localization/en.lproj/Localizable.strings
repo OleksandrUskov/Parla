@@ -154,6 +154,9 @@
 "settings.section.dictation"   = "Dictation";
 "settings.dictation.toggle"    = "Global hotkey — dictate with your voice";
 "settings.dictation.recorder"  = "Shortcut:";
+"settings.dictation.mode"        = "Trigger";
+"settings.dictation.mode.toggle" = "Press to start / stop";
+"settings.dictation.mode.hold"   = "Hold to talk";
 "settings.dictation.keepaudio" = "Keep the recorded audio for playback";
 "settings.dictation.paste"         = "Paste into the active app after dictating";
 "settings.dictation.paste.caption" = "Needs Accessibility — Parla asks once, the first time you use it. This is the only feature that uses it. With it off, the text is simply copied to your clipboard.";

@@ -841,6 +841,21 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    func testDictationHotkeyRouting() {
+        // Toggle mode: act on key-UP only.
+        XCTAssertEqual(AppModel.dictationAction(for: .down, mode: .toggle), .ignore)
+        XCTAssertEqual(AppModel.dictationAction(for: .up, mode: .toggle), .toggle)
+        // Hold-to-talk: start on key-DOWN, stop on key-UP.
+        XCTAssertEqual(AppModel.dictationAction(for: .down, mode: .hold), .start)
+        XCTAssertEqual(AppModel.dictationAction(for: .up, mode: .hold), .stop)
+    }
+
+    func testDictationModeDefaultsToToggle() {
+        XCTAssertEqual(DictationMode(rawValue: "") ?? .toggle, .toggle)
+        XCTAssertEqual(DictationMode(rawValue: "hold"), .hold)
+        XCTAssertEqual(DictationMode.allCases.count, 2)
+    }
+
     // MARK: AVFoundation-direct decode path (BUNDLE_FFMPEG P0)
 
     func testAvDecodableMirrorsDirectlyPlayable() {

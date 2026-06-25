@@ -3,6 +3,13 @@ import AppKit
 import UniformTypeIdentifiers
 import WhisperKit
 
+/// How the dictation hotkey behaves: press once to start/stop (default) vs hold-to-talk (press-and-hold).
+enum DictationMode: String, CaseIterable, Identifiable {
+    case toggle, hold
+    var id: String { rawValue }
+    var label: String { self == .hold ? L("settings.dictation.mode.hold") : L("settings.dictation.mode.toggle") }
+}
+
 /// The single `@Observable` view-model SwiftUI binds to. STATE and SETTINGS live here;
 /// behavior is split across domain extensions:
 /// `AppModel+Models` · `+Transcription` · `+FolderWatch` · `+QuickActions` · `+History` · `+AudioCache`.
@@ -42,6 +49,8 @@ final class AppModel {
     var keepDictationAudio: Bool { didSet { UserDefaults.standard.set(keepDictationAudio, forKey: Keys.keepDictationAudio) } }
     /// Paste the dictation result into the frontmost app (the ONLY Accessibility feature — off by default).
     var dictationPasteIntoFrontmost: Bool { didSet { UserDefaults.standard.set(dictationPasteIntoFrontmost, forKey: Keys.dictationPaste) } }
+    /// Hotkey behavior: press-to-toggle (default) vs hold-to-talk.
+    var dictationMode: DictationMode { didSet { UserDefaults.standard.set(dictationMode.rawValue, forKey: Keys.dictationMode) } }
 
     /// UI language — separate from the speech-recognition language (`language`). `.system` follows the OS.
     var uiLanguage: UILanguage {
@@ -98,6 +107,7 @@ final class AppModel {
         static let keepDictationAudio = "keepDictationAudio"
         static let dictationPaste = "dictationPasteIntoFrontmost"
         static let dictationPasteAXPrompted = "dictationPasteAXPrompted"   // one-time AX prompt guard
+        static let dictationMode = "dictationMode"
         static let lastBookmark = "lastSourceBookmark"
         static let uiLanguage = "uiLanguage"
     }
@@ -118,6 +128,7 @@ final class AppModel {
         dictationHotkeyEnabled = d.bool(forKey: Keys.dictationHotkey)   // opt-in, off by default
         keepDictationAudio = d.bool(forKey: Keys.keepDictationAudio)    // off — dictation audio is throwaway
         dictationPasteIntoFrontmost = d.bool(forKey: Keys.dictationPaste)   // off — the only Accessibility feature
+        dictationMode = DictationMode(rawValue: d.string(forKey: Keys.dictationMode) ?? "") ?? .toggle
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()

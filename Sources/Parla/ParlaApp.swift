@@ -66,7 +66,9 @@ struct ParlaApp: App {
         if !hotkeyInstalled {
             hotkeyInstalled = true
             KeyboardShortcuts.onKeyUp(for: .quickTranscribe) { model.quickTranscribeFromClipboard() }
-            KeyboardShortcuts.onKeyUp(for: .dictate) { model.toggleDictation() }
+            // Both edges → mode-routed (toggle acts on key-up; hold-to-talk starts on down, stops on up).
+            KeyboardShortcuts.onKeyDown(for: .dictate) { model.dictationKeyDown() }
+            KeyboardShortcuts.onKeyUp(for: .dictate) { model.dictationKeyUp() }
         }
         syncHotkey()
     }
