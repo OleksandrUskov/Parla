@@ -79,6 +79,11 @@ struct SettingsView: View {
                 Toggle(L("settings.dictation.toggle"), isOn: $model.dictationHotkeyEnabled)
                 KeyboardShortcuts.Recorder(L("settings.dictation.recorder"), name: .dictate)
                 Toggle(L("settings.dictation.keepaudio"), isOn: $model.keepDictationAudio)
+                Toggle(L("settings.dictation.paste"), isOn: $model.dictationPasteIntoFrontmost)
+                if model.dictationPasteIntoFrontmost {
+                    Text(L("settings.dictation.paste.caption"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Text(L("settings.dictation.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }

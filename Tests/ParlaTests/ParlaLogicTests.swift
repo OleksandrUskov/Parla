@@ -1,6 +1,7 @@
 import XCTest
 import os
 import AVFoundation
+import AppKit
 @testable import Parla
 
 /// Unit tests for pure logic (no WhisperKit/audio/UI):
@@ -772,6 +773,72 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(m.isRecordingDictation)
         XCTAssertTrue(m.history.isEmpty)
         if case .idle = m.phase {} else { XCTFail("phase should stay .idle on a pre-capture cancel") }
+    }
+
+    @MainActor func testDictationPasteDisabledNeverPastes() async {
+        await withTemporaryHistoryStoreAsync {
+            var pasteCalls = 0
+            let fake = FakeEngine(results: [EngineResult(text: "вставь меня", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = true
+            m.dictationPasteIntoFrontmost = false
+            m.attemptPaste = { pasteCalls += 1; return true }
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.finishDictation(wav: wav)
+
+            XCTAssertEqual(pasteCalls, 0)                    // paste off → never synthesizes ⌘V
+            XCTAssertEqual(m.history.first?.text, "вставь меня")
+            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "вставь меня")   // text on the clipboard
+        }
+    }
+
+    @MainActor func testDictationPasteEnabledAttemptsAndSetsClipboard() async {
+        await withTemporaryHistoryStoreAsync {
+            var pasteCalls = 0
+            let fake = FakeEngine(results: [EngineResult(text: "наберись", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false                              // even with autoCopy off, paste must put text on the clipboard
+            m.dictationPasteIntoFrontmost = true
+            m.attemptPaste = { pasteCalls += 1; return true }   // simulate Accessibility-trusted + pasted
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.finishDictation(wav: wav)
+
+            XCTAssertEqual(pasteCalls, 1)
+            XCTAssertEqual(m.history.first?.text, "наберись")
+            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "наберись")   // clipboard set for the ⌘V
+        }
+    }
+
+    @MainActor func testDictationPasteUntrustedFallsBackToClipboard() async {
+        await withTemporaryHistoryStoreAsync {
+            var pasteCalls = 0
+            let fake = FakeEngine(results: [EngineResult(text: "запас", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            m.dictationPasteIntoFrontmost = true
+            m.attemptPaste = { pasteCalls += 1; return false }   // not Accessibility-trusted → no paste, graceful fallback
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.finishDictation(wav: wav)
+
+            XCTAssertEqual(pasteCalls, 1)                    // attempted, returned false
+            XCTAssertEqual(m.history.first?.text, "запас")   // record still saved
+            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "запас")   // text remains on the clipboard
+        }
     }
 
     // MARK: AVFoundation-direct decode path (BUNDLE_FFMPEG P0)

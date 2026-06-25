@@ -40,6 +40,8 @@ final class AppModel {
     // Dictation (feature MIC_DICTATION) — opt-in hotkey + whether to keep the recorded audio.
     var dictationHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(dictationHotkeyEnabled, forKey: Keys.dictationHotkey) } }
     var keepDictationAudio: Bool { didSet { UserDefaults.standard.set(keepDictationAudio, forKey: Keys.keepDictationAudio) } }
+    /// Paste the dictation result into the frontmost app (the ONLY Accessibility feature — off by default).
+    var dictationPasteIntoFrontmost: Bool { didSet { UserDefaults.standard.set(dictationPasteIntoFrontmost, forKey: Keys.dictationPaste) } }
 
     /// UI language — separate from the speech-recognition language (`language`). `.system` follows the OS.
     var uiLanguage: UILanguage {
@@ -76,6 +78,10 @@ final class AppModel {
         await BatchNotifier.post(succeeded: $0, failed: $1)
     }
 
+    /// Paste-into-frontmost (test seam): real CGEvent ⌘V in production; tests inject a recorder.
+    /// Returns whether a synthetic paste was actually performed (false → not Accessibility-trusted).
+    var attemptPaste: @MainActor () -> Bool = { PasteService.pasteIntoFrontmost() }
+
     enum Keys {
         static let model = "model"
         static let language = "language"
@@ -90,6 +96,7 @@ final class AppModel {
         static let hotkey = "globalHotkeyEnabled"
         static let dictationHotkey = "dictationHotkeyEnabled"
         static let keepDictationAudio = "keepDictationAudio"
+        static let dictationPaste = "dictationPasteIntoFrontmost"
         static let lastBookmark = "lastSourceBookmark"
         static let uiLanguage = "uiLanguage"
     }
@@ -109,6 +116,7 @@ final class AppModel {
         globalHotkeyEnabled = d.bool(forKey: Keys.hotkey)   // opt-in, off by default
         dictationHotkeyEnabled = d.bool(forKey: Keys.dictationHotkey)   // opt-in, off by default
         keepDictationAudio = d.bool(forKey: Keys.keepDictationAudio)    // off — dictation audio is throwaway
+        dictationPasteIntoFrontmost = d.bool(forKey: Keys.dictationPaste)   // off — the only Accessibility feature
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()

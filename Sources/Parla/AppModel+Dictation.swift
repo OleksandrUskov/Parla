@@ -104,7 +104,8 @@ extension AppModel {
             history.insert(item, at: 0)
             selection = item.id
             HistoryStore.save(history)
-            if autoCopy { copy(item.text) }
+            // Paste-into-frontmost (opt-in) needs the text on the clipboard for the synthetic ⌘V.
+            if autoCopy || dictationPasteIntoFrontmost { copy(item.text) }
             if keepDictationAudio {
                 let kept = await Self.keepAudio(from: wav, id: item.id)
                 if (kept.file != nil || kept.playable != nil),
@@ -116,7 +117,8 @@ extension AppModel {
             }
             phase = .idle
             if soundOnComplete { CompletionSound.success() }
-            dictationToast(empty: false, failed: false)
+            if dictationPasteIntoFrontmost { pasteDictationResult() }
+            else { dictationToast(empty: false, failed: false) }
         } catch {
             // Dictation is toast-driven (no in-window chip): report via toast + sound and leave phase .idle,
             // so we don't strand a `.failed` chip whose "Try again" would replay an unrelated earlier drop.
@@ -125,6 +127,18 @@ extension AppModel {
             dictationToast(empty: false, failed: true)
         }
         await pruneAudioCache()
+    }
+
+    /// Opt-in: paste the dictation into the frontmost app. The text is already on the clipboard, so if
+    /// Accessibility isn't granted we fall back to a "it's on your clipboard" note + a one-time AX prompt
+    /// (never auto-prompted — only when the user has enabled paste and a dictation actually completes).
+    private func pasteDictationResult() {
+        if attemptPaste() {
+            dictationToast(empty: false, failed: false)   // pasted into the active app — normal done signal
+        } else {
+            PasteService.requestAccessibility()           // not trusted → prompt once (no-op under tests)
+            QuickToast.shared.show(L("toast.dictation.paste.needsax"))
+        }
     }
 
     private func dictationToast(empty: Bool, failed: Bool) {

@@ -24,7 +24,7 @@ running OpenAI Whisper on the Apple Neural Engine. Nothing leaves your machine.
 - 👁 **Folder watch** — point Parla at a folder and new audio is transcribed automatically, hands-free
 - 📦 **Batch progress** “N of M” + a completion notification when a long job finishes in the background
 - ⌨️ **Quick-transcribe from the menu bar** — “from clipboard”, “repeat last file”, popover drop, or an optional **rebindable** global hotkey (default ⌃⌥⌘T, no Accessibility permission)
-- 🎙️ **Live mic dictation** *(opt-in)* — press a hotkey (default ⌃⌥⌘D), speak, press again; Parla transcribes it on-device and copies the text. Microphone permission only, **no Accessibility**
+- 🎙️ **Live mic dictation** *(opt-in)* — press a hotkey (default ⌃⌥⌘D), speak, press again; Parla transcribes it on-device and copies the text. Microphone permission only (an optional “paste into the active app” is the one feature that uses Accessibility)
 - 🧩 **Model manager** — pick / download / **delete** models with progress, on-disk size, and a recommended pick
 - 🔎 **Searchable history** + 📤 **export** — each transcript to **SRT / VTT / JSON / TXT / Markdown**, or the whole history to one Markdown backup
 - 📖 **Long recordings** — files over ~10 min are chunked (bounded memory + per-chunk progress) and shown as collapsible chapters
@@ -108,7 +108,7 @@ Everything beyond plain transcription is **opt-in** and asks for the minimum mac
 | Menu-bar quick actions (clipboard / last file / popover drop) | **none** | reads a file URL from the clipboard only when you click or drop |
 | Folder watch | folder access (macOS may prompt once for Downloads/Desktop/Documents) | only **new** files that appear *after* you turn it on are processed |
 | Global hotkey *(off by default, rebindable, default ⌃⌥⌘T)* | **none** | uses Carbon `RegisterEventHotKey` (via [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts)) — registers one chosen combo, **no Accessibility, no system prompt, no keystroke logging**. The menu-bar buttons work too |
-| Live mic dictation *(off by default, rebindable, default ⌃⌥⌘D)* | **Microphone** | records the mic **only while you dictate**, transcribes on-device, copies the text — audio never leaves your Mac. Uses the Microphone permission only (**no Accessibility**) |
+| Live mic dictation *(off by default, rebindable, default ⌃⌥⌘D)* | **Microphone** (+ **Accessibility** only if you enable auto-paste) | records the mic **only while you dictate**, transcribes on-device, copies the text — audio never leaves your Mac. The optional “paste into the active app” is the *only* feature that uses Accessibility (off by default; without it the text is just on your clipboard — one synthetic ⌘V, **no event tap, no key logging**) |
 | Services menu · `parla://` URL scheme · Shortcuts / Spotlight actions | **none** | transcribe **existing local files only**, read-only — the same on-device pipeline as a drag-and-drop |
 
 Parla is **not sandboxed** (it shells out to `ffmpeg`), so it ships outside the Mac App Store —

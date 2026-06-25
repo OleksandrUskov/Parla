@@ -155,7 +155,10 @@
 "settings.dictation.toggle"    = "Global hotkey — dictate with your voice";
 "settings.dictation.recorder"  = "Shortcut:";
 "settings.dictation.keepaudio" = "Keep the recorded audio for playback";
-"settings.dictation.hint"      = "Press the shortcut (default ⌃⌥⌘D) to start recording from your microphone, press it again to stop — Parla transcribes on-device and copies the text. Audio never leaves your Mac. Dictation uses only the Microphone permission (no Accessibility).";
+"settings.dictation.paste"         = "Paste into the active app after dictating";
+"settings.dictation.paste.caption" = "Needs Accessibility — Parla asks once, the first time you use it. This is the only feature that uses it. With it off, the text is simply copied to your clipboard.";
+"settings.dictation.hint"          = "Press the shortcut (default ⌃⌥⌘D) to start recording from your microphone, press it again to stop — Parla transcribes on-device and copies the text. Audio never leaves your Mac. Recording needs only the Microphone permission; the optional paste-into-the-active-app uses Accessibility.";
+"toast.dictation.paste.needsax"    = "Turn on Accessibility for Parla to auto-paste — the text is on your clipboard meanwhile";
 
 /* Errors */
 "error.drop.failed"         = "Couldn't read the dropped file";
