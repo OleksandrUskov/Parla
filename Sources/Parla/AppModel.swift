@@ -166,7 +166,13 @@ final class AppModel {
 
     /// Quitting now would discard work in flight (a transcription job — only saved at the end —
     /// or an in-progress model download). The AppDelegate gates termination on this.
-    var shouldConfirmQuit: Bool { isBusy || downloadingModel != nil }
+    /// A hybrid refine does NOT count: its streamed transcript is already saved to disk; only the optional
+    /// accuracy upgrade would be skipped, which is fine to abandon — so it must not trigger the "work will be
+    /// lost" prompt (it still holds `isBusy` to block concurrent jobs).
+    var shouldConfirmQuit: Bool {
+        if recordingStartedAt != nil || downloadingModel != nil { return true }
+        return isBusy && refiningDictations.isEmpty
+    }
 
     /// Item for the right pane — taken from the VISIBLE (filtered) list, so the pane and
     /// the sidebar don't diverge while a search is active.

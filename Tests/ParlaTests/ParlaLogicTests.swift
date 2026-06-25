@@ -914,6 +914,19 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(m.isBusy)           // released
     }
 
+    /// A refine holds the busy lane but must NOT trigger the quit "work will be lost" prompt — its streamed
+    /// transcript is already on disk; only the optional accuracy upgrade is in flight.
+    @MainActor func testRefineDoesNotTriggerQuitConfirm() {
+        let m = AppModel(engine: FakeEngine())
+        m.history = []
+        XCTAssertFalse(m.shouldConfirmQuit)
+        m.refiningDictations.insert(UUID())
+        XCTAssertTrue(m.isBusy)                  // still blocks concurrent jobs…
+        XCTAssertFalse(m.shouldConfirmQuit)      // …but quitting is safe (text already saved)
+        m.recordingStartedAt = Date()
+        XCTAssertTrue(m.shouldConfirmQuit)       // an actual recording DOES warn
+    }
+
     /// keepDictationAudio must attach the audio even when the full decode came back empty (the record exists
     /// with the streamed text either way).
     @MainActor func testRefineDictationKeepsAudioWhenDecodeEmpty() async {
