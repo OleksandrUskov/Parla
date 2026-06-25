@@ -14,18 +14,32 @@ struct DropZoneView: View {
                 .strokeBorder(Brand.gradient.opacity(targeted ? 0.95 : 0.4),
                               style: StrokeStyle(lineWidth: 2, dash: [9, 7]))
 
-            VStack(spacing: 10) {
-                Image(systemName: model.isBusy ? "waveform" : "waveform.badge.plus")
-                    .font(.system(size: 40, weight: .semibold))
-                    .foregroundStyle(Brand.gradient)
+            VStack(spacing: 9) {
+                Image(systemName: dropIcon)
+                    .font(.system(size: 38, weight: .semibold))
+                    .foregroundStyle(model.isRecordingDictation ? AnyShapeStyle(.red) : AnyShapeStyle(Brand.gradient))
                     .symbolEffect(.pulse, isActive: model.isBusy || targeted)
-                Text(model.isBusy ? L("drop.working") : L("drop.prompt"))
+                Text(dropTitle)
                     .font(.system(.headline, design: .rounded))
                 if !model.isBusy {
                     Button(L("drop.choose")) { showImporter = true }
                         .buttonStyle(.plain)
                         .font(.subheadline)
                         .foregroundStyle(Brand.accent)
+
+                    // Dictate with the mic — the visible, discoverable entry point (the hotkey is opt-in).
+                    Rectangle().fill(.secondary.opacity(0.25)).frame(width: 64, height: 1).padding(.vertical, 1)
+                    Button { model.toggleDictation() } label: {
+                        Label(L("drop.dictate"), systemImage: "mic.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 16).padding(.vertical, 7)
+                            .background(Brand.gradient, in: Capsule())
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!model.canDictate)
+                    .help(Text(L("drop.dictate.help")))
+                    Text(L("drop.dictate.hint")).font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }
@@ -54,6 +68,15 @@ struct DropZoneView: View {
         }
         .animation(.spring(duration: 0.25), value: targeted)
         .animation(.easeInOut(duration: 0.2), value: model.isBusy)
+    }
+
+    private var dropIcon: String {
+        if model.isRecordingDictation { return "mic.circle.fill" }
+        return model.isBusy ? "waveform" : "waveform.badge.plus"
+    }
+    private var dropTitle: String {
+        if model.isRecordingDictation { return L("drop.listening") }
+        return model.isBusy ? L("drop.working") : L("drop.prompt")
     }
 
     /// Reliably extracts a file URL from an NSItemProvider (Finder/any source).

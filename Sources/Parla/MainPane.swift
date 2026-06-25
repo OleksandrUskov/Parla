@@ -6,7 +6,7 @@ struct MainPane: View {
     var body: some View {
         VStack(spacing: 18) {
             BrandHeader()
-            DropZoneView().frame(height: 168)
+            DropZoneView().frame(height: 210)
             StatusBar()
             if let item = model.selectedItem {
                 TranscriptCard(item: item)

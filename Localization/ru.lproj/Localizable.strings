@@ -22,6 +22,10 @@
 "drop.working" = "Работаю…";
 "drop.prompt"  = "Перетащи голосовое сюда";
 "drop.choose"  = "или выбери файл…";
+"drop.listening" = "Слушаю…";
+"drop.dictate" = "Надиктовать";
+"drop.dictate.help" = "Запись с микрофона и распознавание на устройстве (⌃⌥⌘D). Нажми ещё раз — стоп.";
+"drop.dictate.hint" = "Сохранится в Историю и скопируется в буфер";
 
 /* Header / watch chip */
 "header.translate.help"     = "Результат переводится в английский";
