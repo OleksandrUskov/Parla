@@ -123,6 +123,14 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(AppModel.shouldPrewarmModel(dictationHotkeyEnabled: false, modelDownloaded: false))
     }
 
+    /// Streaming language is pinned after the first detection so short windows don't flap (RU/UK guardrail).
+    func testLockedLanguagePinsAfterFirstDetect() {
+        XCTAssertEqual(AppModel.lockedLanguage(current: "ru", detected: "en"), "ru")   // explicit / already-locked wins
+        XCTAssertEqual(AppModel.lockedLanguage(current: nil, detected: "ru"), "ru")    // Auto → lock the first detection
+        XCTAssertNil(AppModel.lockedLanguage(current: nil, detected: ""))              // nothing detected yet → stay Auto
+        XCTAssertEqual(AppModel.lockedLanguage(current: "uk", detected: ""), "uk")     // keep current on an empty detect
+    }
+
     // MARK: Streaming reconciler (MIC_DICTATION P3c)
 
     private func seg(_ start: Double, _ end: Double, _ text: String) -> Segment {

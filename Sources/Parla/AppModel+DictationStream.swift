@@ -41,6 +41,13 @@ extension AppModel {
     /// frozen, decoding-nothing preview (the loop only starts at startDictation when streaming was on).
     var isStreamingDictation: Bool { streamingTask != nil }
 
+    /// Pure (unit-tested): the language to use for the next streaming window. An explicit `current` is kept;
+    /// on "Auto" (`current == nil`) the first non-empty `detected` language is pinned so later short windows
+    /// don't re-detect and flap (the RU/UK guardrail — never auto-detect per window).
+    nonisolated static func lockedLanguage(current: String?, detected: String) -> String? {
+        current ?? (detected.isEmpty ? nil : detected)
+    }
+
     /// Start the live decode loop for `recorder`. Single-flight (cancels any prior loop). Best-effort: a
     /// transient decode error just skips a frame; a missing model means no preview (the final
     /// `finishDictation` surfaces the real error).
@@ -56,6 +63,11 @@ extension AppModel {
             // Pre-warm the (already-downloaded) model so the first window isn't a load stall.
             try? await self?.engine.ensureLoaded(model: model, progress: { _ in })
             var reconciler = StreamingReconciler()
+            // Lock the language after the first detection: on "Auto" (lang == nil) short streaming windows
+            // otherwise re-detect every tick and can flap (RU↔EN), which is a big chunk of the RU garbage.
+            // Once a window comes back with a language, pin it for all later windows. (If the user set a
+            // language explicitly, it's already pinned.)
+            var lockedLang = lang
             while !Task.isCancelled {
                 try? await Task.sleep(for: AppModel.streamingInterval)
                 // Re-validate after every suspension: the recording may have stopped, or a NEW dictation may
@@ -75,9 +87,10 @@ extension AppModel {
                 let windowStart = Double(from) / AppModel.streamSampleRate
                 let flush = Double(window.count) / AppModel.streamSampleRate >= AppModel.streamFlushSpan
 
-                guard let r = try? await self.engine.transcribe(samples: window, language: lang, model: model)
+                guard let r = try? await self.engine.transcribe(samples: window, language: lockedLang, model: model)
                 else { continue }   // transient decode error → keep streaming
                 guard !Task.isCancelled, self.recorder === recorder else { break }
+                lockedLang = AppModel.lockedLanguage(current: lockedLang, detected: r.language)   // pin after 1st detect
 
                 reconciler.ingest(segments: r.segments, windowStart: windowStart, flush: flush)
                 self.dictationConfirmedText = reconciler.confirmedText
