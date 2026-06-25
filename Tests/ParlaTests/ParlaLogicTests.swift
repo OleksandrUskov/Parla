@@ -736,6 +736,29 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(vttTimecode(3661.5), "01:01:01.500")
     }
 
+    func testSubtitleTimecodeHandlesNonFinite() {
+        // NaN/±inf must NOT trap Int(_:) and kill the export — clamp to zero
+        XCTAssertEqual(srtTimecode(.nan), "00:00:00,000")
+        XCTAssertEqual(srtTimecode(.infinity), "00:00:00,000")
+        XCTAssertEqual(vttTimecode(-.infinity), "00:00:00.000")
+    }
+
+    func testCollapseBlankLines() {
+        XCTAssertEqual(collapseBlankLines("a\n\nb"), "a\nb")       // blank line → single break
+        XCTAssertEqual(collapseBlankLines("a\n \nb"), "a\nb")      // whitespace-only line too
+        XCTAssertEqual(collapseBlankLines("a\n\n\nb"), "a\nb")     // run of blanks
+        XCTAssertEqual(collapseBlankLines("a\nb"), "a\nb")         // single break preserved
+        XCTAssertEqual(collapseBlankLines("solo"), "solo")
+    }
+
+    func testExportEditedCueHasNoBlankLine() {
+        // an edited transcript with a paragraph break must not break SRT/VTT cue framing
+        let item = makeItem(text: "line one\n\nline two", segments: [], edited: true)
+        XCTAssertEqual(exportSRT(item), "1\n00:00:00,000 --> 00:00:01,000\nline one\nline two\n\n")
+        XCTAssertFalse(exportSRT(item).contains("line one\n\nline two"))
+        XCTAssertTrue(exportVTT(item).contains("line one\nline two\n"))
+    }
+
     func testExportSRT() {
         let item = makeItem(text: "full", segments: [
             Segment(start: 0, end: 2, text: "first"),

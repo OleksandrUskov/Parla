@@ -45,7 +45,8 @@ func srtTimecode(_ seconds: Double) -> String { subtitleTimecode(seconds, msSepa
 func vttTimecode(_ seconds: Double) -> String { subtitleTimecode(seconds, msSeparator: ".") }
 
 private func subtitleTimecode(_ seconds: Double, msSeparator: String) -> String {
-    let totalMs = max(0, Int((seconds * 1000).rounded()))   // clamp negatives, round (not floor)
+    let safe = seconds.isFinite ? seconds : 0               // NaN/±inf would trap Int(_:) → kill the export
+    let totalMs = max(0, Int((safe * 1000).rounded()))      // clamp negatives, round (not floor)
     let ms = totalMs % 1000
     let totalSec = totalMs / 1000
     let s = totalSec % 60
@@ -56,21 +57,29 @@ private func subtitleTimecode(_ seconds: Double, msSeparator: String) -> String 
 
 // MARK: - Cue derivation
 
+/// Collapse blank lines inside a cue body. A BLANK LINE terminates a cue in both SubRip and WebVTT,
+/// so an edited transcript containing a paragraph break would emit a structurally-broken subtitle
+/// file (the text after the gap is parsed as a new, index-less cue). Single line breaks are kept.
+func collapseBlankLines(_ s: String) -> String {
+    s.replacingOccurrences(of: #"\n[ \t]*\n+"#, with: "\n", options: .regularExpression)
+}
+
 /// The cues to render as subtitles. Mirrors `display(timestamps:)`:
 /// - drops empty-text segments,
 /// - for an EDITED record (text no longer matches the segments) degrades to ONE full-text cue
 ///   spanning `[0, durationSec]` — never emit mismatched timecodes,
-/// - clamps each cue so `start ≥ 0` and `end ≥ start` (no reversed `-->` ranges).
+/// - clamps each cue so `start ≥ 0` and `end ≥ start` (no reversed `-->` ranges),
+/// - collapses blank lines in each cue body (a blank line would break the cue framing).
 func subtitleCues(_ item: TranscriptItem) -> [(start: Double, end: Double, text: String)] {
     if item.isEdited || item.segments.isEmpty {
-        let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = collapseBlankLines(item.text.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !text.isEmpty else { return [] }
         return [(0, max(0, item.durationSec), text)]
     }
     return item.segments
         .map { seg -> (start: Double, end: Double, text: String) in
             let start = max(0, seg.start)
-            return (start: start, end: max(start, seg.end), text: seg.cleanText)   // strip WhisperKit tokens
+            return (start: start, end: max(start, seg.end), text: collapseBlankLines(seg.cleanText))   // strip WhisperKit tokens
         }
         .filter { !$0.text.isEmpty }   // a tokens-only segment becomes empty after cleaning → drop it
 }
