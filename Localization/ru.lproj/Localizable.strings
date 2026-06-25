@@ -57,7 +57,7 @@
 
 /* Status bar */
 "status.preparing"    = "Готовлю %@…";
-"status.loadingmodel" = "Загружаю модель в память… (первый раз — дольше)";
+"status.loadingmodel" = "Загружаю модель в память…";
 "status.transcribing" = "Распознаю %@…";
 "status.downloading"  = "Скачиваю модель (один раз)… %lld%%";
 
@@ -228,4 +228,4 @@
 "onboarding.ffmpeg.title"   = "Готов к аудио из Telegram";
 "onboarding.ffmpeg.bundled" = "ffmpeg уже встроен — ставить ничего не надо. Ogg/Opus, m4a, mp3, wav и другое работают сразу.";
 "onboarding.start"          = "Начать";
-"status.loadingmodel.firstrun" = "Первый запуск компилирует модель для Apple Neural Engine — это разово, дальше загрузка мгновенная.";
+"status.loadingmodel.firstrun" = "Первый запуск дольше — компилирует модель под Apple Neural Engine (разово). Дальше компиляция пропускается, остаётся только загрузка в память.";

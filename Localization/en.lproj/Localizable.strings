@@ -57,7 +57,7 @@
 
 /* Status bar */
 "status.preparing"    = "Preparing %@…";
-"status.loadingmodel" = "Loading the model into memory… (slower the first time)";
+"status.loadingmodel" = "Loading the model into memory…";
 "status.transcribing" = "Transcribing %@…";
 "status.downloading"  = "Downloading the model (one-time)… %lld%%";
 
@@ -228,4 +228,4 @@
 "onboarding.ffmpeg.title"   = "Ready for Telegram audio";
 "onboarding.ffmpeg.bundled" = "ffmpeg is built in — nothing to install. Ogg/Opus, m4a, mp3, wav and more just work.";
 "onboarding.start"          = "Get started";
-"status.loadingmodel.firstrun" = "First run compiles the model for the Apple Neural Engine — one-time only, later launches are instant.";
+"status.loadingmodel.firstrun" = "First run is slower — it compiles the model for the Apple Neural Engine (one-time). Later launches skip that and just load it into memory.";

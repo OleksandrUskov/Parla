@@ -114,6 +114,15 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(MicRecorder.normalize([]).count, 0)
     }
 
+    /// Launch pre-warm fires only for users who dictate (hotkey on) AND when the model is already on disk
+    /// (never start a download from a pre-warm).
+    func testShouldPrewarmModelGate() {
+        XCTAssertTrue(AppModel.shouldPrewarmModel(dictationHotkeyEnabled: true, modelDownloaded: true))
+        XCTAssertFalse(AppModel.shouldPrewarmModel(dictationHotkeyEnabled: true, modelDownloaded: false))
+        XCTAssertFalse(AppModel.shouldPrewarmModel(dictationHotkeyEnabled: false, modelDownloaded: true))
+        XCTAssertFalse(AppModel.shouldPrewarmModel(dictationHotkeyEnabled: false, modelDownloaded: false))
+    }
+
     // MARK: Streaming reconciler (MIC_DICTATION P3c)
 
     private func seg(_ start: Double, _ end: Double, _ text: String) -> Segment {

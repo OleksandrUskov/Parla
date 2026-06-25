@@ -35,6 +35,7 @@ struct ParlaApp: App {
                     ParlaRuntime.model = model                // app-bound AppIntents reach the live model
                     installHotkeyOnce()                  // install hotkey handler + sync enabled/disabled to the setting
                     model.startWatchingIfEnabled()       // resume folder watching if enabled
+                    model.prewarmDictationModel()        // load the model into memory now if the user dictates → instant first dictation
                     await model.pruneAudioCache()        // remove orphans + old audio beyond the limit
                     await model.refreshModels()
                 }

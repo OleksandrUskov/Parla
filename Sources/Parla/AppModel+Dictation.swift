@@ -15,6 +15,22 @@ extension AppModel {
     /// (`isBusy` already folds in the recording state).
     var canDictate: Bool { !isBusy && downloadingModel == nil }
 
+    /// Pure gate (unit-tested): pre-warm the model on launch only for users who actually dictate (the
+    /// dictation hotkey is enabled) AND when the model is already on disk (never trigger a download here).
+    nonisolated static func shouldPrewarmModel(dictationHotkeyEnabled: Bool, modelDownloaded: Bool) -> Bool {
+        dictationHotkeyEnabled && modelDownloaded
+    }
+
+    /// Pre-warm the model INTO MEMORY at app launch so the first dictation is instant instead of waiting a few
+    /// seconds for the load. Silent + best-effort; ensureLoaded coalesces, so a dictation that starts mid-warm
+    /// just joins the same load. Gated by `shouldPrewarmModel` (hotkey users, model already downloaded).
+    func prewarmDictationModel() {
+        guard Self.shouldPrewarmModel(dictationHotkeyEnabled: dictationHotkeyEnabled,
+                                      modelDownloaded: TranscriptionEngine.isDownloaded(selectedModel)) else { return }
+        let model = selectedModel
+        Task { try? await engine.ensureLoaded(model: model, progress: { _ in }) }
+    }
+
     /// Hotkey / menu-bar / Settings entry point: start recording, or stop+transcribe if already recording.
     func toggleDictation() {
         if isRecordingDictation { stopAndTranscribeDictation() }
