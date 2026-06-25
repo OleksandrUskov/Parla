@@ -103,6 +103,17 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(fake.transcribeCalls, 1)
     }
 
+    /// The streaming Float feed must be bit-identical to how WhisperKit reads an Int16 WAV (÷32768) — if it
+    /// drifts (e.g. ÷32767), the live path and the file path would decode subtly different samples. The live
+    /// tap itself is manual-only; this pins the one pure piece. (Int16 min −32768 → exactly −1.0.)
+    func testStreamingNormalizeMatchesWhisperKitWavScaling() {
+        XCTAssertEqual(MicRecorder.normalize([0]), [0])
+        XCTAssertEqual(MicRecorder.normalize([-32768]), [-1.0])
+        XCTAssertEqual(MicRecorder.normalize([16384]), [0.5])
+        XCTAssertEqual(MicRecorder.normalize([32767]).first!, 32767.0 / 32768.0, accuracy: 1e-7)
+        XCTAssertEqual(MicRecorder.normalize([]).count, 0)
+    }
+
     // MARK: TranscriptItem
 
     func testDisplayPlain() {

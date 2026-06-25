@@ -34,9 +34,15 @@ final class MicRecorder {
     private let vad: SilenceDetector?                 // nil = VAD off (zero overhead on the audio thread)
     private var onAutoStop: (@MainActor () -> Void)?  // stored so the VAD silence hook can route to it
 
-    init(maxSeconds: TimeInterval = 120, vad: SilenceDetector? = nil) {
+    // Streaming (MIC_DICTATION P3): the live 16 kHz mono Float buffer WhisperKit consumes, shared between
+    // the audio-thread sink (appends) and the main actor (snapshots) via an OSAllocatedUnfairLock — the
+    // same Sendable cross-thread discipline as the VAD hook. nil when not streaming → zero overhead.
+    private let liveBuffer: OSAllocatedUnfairLock<[Float]>?
+
+    init(maxSeconds: TimeInterval = 120, vad: SilenceDetector? = nil, streaming: Bool = false) {
         self.maxSeconds = maxSeconds
         self.vad = vad
+        self.liveBuffer = streaming ? OSAllocatedUnfairLock(initialState: []) : nil
     }
 
     enum Failure: LocalizedError {
@@ -83,7 +89,7 @@ final class MicRecorder {
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.fireAutoStop() } }
         }
         guard let sink = WavSink(url: url, source: inFormat, target: Self.targetFormat,
-                                 detector: vad, onSilence: onSilence) else {
+                                 detector: vad, onSilence: onSilence, liveBuffer: liveBuffer) else {
             throw Failure.sinkSetupFailed
         }
 
@@ -138,6 +144,28 @@ final class MicRecorder {
 
     /// Route the VAD silence signal to the same auto-stop handler the 120 s cap uses. Always on the main actor.
     private func fireAutoStop() { onAutoStop?() }
+
+    // MARK: Streaming (MIC_DICTATION P3) — live Float buffer access
+
+    /// Number of 16 kHz mono Float samples captured so far (0 when not streaming) — drives the orchestrator's
+    /// window cadence. Lock-guarded; safe to read from the main actor while the audio thread appends.
+    var liveSampleCount: Int { liveBuffer?.withLock { $0.count } ?? 0 }
+
+    /// Snapshot copy of the captured Float samples from `start` (sample index) to now; empty when not
+    /// streaming or `start` is past the end. Keep `start` near the tail — the copy runs under the lock the
+    /// audio thread appends through, so a whole-buffer copy could briefly stall capture. The orchestrator
+    /// only ever windows a bounded un-confirmed tail, so the lock is held for sub-millisecond copies.
+    func liveSamples(from start: Int = 0) -> [Float] {
+        guard let liveBuffer else { return [] }
+        return liveBuffer.withLock { buf in start < buf.count ? Array(buf[start...]) : [] }
+    }
+
+    /// 16-bit PCM → Float in [-1, 1), matching how WhisperKit reads an Int16 WAV (÷32768). Pulled out so the
+    /// streaming Float feed is bit-identical to the file path — and unit-testable (the live tap itself isn't).
+    /// `nonisolated`: it's pure and the audio-thread sink calls it off the main actor.
+    nonisolated static func normalize(_ samples: [Int16]) -> [Float] {
+        samples.map { Float($0) / 32768.0 }
+    }
 }
 
 /// Real-time WAV sink: resamples each tap buffer to the target format and appends it to an `AVAudioFile`.
@@ -152,9 +180,11 @@ private final class WavSink {
     private var detector: SilenceDetector?
     private let onSilence: (@Sendable () -> Void)?
     private var firedSilence = false
+    private let liveBuffer: OSAllocatedUnfairLock<[Float]>?   // streaming: mirror frames as Float, else nil
 
     init?(url: URL, source: AVAudioFormat, target: AVAudioFormat,
-          detector: SilenceDetector? = nil, onSilence: (@Sendable () -> Void)? = nil) {
+          detector: SilenceDetector? = nil, onSilence: (@Sendable () -> Void)? = nil,
+          liveBuffer: OSAllocatedUnfairLock<[Float]>? = nil) {
         guard source.sampleRate > 0,
               let converter = AVAudioConverter(from: source, to: target),
               let file = try? AVAudioFile(forWriting: url, settings: target.settings,
@@ -166,6 +196,7 @@ private final class WavSink {
         self.ratio = target.sampleRate / source.sampleRate
         self.detector = detector
         self.onSilence = onSilence
+        self.liveBuffer = liveBuffer
     }
 
     func append(_ input: AVAudioPCMBuffer) {
@@ -199,6 +230,15 @@ private final class WavSink {
         }
         guard status != .error, out.frameLength > 0 else { return }
         try? file.write(from: out)
+
+        // Streaming (opt-in): mirror the just-written 16 kHz mono Int16 frames into the in-memory Float
+        // buffer WhisperKit consumes. Conversion runs lock-free; only the bulk append holds the lock, so
+        // the audio thread is never blocked on the main actor's per-sample work.
+        if let liveBuffer, let i16 = out.int16ChannelData {
+            let chunk = Array(UnsafeBufferPointer(start: i16[0], count: Int(out.frameLength)))   // mono → contiguous
+            let floats = MicRecorder.normalize(chunk)
+            liveBuffer.withLock { $0.append(contentsOf: floats) }
+        }
     }
 
     /// Mean loudness (RMS) of the first channel — 0 if the buffer isn't deinterleaved Float32 (the VAD
