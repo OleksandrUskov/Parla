@@ -30,6 +30,9 @@ enum ModelLoad: Sendable, Equatable {
 protocol TranscribingEngine: Sendable {
     func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws
     func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult
+    /// Streaming seam (MIC_DICTATION P3): decode an in-memory 16 kHz mono Float buffer — no file round-trip.
+    /// The caller owns windowing + absolute-time bookkeeping; returned segment times are buffer-relative.
+    func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult
     func deleteModel(_ name: String) async throws
 }
 
@@ -117,23 +120,45 @@ actor TranscriptionEngine {
         let results: [TranscriptionResult] = try await kit.transcribe(audioPath: wavPath, decodeOptions: options)
         let elapsed = Date().timeIntervalSince(start)
 
+        let mapped = mapResults(results, language: language)
+        // duration = the ACTUAL audio length, not the processing time (`elapsed`). Fall back to the
+        // last segment end, then to elapsed, if the file can't be probed.
+        let audioLen = AudioConverter.duration(of: wavPath) ?? mapped.segments.map(\.end).max() ?? elapsed
+        return EngineResult(text: mapped.text, language: mapped.language,
+                            segments: mapped.segments, duration: audioLen)
+    }
+
+    /// Streaming seam (MIC_DICTATION P3): transcribe an in-memory 16 kHz mono Float buffer — the live
+    /// dictation loop feeds sliding windows straight from the mic tap, no file round-trip. Always
+    /// `.transcribe` (dictation never translates); pass `language` explicitly for RU/UK (auto-detect
+    /// degrades and misclassifies UK as RU). Returned segment times are buffer-relative — the caller
+    /// owns the windowing and the absolute-time offset.
+    func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult {
+        if loadedModel != model || whisperKit == nil {
+            try await ensureLoaded(model: model, progress: { _ in })
+        }
+        guard let kit = whisperKit else { throw EngineError.notLoaded }
+
+        let options = DecodingOptions(task: .transcribe, language: language, detectLanguage: language == nil)
+        let results: [TranscriptionResult] = try await kit.transcribe(audioArray: samples, decodeOptions: options)
+        let mapped = mapResults(results, language: language)
+        let duration = Double(samples.count) / 16_000.0   // 16 kHz mono → exact length, no file to probe
+        return EngineResult(text: mapped.text, language: mapped.language,
+                            segments: mapped.segments, duration: duration)
+    }
+
+    /// Map WhisperKit results into our domain shape (minus duration). Strips special tokens at the source —
+    /// the per-segment `.text` carries `<|startoftranscript|>`, `<|ru|>`, `<|8.52|>`… that the overall
+    /// `.text` doesn't — and normalizes the language fallback. The file-path and streaming seams share this
+    /// so they can never drift.
+    private func mapResults(_ results: [TranscriptionResult], language: String?)
+        -> (text: String, language: String, segments: [Segment]) {
         let fullText = results.map { $0.text }.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        // WhisperKit's per-segment `.text` carries raw special tokens (<|startoftranscript|>, <|ru|>,
-        // <|8.52|>, …) that the overall `.text` doesn't — strip them at the source so storage, UI and
-        // every export are clean.
         let segs = results.flatMap { $0.segments }.map {
             Segment(start: Double($0.start), end: Double($0.end), text: stripWhisperTokens($0.text))
         }
-        // duration = the ACTUAL audio length, not the processing time (`elapsed`). Fall back to the
-        // last segment end, then to elapsed, if the file can't be probed.
-        let audioLen = AudioConverter.duration(of: wavPath) ?? segs.map(\.end).max() ?? elapsed
-        return EngineResult(
-            text: fullText,
-            language: results.first?.language ?? (language ?? ""),
-            segments: segs,
-            duration: audioLen
-        )
+        return (fullText, results.first?.language ?? (language ?? ""), segs)
     }
 }
 

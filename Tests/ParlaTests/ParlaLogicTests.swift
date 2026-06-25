@@ -86,6 +86,23 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(f.commonFormat, .pcmFormatInt16)
     }
 
+    // MARK: Streaming engine seam (MIC_DICTATION P3a)
+
+    /// The streaming seam decodes an in-memory Float buffer and threads results through the SAME mapping
+    /// as the file path. The real WhisperKit decode is manual-only; this pins the seam's shape + that the
+    /// orchestrator (P3c) gets a buffer-sized, canned-result double to drive.
+    func testStreamingSeamDecodesBufferAndReportsSize() async throws {
+        let canned = EngineResult(text: "привет", language: "ru",
+                                  segments: [Segment(start: 0, end: 1, text: "привет")], duration: 1)
+        let fake = FakeEngine(results: [canned])
+        let r = try await fake.transcribe(samples: [Float](repeating: 0, count: 16_000),
+                                          language: "ru", model: "m")
+        XCTAssertEqual(r.text, "привет")
+        XCTAssertEqual(r.segments.count, 1)
+        XCTAssertEqual(fake.transcribedSampleCounts, [16_000])
+        XCTAssertEqual(fake.transcribeCalls, 1)
+    }
+
     // MARK: TranscriptItem
 
     func testDisplayPlain() {
@@ -1973,6 +1990,7 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     private(set) var ensureLoadedCalls = 0
     private(set) var transcribeCalls = 0
     private(set) var transcribedPaths: [String] = []   // the decode path handed to each transcribe call
+    private(set) var transcribedSampleCounts: [Int] = []   // buffer sizes handed to the streaming seam
     private(set) var deletedModels: [String] = []
 
     init(results: [EngineResult] = [], throwOnTranscribe: Bool = false) {
@@ -1988,6 +2006,18 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
         transcribeCalls += 1
         transcribedPaths.append(wavPath)
         if throwOnTranscribe { throw EngineError.notLoaded }
+        let r = results.isEmpty ? EngineResult(text: "", language: "", segments: [], duration: 0)
+                                : results[min(idx, results.count - 1)]
+        idx += 1
+        return r
+    }
+
+    func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult {
+        transcribeCalls += 1
+        transcribedSampleCounts.append(samples.count)
+        if throwOnTranscribe { throw EngineError.notLoaded }
+        // Streaming windows pop the SAME canned queue as the file path, so a P3c orchestrator test can
+        // hand each tick its own scripted EngineResult.
         let r = results.isEmpty ? EngineResult(text: "", language: "", segments: [], duration: 0)
                                 : results[min(idx, results.count - 1)]
         idx += 1
