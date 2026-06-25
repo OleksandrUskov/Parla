@@ -210,7 +210,10 @@ struct StatusBar: View {
 
     @ViewBuilder private var phaseView: some View {
         if model.isRecordingDictation {
-            recordingChip
+            VStack(alignment: .leading, spacing: 8) {
+                recordingChip
+                if model.isStreamingDictation { streamingPreview }
+            }
         } else {
             phaseChip
         }
@@ -227,6 +230,36 @@ struct StatusBar: View {
                 Spacer()
                 Button(L("dictation.stop")) { model.stopAndTranscribeDictation() }
                     .buttonStyle(.plain).font(.callout.weight(.medium)).foregroundStyle(Brand.accent)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    /// Live streamed text while dictating in streaming mode: the confirmed prefix solid, the volatile tail
+    /// dimmed. Auto-scrolls to the live edge; height-capped so it can't shove the rest of the UI. PREVIEW
+    /// ONLY — the saved transcript comes from the full decode after Stop. Hidden until there's any text.
+    @ViewBuilder private var streamingPreview: some View {
+        let confirmed = model.dictationConfirmedText
+        let hypothesis = model.dictationHypothesisText
+        if !confirmed.isEmpty || !hypothesis.isEmpty {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        (Text(confirmed).foregroundStyle(.primary)
+                         + Text(confirmed.isEmpty || hypothesis.isEmpty ? hypothesis : " " + hypothesis)
+                            .foregroundStyle(.secondary))
+                            .font(.callout)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                        Color.clear.frame(height: 1).id("dictationLiveEdge")   // bottom anchor for auto-scroll
+                    }
+                }
+                .frame(maxHeight: 140)
+                .onChange(of: hypothesis) { _, _ in proxy.scrollTo("dictationLiveEdge", anchor: .bottom) }
+                .onChange(of: confirmed) { _, _ in proxy.scrollTo("dictationLiveEdge", anchor: .bottom) }
             }
             .padding(.horizontal, 14).padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)

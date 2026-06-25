@@ -82,6 +82,11 @@ struct SettingsView: View {
                     ForEach(DictationMode.allCases) { mode in Text(mode.label).tag(mode) }
                 }
                 Toggle(L("settings.dictation.vad"), isOn: $model.dictationVADEnabled)
+                Toggle(L("settings.dictation.streaming"), isOn: $model.dictationLiveStreaming)
+                if model.dictationLiveStreaming {
+                    Text(L("settings.dictation.streaming.caption"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Toggle(L("settings.dictation.keepaudio"), isOn: $model.keepDictationAudio)
                 Toggle(L("settings.dictation.paste"), isOn: $model.dictationPasteIntoFrontmost)
                 if model.dictationPasteIntoFrontmost {

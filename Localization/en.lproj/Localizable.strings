@@ -158,6 +158,8 @@
 "settings.dictation.mode.toggle" = "Press to start / stop";
 "settings.dictation.mode.hold"   = "Hold to talk";
 "settings.dictation.vad"         = "Stop automatically when I go quiet";
+"settings.dictation.streaming"   = "Show text live as I speak";
+"settings.dictation.streaming.caption" = "A near-live preview while you talk. The saved transcript is still a full, accurate pass made after you stop.";
 "settings.dictation.keepaudio" = "Keep the recorded audio for playback";
 "settings.dictation.paste"         = "Paste into the active app after dictating";
 "settings.dictation.paste.caption" = "Needs Accessibility — Parla asks once, the first time you use it. This is the only feature that uses it. With it off, the text is simply copied to your clipboard.";
