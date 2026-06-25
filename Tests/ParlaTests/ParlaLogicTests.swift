@@ -1233,6 +1233,10 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(AppModel.shouldPlayCompletionSound(soundEnabled: true, isWatcherRun: true, watchQueueEmpty: true))
     }
 
+    func testCompletionSoundIsHeadlessUnderTests() {
+        XCTAssertTrue(CompletionSound.isHeadless)   // the sound can never beep during the test suite
+    }
+
     @MainActor func testSoundOnCompleteDefaultsOn() {
         UserDefaults.standard.removeObject(forKey: AppModel.Keys.sound)
         XCTAssertTrue(AppModel().soundOnComplete)
