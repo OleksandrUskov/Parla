@@ -10,6 +10,7 @@ struct ParlaApp: App {
     @State private var hotkeyInstalled = false
     @AppStorage("didOnboard") private var didOnboard = false   // first-run sheet gate (UI pref, not history)
     @State private var showOnboarding = false
+    @State private var servicesProvider: ServicesProvider?     // strong ref (NSApp.servicesProvider isn't retained)
 
     var body: some Scene {
         WindowGroup(id: "main") {
@@ -27,6 +28,10 @@ struct ParlaApp: App {
                         showOnboarding = true            // fresh start only — upgraders with history skip it
                     }
                     NotificationClickHandler.install()   // click on completion notification → bring window forward
+                    let sp = ServicesProvider(model: model)   // "Transcribe with Parla" in the Services menu
+                    NSApp.servicesProvider = sp
+                    servicesProvider = sp                     // keep a strong ref alive
+                    NSUpdateDynamicServices()
                     installHotkeyOnce()                  // install hotkey handler + sync enabled/disabled to the setting
                     model.startWatchingIfEnabled()       // resume folder watching if enabled
                     await model.pruneAudioCache()        // remove orphans + old audio beyond the limit

@@ -72,6 +72,16 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
       <key>CFBundleURLSchemes</key><array><string>parla</string></array>
     </dict>
   </array>
+  <key>NSServices</key>
+  <array>
+    <dict>
+      <key>NSMenuItem</key><dict><key>default</key><string>Transcribe with Parla</string></dict>
+      <key>NSMessage</key><string>transcribeFiles</string>
+      <key>NSPortName</key><string>Parla</string>
+      <key>NSSendTypes</key><array><string>public.file-url</string><string>NSFilenamesPboardType</string></array>
+      <key>NSReturnTypes</key><array/>
+    </dict>
+  </array>
   $ICON_LINE
 </dict>
 </plist>
