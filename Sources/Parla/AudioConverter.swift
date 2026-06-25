@@ -20,14 +20,23 @@ enum AudioConverter {
     }
 
     /// Run a Process, draining stderr to EOF *before* waitUntilExit so a flood can't fill the pipe
-    /// buffer and deadlock the process; stdout → /dev/null. Returns (exit status, last 3 stderr lines).
-    static func runCapturingStderr(_ proc: Process) throws -> (status: Int32, stderrTail: String) {
+    /// buffer and deadlock the process; stdout → /dev/null. A watchdog bounds a *wedged* child (the
+    /// pipe-drain fix doesn't help if ffmpeg simply hangs): after `timeout` seconds it terminates the
+    /// process, which closes stderr and lets the read return. Audio decode/transcode runs far faster
+    /// than realtime, so a legit job never reaches the (generous) default; `timeout <= 0` disables it.
+    /// Returns (exit status, last 3 stderr lines).
+    static func runCapturingStderr(_ proc: Process, timeout: TimeInterval = 1800) throws -> (status: Int32, stderrTail: String) {
         let errPipe = Pipe()
         proc.standardError = errPipe
         proc.standardOutput = FileHandle.nullDevice
         try proc.run()
-        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()   // drains until the child closes stderr (on exit)
+
+        let watchdog = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
+        if timeout > 0 { DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: watchdog) }
+
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()   // drains until the child closes stderr (on exit/terminate)
         proc.waitUntilExit()
+        watchdog.cancel()                                                  // exited in time → stand the watchdog down
         let err = String(data: errData, encoding: .utf8) ?? ""
         let tail = err.split(separator: "\n").suffix(3).joined(separator: "\n")
         return (proc.terminationStatus, tail)

@@ -1086,6 +1086,25 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual((box.firstObject as? NSNumber)?.int32Value, 3)   // completed (not deadlocked), exit code preserved
     }
 
+    /// A wedged child (sleep 30) must be killed by the watchdog, not block readDataToEndOfFile forever.
+    func testRunCapturingStderrWatchdogTerminatesHang() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        p.arguments = ["30"]
+        let exp = expectation(description: "watchdog fires")
+        let box = NSMutableArray()
+        let start = Date()
+        Thread.detachNewThread {
+            let r = try? AudioConverter.runCapturingStderr(p, timeout: 0.4)
+            box.add(r?.status ?? 0)
+            box.add(Date().timeIntervalSince(start))
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 10)
+        XCTAssertLessThan((box.lastObject as? NSNumber)?.doubleValue ?? .greatestFiniteMagnitude, 5)  // killed ~0.4s, not 30s
+        XCTAssertNotEqual((box.firstObject as? NSNumber)?.int32Value, 0)                              // terminated → non-zero
+    }
+
     // MARK: Sidecar identity + migration completeness (C, D)
 
     func testSidecarMatchesBySourcePathNotName() {
