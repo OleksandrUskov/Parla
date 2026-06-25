@@ -53,6 +53,9 @@ final class AppModel {
     var dictationMode: DictationMode { didSet { UserDefaults.standard.set(dictationMode.rawValue, forKey: Keys.dictationMode) } }
     /// Auto-stop a dictation after a short run of silence (opt-in, off by default).
     var dictationVADEnabled: Bool { didSet { UserDefaults.standard.set(dictationVADEnabled, forKey: Keys.dictationVAD) } }
+    /// Live segment-level streaming preview while dictating (opt-in, off by default). PREVIEW ONLY — the
+    /// saved transcript still comes from the full offline decode in `finishDictation`.
+    var dictationLiveStreaming: Bool { didSet { UserDefaults.standard.set(dictationLiveStreaming, forKey: Keys.dictationLiveStreaming) } }
 
     /// UI language — separate from the speech-recognition language (`language`). `.system` follows the OS.
     var uiLanguage: UILanguage {
@@ -73,6 +76,9 @@ final class AppModel {
     var watcher: FolderWatcher?                        // +FolderWatch
     var recorder: MicRecorder?                         // +Dictation (live mic capture)
     var recordingStartedAt: Date?                      // +Dictation: non-nil while recording (drives isBusy + the chip timer)
+    var streamingTask: Task<Void, Never>?              // +DictationStream: the live decode loop (single-flight)
+    var dictationConfirmedText = ""                    // +DictationStream: stable streamed prefix (render solid)
+    var dictationHypothesisText = ""                   // +DictationStream: live streamed tail (render dimmed)
     var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys
@@ -111,6 +117,7 @@ final class AppModel {
         static let dictationPasteAXPrompted = "dictationPasteAXPrompted"   // one-time AX prompt guard
         static let dictationMode = "dictationMode"
         static let dictationVAD = "dictationVADEnabled"
+        static let dictationLiveStreaming = "dictationLiveStreaming"
         static let lastBookmark = "lastSourceBookmark"
         static let uiLanguage = "uiLanguage"
     }
@@ -133,6 +140,7 @@ final class AppModel {
         dictationPasteIntoFrontmost = d.bool(forKey: Keys.dictationPaste)   // off — the only Accessibility feature
         dictationMode = DictationMode(rawValue: d.string(forKey: Keys.dictationMode) ?? "") ?? .toggle
         dictationVADEnabled = d.bool(forKey: Keys.dictationVAD)   // opt-in, off by default
+        dictationLiveStreaming = d.bool(forKey: Keys.dictationLiveStreaming)   // opt-in, off by default
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()

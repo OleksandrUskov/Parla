@@ -66,11 +66,13 @@ extension AppModel {
                 QuickToast.shared.show(L("toast.mic.denied"))
                 return
             }
-            let rec = MicRecorder(vad: dictationVADEnabled ? SilenceDetector() : nil)
+            let rec = MicRecorder(vad: dictationVADEnabled ? SilenceDetector() : nil,
+                                  streaming: dictationLiveStreaming)
             do {
                 try rec.start(onAutoStop: { [weak self] in self?.stopAndTranscribeDictation() })
                 recorder = rec
                 recordingStartedAt = Date()         // re-stamp to the real capture start (after the permission await)
+                if dictationLiveStreaming { startStreamingLoop(for: rec) }   // live preview (full decode still saves)
             } catch {
                 recordingStartedAt = nil
                 recorder = nil
@@ -82,6 +84,7 @@ extension AppModel {
     /// Stop the recorder and transcribe the captured WAV (reusing the standard result path).
     func stopAndTranscribeDictation() {
         guard isRecordingDictation else { return }
+        stopStreamingLoop()   // end the live-preview loop; the saved transcript comes from the full decode below
         // Stop pressed before capture began (e.g. during the first-run mic-permission prompt → the recorder
         // isn't created yet): silently cancel. Don't show a "didn't catch anything" error for a non-recording.
         guard let rec = recorder else { recordingStartedAt = nil; return }
