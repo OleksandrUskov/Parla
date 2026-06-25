@@ -185,3 +185,17 @@
 "quit.busy.message" = "Если выйти сейчас, текущая расшифровка будет потеряна.";
 "quit.busy.cancel"  = "Не выходить";
 "quit.busy.quit"    = "Всё равно выйти";
+
+/* First-run onboarding + first-compile reassurance */
+"onboarding.title"          = "Расшифровка голоса в текст — 100% на твоём Mac.";
+"onboarding.step1.title"    = "Брось файл — получи текст";
+"onboarding.step1.body"     = "Перетащи голосовое, аудио или видео на Parla — и получишь слова. Телеграмные .ogg/.opus тоже.";
+"onboarding.privacy.title"  = "Приватно по умолчанию";
+"onboarding.privacy.body"   = "Ничего не загружается в сеть. Единственный сетевой запрос — разовое скачивание модели ниже, дальше всё офлайн.";
+"onboarding.model.title"    = "Выбери модель";
+"onboarding.model.body"     = "Больше = точнее, но дольше качать. Turbo — рекомендуемый баланс; поменять можно потом в настройках.";
+"onboarding.ffmpeg.title"   = "Готов к аудио из Telegram";
+"onboarding.ffmpeg.bundled" = "ffmpeg уже встроен — ставить ничего не надо. Ogg/Opus, m4a, mp3, wav и другое работают сразу.";
+"onboarding.ffmpeg.missing" = "ffmpeg не найден. m4a/mp3/wav работают; для Ogg/Opus установи ffmpeg.";
+"onboarding.start"          = "Начать";
+"status.loadingmodel.firstrun" = "Первый запуск компилирует модель для Apple Neural Engine — это разово, дальше загрузка мгновенная.";

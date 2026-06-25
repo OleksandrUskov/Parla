@@ -185,3 +185,17 @@
 "quit.busy.message" = "If you quit now, the in-progress transcript will be lost.";
 "quit.busy.cancel"  = "Keep Running";
 "quit.busy.quit"    = "Quit Anyway";
+
+/* First-run onboarding + first-compile reassurance */
+"onboarding.title"          = "Transcribe voice to text — 100% on your Mac.";
+"onboarding.step1.title"    = "Drop a file, get text";
+"onboarding.step1.body"     = "Drag any voice message, audio, or video onto Parla and it writes out the words — Telegram .ogg/.opus too.";
+"onboarding.privacy.title"  = "Private by design";
+"onboarding.privacy.body"   = "Nothing is uploaded. The only network use is the one-time model download below — after that, fully offline.";
+"onboarding.model.title"    = "Pick a model";
+"onboarding.model.body"     = "Bigger = more accurate but slower to download. Turbo is the recommended balance; you can change it later in Settings.";
+"onboarding.ffmpeg.title"   = "Ready for Telegram audio";
+"onboarding.ffmpeg.bundled" = "ffmpeg is built in — nothing to install. Ogg/Opus, m4a, mp3, wav and more just work.";
+"onboarding.ffmpeg.missing" = "ffmpeg wasn't found. m4a/mp3/wav still work; install ffmpeg for Ogg/Opus.";
+"onboarding.start"          = "Get started";
+"status.loadingmodel.firstrun" = "First run compiles the model for the Apple Neural Engine — one-time only, later launches are instant.";

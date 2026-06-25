@@ -8,14 +8,23 @@ struct ParlaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
     @State private var hotkeyInstalled = false
+    @AppStorage("didOnboard") private var didOnboard = false   // first-run sheet gate (UI pref, not history)
+    @State private var showOnboarding = false
 
     var body: some Scene {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(model)
                 .environment(\.locale, model.resolvedLocale)   // reading resolvedLocale in App.body → re-render on language change
+                .sheet(isPresented: $showOnboarding) {
+                    OnboardingView { didOnboard = true; showOnboarding = false }
+                        .environment(model)
+                }
                 .task {
                     appDelegate.model = model            // let the terminate-guard see in-flight work
+                    if Onboarding.shouldShowOnboarding(didOnboard: didOnboard, hasHistory: !model.history.isEmpty) {
+                        showOnboarding = true            // fresh start only — upgraders with history skip it
+                    }
                     NotificationClickHandler.install()   // click on completion notification → bring window forward
                     installHotkeyOnce()                  // install hotkey handler + sync enabled/disabled to the setting
                     model.startWatchingIfEnabled()       // resume folder watching if enabled

@@ -197,8 +197,18 @@ struct ModelRow: View {
 
 struct StatusBar: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("didCompileModel") private var didCompileModel = false   // one-time first-compile hint gate
 
     var body: some View {
+        phaseView
+            // The first ANE compile (.loadingModel → .transcribing) is one-time; once it completes,
+            // retire the reassurance caption so later (fast) loads don't show it.
+            .onChange(of: model.phase) { _, new in
+                if case .transcribing = new { didCompileModel = true }
+            }
+    }
+
+    @ViewBuilder private var phaseView: some View {
         switch model.phase {
         case .idle:
             EmptyView()
@@ -207,7 +217,15 @@ struct StatusBar: View {
         case .downloadingModel(let p):
             downloadChip(p)
         case .loadingModel:
-            chip(L("status.loadingmodel"), busy: true)
+            VStack(alignment: .leading, spacing: 6) {
+                chip(L("status.loadingmodel"), busy: true)
+                if Onboarding.shouldShowFirstCompileHint(isLoadingModel: true, didCompileModel: didCompileModel) {
+                    Text(L("status.loadingmodel.firstrun"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.horizontal, 14)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         case .transcribing(let n, let b):
             progressChip(Lf("status.transcribing", batchLabel(n, b)), b)
         case .failed(let m):

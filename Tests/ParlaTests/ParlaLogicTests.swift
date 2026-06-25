@@ -1255,6 +1255,31 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(CompletionSound.isHeadless)   // the sound can never beep during the test suite
     }
 
+    // MARK: First-run onboarding (pure decision logic)
+
+    func testShouldShowOnboarding() {
+        XCTAssertTrue(Onboarding.shouldShowOnboarding(didOnboard: false, hasHistory: false))   // fresh install
+        XCTAssertFalse(Onboarding.shouldShowOnboarding(didOnboard: true, hasHistory: false))   // already onboarded
+        XCTAssertFalse(Onboarding.shouldShowOnboarding(didOnboard: false, hasHistory: true))   // upgrader with history → skip
+    }
+
+    func testShouldShowFirstCompileHint() {
+        XCTAssertTrue(Onboarding.shouldShowFirstCompileHint(isLoadingModel: true, didCompileModel: false))
+        XCTAssertFalse(Onboarding.shouldShowFirstCompileHint(isLoadingModel: true, didCompileModel: true))   // compiled once already
+        XCTAssertFalse(Onboarding.shouldShowFirstCompileHint(isLoadingModel: false, didCompileModel: false)) // not loading a model
+    }
+
+    func testRecommendedModelPrefersRecommendedTier() {
+        let tiers = [
+            ModelTier(title: "Tiny", hint: "", estimate: "", name: "openai_whisper-tiny", recommended: false),
+            ModelTier(title: "Turbo", hint: "", estimate: "", name: "openai_whisper-large-v3-v20240930", recommended: true),
+            ModelTier(title: "Large", hint: "", estimate: "", name: "openai_whisper-large-v3", recommended: false),
+        ]
+        XCTAssertEqual(Onboarding.recommendedModel(from: tiers), "openai_whisper-large-v3-v20240930")  // the recommended one wins
+        XCTAssertEqual(Onboarding.recommendedModel(from: [tiers[0]]), "openai_whisper-tiny")           // none recommended → first
+        XCTAssertNil(Onboarding.recommendedModel(from: []))                                            // empty → nil
+    }
+
     @MainActor func testSoundOnCompleteDefaultsOn() {
         UserDefaults.standard.removeObject(forKey: AppModel.Keys.sound)
         XCTAssertTrue(AppModel().soundOnComplete)

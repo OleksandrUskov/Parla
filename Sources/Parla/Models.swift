@@ -186,7 +186,8 @@ enum EnginePhase: Equatable {
     case idle
     case preparing(String, batch: BatchProgress? = nil)
     case downloadingModel(Double)   // 0...1, actual download (one time)
-    case loadingModel               // loading into memory (fast, every launch)
+    case loadingModel               // loading into memory: the FIRST compile (ANE) can take minutes,
+                                    // cached after — every later launch is fast (see status.loadingmodel.firstrun)
     case transcribing(String, batch: BatchProgress? = nil)
     case failed(String)
 }
