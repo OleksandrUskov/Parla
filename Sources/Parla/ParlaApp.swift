@@ -87,7 +87,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Click on the batch-completion notification → activate Parla and bring its window forward.
 /// Registered only in the real app (via `.task`), not in `swift test`.
 final class NotificationClickHandler: NSObject, UNUserNotificationCenterDelegate {
-    static let shared = NotificationClickHandler()
+    /// `nonisolated(unsafe)`: the handler is stateless and only ever touched on the main actor
+    /// (install() sets the delegate on main; the callback hops via MainActor.run). Marking the class
+    /// `@MainActor` would break the nonisolated UNUserNotificationCenterDelegate conformance, so we opt
+    /// just this global out — benign, like the other main-actor-only statics.
+    nonisolated(unsafe) static let shared = NotificationClickHandler()
     static func install() { UNUserNotificationCenter.current().delegate = shared }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,

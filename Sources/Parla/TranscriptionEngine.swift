@@ -1,5 +1,7 @@
 import Foundation
-import WhisperKit
+// @preconcurrency: WhisperKit isn't Sendable-annotated yet. Treating its API as pre-concurrency
+// suppresses the dependency's missing-Sendable noise so v6 only flags OUR genuine isolation issues.
+@preconcurrency import WhisperKit
 
 enum EngineError: LocalizedError {
     case notLoaded
@@ -110,6 +112,8 @@ actor TranscriptionEngine {
                                       language: language, detectLanguage: language == nil)
         let start = Date()
         // Array overload + chunk merging (WhisperKit may split long audio).
+        // `kit` never escapes this actor's isolation — the call runs ON the actor; @preconcurrency on
+        // the import lets v6 accept passing the not-yet-Sendable `kit` into its own method.
         let results: [TranscriptionResult] = try await kit.transcribe(audioPath: wavPath, decodeOptions: options)
         let elapsed = Date().timeIntervalSince(start)
 

@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import Parla
 
 /// Unit tests for pure logic (no WhisperKit/audio/UI):
@@ -1112,37 +1113,37 @@ final class ParlaLogicTests: XCTestCase {
     /// runCapturingStderr drains concurrently, so it must finish. Run on a thread with a timeout so
     /// a regression FAILS the test instead of hanging the suite forever.
     func testRunCapturingStderrDrainsFloodWithoutDeadlock() {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/sh")
-        p.arguments = ["-c", "i=0; while [ $i -lt 6000 ]; do echo 'xxxxxxxxxxxxxxxxxxxxxxxxxx' 1>&2; i=$((i+1)); done; exit 3"]
         let exp = expectation(description: "drain completes")
-        let box = NSMutableArray()   // thread-safe handoff of the status
+        let status = OSAllocatedUnfairLock<Int32>(initialState: -1)   // Sendable cross-thread handoff
         Thread.detachNewThread {
+            let p = Process()                                          // created in-thread → not captured
+            p.executableURL = URL(fileURLWithPath: "/bin/sh")
+            p.arguments = ["-c", "i=0; while [ $i -lt 6000 ]; do echo 'xxxxxxxxxxxxxxxxxxxxxxxxxx' 1>&2; i=$((i+1)); done; exit 3"]
             let r = try? AudioConverter.runCapturingStderr(p)
-            box.add(r?.status ?? -1)
+            status.withLock { $0 = r?.status ?? -1 }
             exp.fulfill()
         }
         wait(for: [exp], timeout: 15)
-        XCTAssertEqual((box.firstObject as? NSNumber)?.int32Value, 3)   // completed (not deadlocked), exit code preserved
+        XCTAssertEqual(status.withLock { $0 }, 3)   // completed (not deadlocked), exit code preserved
     }
 
     /// A wedged child (sleep 30) must be killed by the watchdog, not block readDataToEndOfFile forever.
     func testRunCapturingStderrWatchdogTerminatesHang() {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        p.arguments = ["30"]
         let exp = expectation(description: "watchdog fires")
-        let box = NSMutableArray()
+        let result = OSAllocatedUnfairLock<(status: Int32, elapsed: Double)>(initialState: (0, .greatestFiniteMagnitude))
         let start = Date()
         Thread.detachNewThread {
+            let p = Process()                                          // created in-thread → not captured
+            p.executableURL = URL(fileURLWithPath: "/bin/sleep")
+            p.arguments = ["30"]
             let r = try? AudioConverter.runCapturingStderr(p, timeout: 0.4)
-            box.add(r?.status ?? 0)
-            box.add(Date().timeIntervalSince(start))
+            result.withLock { $0 = (r?.status ?? 0, Date().timeIntervalSince(start)) }
             exp.fulfill()
         }
         wait(for: [exp], timeout: 10)
-        XCTAssertLessThan((box.lastObject as? NSNumber)?.doubleValue ?? .greatestFiniteMagnitude, 5)  // killed ~0.4s, not 30s
-        XCTAssertNotEqual((box.firstObject as? NSNumber)?.int32Value, 0)                              // terminated → non-zero
+        let r = result.withLock { $0 }
+        XCTAssertLessThan(r.elapsed, 5)        // killed ~0.4s, not 30s
+        XCTAssertNotEqual(r.status, 0)         // terminated → non-zero
     }
 
     // MARK: Sidecar identity + migration completeness (C, D)
@@ -1169,6 +1170,23 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(AppModel.sidecarPlan(text: "transcript", targetExists: true))
         // no file there → write the transcript
         XCTAssertEqual(AppModel.sidecarPlan(text: "transcript", targetExists: false), Data("transcript".utf8))
+    }
+
+    func testStoreFileURLSeamsSwapAndRestore() {
+        // The nonisolated(unsafe) test seams (Swift 6 flip) must still swap + restore verbatim —
+        // withTemporaryHistoryStore and every orchestration test rely on this contract.
+        let origHistory = HistoryStore.fileURL
+        let origProcessed = ProcessedStore.fileURL
+        let tmpH = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        let tmpP = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        HistoryStore.fileURL = tmpH
+        ProcessedStore.fileURL = tmpP
+        XCTAssertEqual(HistoryStore.fileURL, tmpH)
+        XCTAssertEqual(ProcessedStore.fileURL, tmpP)
+        HistoryStore.fileURL = origHistory
+        ProcessedStore.fileURL = origProcessed
+        XCTAssertEqual(HistoryStore.fileURL, origHistory)
+        XCTAssertEqual(ProcessedStore.fileURL, origProcessed)
     }
 
     func testMigrateClearsStaleStagingAndCopiesFresh() throws {
@@ -1640,7 +1658,10 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     /// Async sibling of withTemporaryHistoryStore — for `await transcribe(...)` orchestration tests.
-    private func withTemporaryHistoryStoreAsync(_ body: () async -> Void) async {
+    /// `@MainActor` so the @MainActor orchestration tests don't "send" the (non-Sendable) XCTestCase
+    /// across isolation when they `await` it under Swift 6.
+    @MainActor
+    private func withTemporaryHistoryStoreAsync(_ body: @MainActor () async -> Void) async {
         let original = HistoryStore.fileURL
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ParlaTest-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

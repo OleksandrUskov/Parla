@@ -1,5 +1,5 @@
 import Foundation
-import WhisperKit
+@preconcurrency import WhisperKit   // not Sendable-annotated yet — see TranscriptionEngine.swift
 
 /// Model catalog: download status / on-disk size, download/delete, tiers for the manager.
 extension AppModel {
@@ -42,7 +42,9 @@ extension AppModel {
         downloadingModel = name
         downloadProgress = 0
         do {
-            _ = try await WhisperKit.download(variant: name, progressCallback: { [weak self] p in
+            _ = try await WhisperKit.download(variant: name, progressCallback: { @Sendable [weak self] p in
+                // @Sendable: the callback crosses into WhisperKit's nonisolated download. `self`
+                // (a @MainActor class → Sendable) is touched only inside the @MainActor Task hop.
                 Task { @MainActor in self?.downloadProgress = p.fractionCompleted }
             })
         } catch {

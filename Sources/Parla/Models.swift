@@ -218,7 +218,9 @@ enum HistoryStore {
     /// Path to the history file in ~/Library/Application Support/Parla/.
     /// `var` (not `let`) is a test seam: tests swap the path for a temporary one so they don't touch
     /// the user's real history. In production the value never changes.
-    static var fileURL: URL = {
+    /// `nonisolated(unsafe)`: a deliberate global-mutable opt-out — written only on the main actor
+    /// (prod: never after launch; tests: serialized via `withTemporaryHistoryStore`), read widely.
+    nonisolated(unsafe) static var fileURL: URL = {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Parla", isDirectory: true)
@@ -256,8 +258,9 @@ enum HistoryStore {
     }
 
     /// Legacy app-support dir (the old "Murmur" name) to migrate from. `var` test-seam so unit tests
-    /// never touch the real ~/Library/Application Support/Murmur.
-    static var legacyBase: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    /// never touch the real ~/Library/Application Support/Murmur. `nonisolated(unsafe)`: same benign
+    /// main-actor-only-write opt-out as `fileURL`.
+    nonisolated(unsafe) static var legacyBase: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Murmur", isDirectory: true)
 
     /// One-time migration from the old app name (Murmur → Parla). Copies history.json AND the player
@@ -358,7 +361,8 @@ enum FolderScan {
 /// Store for the set of processed keys in ~/Library/Application Support/Parla/processed.json.
 /// Mirrors HistoryStore (including the `var fileURL` test seam).
 enum ProcessedStore {
-    static var fileURL: URL = {
+    /// `nonisolated(unsafe)`: same benign main-actor-only-write test seam as `HistoryStore.fileURL`.
+    nonisolated(unsafe) static var fileURL: URL = {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Parla", isDirectory: true)
