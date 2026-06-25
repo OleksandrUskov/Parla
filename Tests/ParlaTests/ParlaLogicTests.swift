@@ -897,6 +897,15 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(stitched[2].start, 120)                        // chunk1's local 0 → global 120
     }
 
+    func testResolveChunkedLanguage() {
+        // first non-empty chunk language wins → Auto-detected language survives on long files
+        XCTAssertEqual(AudioChunker.resolveLanguage(chunkLanguages: ["", "ru", "en"], requested: nil), "ru")
+        // nothing detected (all chunks failed/silent) → fall back to the requested language
+        XCTAssertEqual(AudioChunker.resolveLanguage(chunkLanguages: ["", ""], requested: "uk"), "uk")
+        // nothing at all → empty (never crashes, mirrors single-pass default)
+        XCTAssertEqual(AudioChunker.resolveLanguage(chunkLanguages: [], requested: nil), "")
+    }
+
     func testChapters() {
         let segs = [
             Segment(start: 0, end: 60, text: "a"),

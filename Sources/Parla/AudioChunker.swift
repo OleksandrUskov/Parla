@@ -40,6 +40,15 @@ enum AudioChunker {
             .sorted { $0.start < $1.start }
     }
 
+    /// Language for a stitched long-audio result: the first chunk's actually-reported language wins
+    /// (mirrors the single-pass path, which returns the engine's reported language — the requested one
+    /// if requested, else the detected one), falling back to the requested language, then "". Empty
+    /// per-chunk languages (failed/silent chunks) are skipped — so Auto-mode long files keep a real
+    /// detected language instead of saving "".
+    static func resolveLanguage(chunkLanguages: [String], requested: String?) -> String {
+        chunkLanguages.first(where: { !$0.isEmpty }) ?? requested ?? ""
+    }
+
     /// Bucket already-global (stitched) segments into fixed `size`-second windows for the chapter view.
     /// A pure function of the segments + size — no persisted state. Empty windows are skipped (a
     /// chapter only exists where there's speech); chapters are renumbered 1…M for display.

@@ -166,6 +166,7 @@ extension AppModel {
         let total = chunks.count
         var perChunkSegments: [[Segment]] = []
         var texts: [String] = []
+        var langs: [String] = []
         for (k, chunk) in chunks.enumerated() {
             phase = .transcribing(Lf("chunk.label", k + 1, total),
                                   batch: BatchProgress(index: k + 1, total: total, done: k))
@@ -174,11 +175,13 @@ extension AppModel {
                                                     model: model, translate: translateToEnglish)
                 perChunkSegments.append(r.segments)
                 texts.append(r.text)
+                langs.append(r.language)
             } catch {
                 // resilience: one bad chunk doesn't lose the whole transcript
                 perChunkSegments.append([Segment(start: 0, end: AudioChunker.chunkLengthSec,
                                                  text: Lf("chunk.failed", k + 1))])
                 texts.append("")
+                langs.append("")
             }
             try? FileManager.default.removeItem(at: chunk)   // free each chunk WAV as we go
         }
@@ -186,7 +189,11 @@ extension AppModel {
                                            chunkLength: AudioChunker.chunkLengthSec)
         let fullText = texts.filter { !$0.isEmpty }.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return EngineResult(text: fullText, language: lang ?? "", segments: stitched, duration: audioDuration)
+        // Mirror the single-pass path: keep the engine-reported language (detected in Auto mode),
+        // not the bare requested value — otherwise long Auto-mode files persist an empty language.
+        return EngineResult(text: fullText,
+                            language: AudioChunker.resolveLanguage(chunkLanguages: langs, requested: lang),
+                            segments: stitched, duration: audioDuration)
     }
 
     private func progressHandler() -> @Sendable (ModelLoad) -> Void {
