@@ -61,23 +61,20 @@ struct StreamingReconciler {
         hypothesisText = Self.join(tail)
     }
 
-    /// Append `addition` to `base`, dropping any leading words of `addition` that already form the tail of
-    /// `base` (word-level overlap, capped at 8 words). Removes the cross-window duplicate-word artifact that
-    /// a blind append produces when a re-decoded window re-emits the previous cut's trailing words.
+    /// Append `addition` to `base`, dropping a SINGLE leading word of `addition` if it duplicates the last
+    /// word of `base` — the one word a re-decoded window can spill across the cut (its timestamp lands just
+    /// before the word's true acoustic end, so the next window re-emits it). Deliberately ONLY one word:
+    /// deduping a longer run would eat genuinely repeated speech ("так так так", "да да да", stutters) — a
+    /// worse artifact than a rare single re-emit. Preview-only either way (the saved transcript is a full decode).
     static func mergeDedup(_ base: String, _ addition: String) -> String {
         if addition.isEmpty { return base }
         if base.isEmpty { return addition }
-        let baseWords = base.split(separator: " ")
         let addWords = addition.split(separator: " ")
-        let maxOverlap = min(baseWords.count, addWords.count, 8)
-        var overlap = 0
-        var k = maxOverlap
-        while k > 0 {
-            if baseWords.suffix(k).elementsEqual(addWords.prefix(k)) { overlap = k; break }
-            k -= 1
+        if let lastBase = base.split(separator: " ").last, lastBase == addWords.first {
+            let kept = addWords.dropFirst()
+            return kept.isEmpty ? base : base + " " + kept.joined(separator: " ")
         }
-        let kept = addWords.dropFirst(overlap)
-        return kept.isEmpty ? base : base + " " + kept.joined(separator: " ")
+        return base + " " + addition
     }
 
     /// Trim + join segment texts with single spaces, dropping any that strip to empty.

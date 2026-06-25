@@ -191,15 +191,29 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(r.confirmedSeconds, 3, accuracy: 1e-9)
     }
 
-    /// Overlap-aware merge: when a re-decoded window re-emits the previous cut's trailing word(s), the merge
-    /// drops the duplicate prefix instead of producing "a a b" / "привет привет".
-    func testReconcilerMergeDedupDropsWordOverlap() {
-        XCTAssertEqual(StreamingReconciler.mergeDedup("a", "a b"), "a b")
-        XCTAssertEqual(StreamingReconciler.mergeDedup("привет мир", "мир как дела"), "привет мир как дела")
-        XCTAssertEqual(StreamingReconciler.mergeDedup("a b", "c d"), "a b c d")   // no overlap
+    /// Overlap-aware merge drops ONLY the single boundary word a re-decoded window can re-emit — never a
+    /// longer run (that would eat genuinely repeated speech, the regression the re-review caught).
+    func testReconcilerMergeDedupDropsSingleBoundaryWord() {
+        XCTAssertEqual(StreamingReconciler.mergeDedup("привет", "привет мир"), "привет мир")     // re-emit removed
+        XCTAssertEqual(StreamingReconciler.mergeDedup("раз два три", "три четыре"), "раз два три четыре")
+        XCTAssertEqual(StreamingReconciler.mergeDedup("a b", "c d"), "a b c d")                 // no overlap
+        XCTAssertEqual(StreamingReconciler.mergeDedup("так", "так"), "так")                     // pure single re-emit
         XCTAssertEqual(StreamingReconciler.mergeDedup("", "hello"), "hello")
         XCTAssertEqual(StreamingReconciler.mergeDedup("done", ""), "done")
-        XCTAssertEqual(StreamingReconciler.mergeDedup("a a", "a a b"), "a a b")   // 2-word overlap
+        // A genuinely repeated run is PRESERVED (minus only the one boundary word) — NOT collapsed.
+        XCTAssertEqual(StreamingReconciler.mergeDedup("да да да", "да да да да да"), "да да да да да да да")
+    }
+
+    /// The decode window is clamped to a max look-back so a stalled cursor (zero-segment silence / pre-first
+    /// confirm) can't grow the decode or the lock-held copy without bound.
+    func testStreamWindowStartClampsToMaxLookback() {
+        let maxW = 240_000   // 15 s @ 16 kHz
+        // Cursor recent → start at the cursor (no clamp).
+        XCTAssertEqual(AppModel.streamWindowStartSample(cursorSample: 100_000, liveCount: 120_000, maxWindow: maxW), 100_000)
+        // Cursor stalled far back → clamp to liveCount - maxWindow.
+        XCTAssertEqual(AppModel.streamWindowStartSample(cursorSample: 0, liveCount: 400_000, maxWindow: maxW), 160_000)
+        // Buffer shorter than the window → start at the cursor (0).
+        XCTAssertEqual(AppModel.streamWindowStartSample(cursorSample: 0, liveCount: 50_000, maxWindow: maxW), 0)
     }
 
     /// End-to-end: a tick whose re-decoded window re-emits the prior confirmed word must NOT duplicate it.

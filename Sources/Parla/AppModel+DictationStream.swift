@@ -22,6 +22,19 @@ extension AppModel {
     /// If the decode window grows past this without the cursor advancing (continuous low-pause speech),
     /// force-flush so the cursor catches up — bounds each decode + the audio-thread lock-copy.
     private static let streamFlushSpan = 10.0   // seconds
+    /// Hard ceiling on the decode window: never look back further than this from the live edge, so a stalled
+    /// cursor (zero-segment silence with VAD off, or speech before the first confirm) can't grow the decode
+    /// or the lock-held buffer copy without bound. Must exceed streamFlushSpan so normal speech advances via
+    /// flush (no audio skipped) and only silence is ever clamped past.
+    private static let streamMaxWindowSamples = 240_000   // 15 s @ 16 kHz
+
+    /// Where to start the next decode window (sample index): the confirmed cursor, but never more than
+    /// `maxWindow` behind the live edge. Pure + nonisolated → unit-tested. Audio skipped by the clamp is only
+    /// ever silence/unconfirmable (speech advances the cursor via flush); the saved transcript is the full
+    /// decode regardless, so the clamp only ever trims the live preview, never stored text.
+    nonisolated static func streamWindowStartSample(cursorSample: Int, liveCount: Int, maxWindow: Int) -> Int {
+        max(cursorSample, liveCount - maxWindow)
+    }
 
     /// True while a streaming decode loop is actually running — drives the live-preview visibility.
     /// LOOP-driven, not setting-driven, so flipping the Settings toggle mid-dictation can't surface a
@@ -50,11 +63,15 @@ extension AppModel {
                 guard !Task.isCancelled, let self, let recorder,
                       recorder.isRecording, self.recorder === recorder else { break }
 
-                let from = Int(reconciler.confirmedSeconds * AppModel.streamSampleRate)
+                let cursorSample = Int(reconciler.confirmedSeconds * AppModel.streamSampleRate)
+                let from = AppModel.streamWindowStartSample(cursorSample: cursorSample,
+                                                            liveCount: recorder.liveSampleCount,
+                                                            maxWindow: AppModel.streamMaxWindowSamples)
                 let window = recorder.liveSamples(from: from)
                 guard window.count >= AppModel.streamMinWindowSamples else { continue }
                 // windowStart from the actual sample index (not confirmedSeconds) so the seconds cursor and
-                // the sample cursor stay exactly consistent — no rounding drift accumulating over many ticks.
+                // the sample cursor stay exactly consistent — no rounding drift, and correct when the clamp
+                // skips ahead of a stalled cursor.
                 let windowStart = Double(from) / AppModel.streamSampleRate
                 let flush = Double(window.count) / AppModel.streamSampleRate >= AppModel.streamFlushSpan
 
