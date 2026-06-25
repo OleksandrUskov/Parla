@@ -40,6 +40,7 @@ protocol TranscribingEngine: Sendable {
 actor TranscriptionEngine {
     private var whisperKit: WhisperKit?
     private var loadedModel: String?
+    private var loadInFlight: (model: String, task: Task<Void, Error>)?   // coalesce concurrent same-model loads
 
     /// Where WhisperKit stores models: ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml
     static func modelsRoot() -> URL {
@@ -71,6 +72,24 @@ actor TranscriptionEngine {
     /// Otherwise — download with progress. On any local-load failure — fall back to re-downloading.
     func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {
         if loadedModel == model, whisperKit != nil { return }
+        // Coalesce concurrent loads of the SAME model (e.g. the streaming pre-warm racing the final
+        // finishDictation decode): join the in-flight load instead of nil-ing `whisperKit` and starting a
+        // second download/load. The actor serializes everything up to the first await, so the check + set
+        // is atomic.
+        if let inFlight = loadInFlight, inFlight.model == model {
+            try await inFlight.task.value
+            return
+        }
+        let task = Task { try await self.performLoad(model: model, progress: progress) }
+        loadInFlight = (model, task)
+        defer { loadInFlight = nil }
+        try await task.value
+    }
+
+    /// The actual load (always run behind `loadInFlight` so only one runs per model at a time): load locally
+    /// if on disk (offline, no re-download), else download with progress. Local-load failure (corrupt cache)
+    /// falls back to re-downloading.
+    private func performLoad(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {
         whisperKit = nil
 
         if Self.isDownloaded(model) {

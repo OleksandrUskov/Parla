@@ -181,6 +181,37 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(r.confirmedText, "hello world")
     }
 
+    /// `flush: true` overrides holdback and confirms every segment, advancing the cursor — the orchestrator
+    /// uses this when the window has grown large without confirming (continuous speech), to keep it bounded.
+    func testReconcilerFlushConfirmsAllSegmentsDespiteHoldback() {
+        var r = StreamingReconciler(holdback: 2)
+        r.ingest(segments: [seg(0, 1, "a"), seg(1, 2, "b"), seg(2, 3, "c")], windowStart: 0, flush: true)
+        XCTAssertEqual(r.confirmedText, "a b c")          // all confirmed despite holdback 2
+        XCTAssertEqual(r.hypothesisText, "")
+        XCTAssertEqual(r.confirmedSeconds, 3, accuracy: 1e-9)
+    }
+
+    /// Overlap-aware merge: when a re-decoded window re-emits the previous cut's trailing word(s), the merge
+    /// drops the duplicate prefix instead of producing "a a b" / "привет привет".
+    func testReconcilerMergeDedupDropsWordOverlap() {
+        XCTAssertEqual(StreamingReconciler.mergeDedup("a", "a b"), "a b")
+        XCTAssertEqual(StreamingReconciler.mergeDedup("привет мир", "мир как дела"), "привет мир как дела")
+        XCTAssertEqual(StreamingReconciler.mergeDedup("a b", "c d"), "a b c d")   // no overlap
+        XCTAssertEqual(StreamingReconciler.mergeDedup("", "hello"), "hello")
+        XCTAssertEqual(StreamingReconciler.mergeDedup("done", ""), "done")
+        XCTAssertEqual(StreamingReconciler.mergeDedup("a a", "a a b"), "a a b")   // 2-word overlap
+    }
+
+    /// End-to-end: a tick whose re-decoded window re-emits the prior confirmed word must NOT duplicate it.
+    func testReconcilerNoDuplicateWordAcrossReSegmentedWindow() {
+        var r = StreamingReconciler(holdback: 2)
+        r.ingest(segments: [seg(0, 1, "a"), seg(1, 2, "b"), seg(2, 3, "c")], windowStart: 0)   // confirm "a"
+        // Next window restarts at the cursor (1.0) but re-emits "a" first (cut landed before a's acoustic end).
+        r.ingest(segments: [seg(0, 1, "a"), seg(1, 2, "b"), seg(2, 3, "c"), seg(3, 4, "d")], windowStart: 1.0)
+        XCTAssertEqual(r.confirmedText, "a b")            // "a" not duplicated, "b" confirmed
+        XCTAssertEqual(r.hypothesisText, "c d")
+    }
+
     // MARK: TranscriptItem
 
     func testDisplayPlain() {

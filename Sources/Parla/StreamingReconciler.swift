@@ -41,16 +41,43 @@ struct StreamingReconciler {
     /// Confirms all but the last `holdback` segments, appends their text to `confirmedText`, and advances
     /// `confirmedSeconds` to the last confirmed segment's absolute end. Segments are never re-confirmed:
     /// because the next window starts at the advanced cursor, already-confirmed audio is not decoded again.
-    mutating func ingest(segments: [Segment], windowStart: Double) {
-        let confirmCount = max(0, segments.count - holdback)
+    /// - Parameter flush: confirm EVERY segment this tick (holdback 0). The orchestrator sets it when the
+    ///   decode window has grown large without the cursor advancing (continuous low-pause speech where
+    ///   Whisper emits ≤ holdback segments per window) — flushing makes the cursor catch up so the next
+    ///   window stays bounded instead of re-decoding an ever-growing buffer. Normal ticks hold the tail back.
+    mutating func ingest(segments: [Segment], windowStart: Double, flush: Bool = false) {
+        let effectiveHoldback = flush ? 0 : holdback
+        let confirmCount = max(0, segments.count - effectiveHoldback)
         let confirmed = segments.prefix(confirmCount)
         let tail = segments.dropFirst(confirmCount)
 
         if let last = confirmed.last {
-            confirmedText = Self.appended(confirmedText, Self.join(confirmed))
+            // Overlap-aware append: the next window restarts at the cursor and may re-emit the last confirmed
+            // word(s) (the cut rarely lands on the true acoustic boundary, and each window is decoded cold),
+            // so drop any leading words already ending confirmedText — else the preview shows "привет привет".
+            confirmedText = Self.mergeDedup(confirmedText, Self.join(confirmed))
             confirmedSeconds = windowStart + last.end
         }
         hypothesisText = Self.join(tail)
+    }
+
+    /// Append `addition` to `base`, dropping any leading words of `addition` that already form the tail of
+    /// `base` (word-level overlap, capped at 8 words). Removes the cross-window duplicate-word artifact that
+    /// a blind append produces when a re-decoded window re-emits the previous cut's trailing words.
+    static func mergeDedup(_ base: String, _ addition: String) -> String {
+        if addition.isEmpty { return base }
+        if base.isEmpty { return addition }
+        let baseWords = base.split(separator: " ")
+        let addWords = addition.split(separator: " ")
+        let maxOverlap = min(baseWords.count, addWords.count, 8)
+        var overlap = 0
+        var k = maxOverlap
+        while k > 0 {
+            if baseWords.suffix(k).elementsEqual(addWords.prefix(k)) { overlap = k; break }
+            k -= 1
+        }
+        let kept = addWords.dropFirst(overlap)
+        return kept.isEmpty ? base : base + " " + kept.joined(separator: " ")
     }
 
     /// Trim + join segment texts with single spaces, dropping any that strip to empty.
