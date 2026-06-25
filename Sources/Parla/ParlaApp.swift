@@ -32,6 +32,7 @@ struct ParlaApp: App {
                     NSApp.servicesProvider = sp
                     servicesProvider = sp                     // keep a strong ref alive
                     NSUpdateDynamicServices()
+                    ParlaRuntime.model = model                // app-bound AppIntents reach the live model
                     installHotkeyOnce()                  // install hotkey handler + sync enabled/disabled to the setting
                     model.startWatchingIfEnabled()       // resume folder watching if enabled
                     await model.pruneAudioCache()        // remove orphans + old audio beyond the limit

@@ -1255,6 +1255,14 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(CompletionSound.isHeadless)   // the sound can never beep during the test suite
     }
 
+    @MainActor func testLastTranscriptText() {
+        let m = AppModel(engine: FakeEngine())
+        m.history = []
+        XCTAssertEqual(m.lastTranscriptText, "")                          // empty history → "" (GetLastTranscript)
+        m.history = [makeItem(text: "newest"), makeItem(text: "older")]
+        XCTAssertEqual(m.lastTranscriptText, "newest")                    // history[0] is newest
+    }
+
     // MARK: parla:// URL scheme (pure parser)
 
     func testParseParlaURL() {

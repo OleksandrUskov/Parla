@@ -129,6 +129,9 @@ final class AppModel {
 
     var filteredHistory: [TranscriptItem] { filterHistory(history, query: searchQuery) }
 
+    /// Most recent transcript's text, or "" — the read value behind GetLastTranscriptIntent (Shortcuts).
+    var lastTranscriptText: String { history.first?.text ?? "" }
+
     // «What counts as audio» — a cross-domain utility (used by transcription, watching, and the buffer).
     nonisolated static let audioExts: Set<String> = [
         "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac",
