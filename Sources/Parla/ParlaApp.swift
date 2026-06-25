@@ -5,6 +5,7 @@ import KeyboardShortcuts
 
 @main
 struct ParlaApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
     @State private var hotkeyInstalled = false
 
@@ -56,6 +57,14 @@ struct ParlaApp: App {
         if model.globalHotkeyEnabled { KeyboardShortcuts.enable(.quickTranscribe) }
         else { KeyboardShortcuts.disable(.quickTranscribe) }
     }
+}
+
+/// Quit Parla when its main window is closed — instead of lingering in the Dock with no windows
+/// (the macOS default that forces a manual right-click → Quit). The `MenuBarExtra` is a status item,
+/// not a window, so closing the main window terminates the app, giving a normal desktop-app feel.
+/// (⌘Q still works; the menu-bar quick-transcribe lives only while the app is running.)
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
 
 /// Click on the batch-completion notification → activate Parla and bring its window forward.
