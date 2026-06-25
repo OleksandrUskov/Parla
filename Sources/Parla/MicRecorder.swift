@@ -31,7 +31,13 @@ final class MicRecorder {
     private var autoStop: DispatchWorkItem?
     private(set) var isRecording = false
 
-    init(maxSeconds: TimeInterval = 120) { self.maxSeconds = maxSeconds }
+    private let vad: SilenceDetector?                 // nil = VAD off (zero overhead on the audio thread)
+    private var onAutoStop: (@MainActor () -> Void)?  // stored so the VAD silence hook can route to it
+
+    init(maxSeconds: TimeInterval = 120, vad: SilenceDetector? = nil) {
+        self.maxSeconds = maxSeconds
+        self.vad = vad
+    }
 
     enum Failure: LocalizedError {
         case alreadyRecording
@@ -66,9 +72,18 @@ final class MicRecorder {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("parla-dictation-\(UUID().uuidString).wav")
 
+        self.onAutoStop = onAutoStop
+
         let input = engine.inputNode
         let inFormat = input.outputFormat(forBus: 0)
-        guard let sink = WavSink(url: url, source: inFormat, target: Self.targetFormat) else {
+        // VAD (opt-in): on a run of silence the sink fires this ONCE → hop to main → the SAME `onAutoStop`
+        // channel the 120 s cap uses (single stop + transcribe). Audio-thread buffers never cross isolation;
+        // only this Sendable signal does. Mirrors the FolderWatcher `MainActor.assumeIsolated` hand-off.
+        let onSilence: (@Sendable () -> Void)? = vad == nil ? nil : { @Sendable [weak self] in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.fireAutoStop() } }
+        }
+        guard let sink = WavSink(url: url, source: inFormat, target: Self.targetFormat,
+                                 detector: vad, onSilence: onSilence) else {
             throw Failure.sinkSetupFailed
         }
 
@@ -120,6 +135,9 @@ final class MicRecorder {
     func cancel() {
         if let url = stop() { try? FileManager.default.removeItem(at: url) }
     }
+
+    /// Route the VAD silence signal to the same auto-stop handler the 120 s cap uses. Always on the main actor.
+    private func fireAutoStop() { onAutoStop?() }
 }
 
 /// Real-time WAV sink: resamples each tap buffer to the target format and appends it to an `AVAudioFile`.
@@ -131,8 +149,12 @@ private final class WavSink {
     private let file: AVAudioFile
     private let target: AVAudioFormat
     private let ratio: Double
+    private var detector: SilenceDetector?
+    private let onSilence: (@Sendable () -> Void)?
+    private var firedSilence = false
 
-    init?(url: URL, source: AVAudioFormat, target: AVAudioFormat) {
+    init?(url: URL, source: AVAudioFormat, target: AVAudioFormat,
+          detector: SilenceDetector? = nil, onSilence: (@Sendable () -> Void)? = nil) {
         guard source.sampleRate > 0,
               let converter = AVAudioConverter(from: source, to: target),
               let file = try? AVAudioFile(forWriting: url, settings: target.settings,
@@ -142,10 +164,23 @@ private final class WavSink {
         self.file = file
         self.target = target
         self.ratio = target.sampleRate / source.sampleRate
+        self.detector = detector
+        self.onSilence = onSilence
     }
 
     func append(_ input: AVAudioPCMBuffer) {
         guard input.frameLength > 0 else { return }
+
+        // VAD (opt-in): feed this buffer's loudness; on a run of silence (after speech) fire the stop ONCE.
+        // The buffer is still written below, so audio up to the silence is kept.
+        if !firedSilence, let onSilence, input.format.sampleRate > 0 {
+            let dt = Double(input.frameLength) / input.format.sampleRate
+            if let stop = detector?.feed(rms: WavSink.rms(of: input), dt: dt), stop {
+                firedSilence = true
+                onSilence()
+            }
+        }
+
         // Output capacity = input frames × (16k / inputRate), plus slack for the resampler's tail.
         let capacity = AVAudioFrameCount(Double(input.frameLength) * ratio) + 1024
         guard let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
@@ -164,5 +199,16 @@ private final class WavSink {
         }
         guard status != .error, out.frameLength > 0 else { return }
         try? file.write(from: out)
+    }
+
+    /// Mean loudness (RMS) of the first channel — 0 if the buffer isn't deinterleaved Float32 (the VAD
+    /// then simply never arms, which is safe). Cheap enough for the real-time tap.
+    private static func rms(of buffer: AVAudioPCMBuffer) -> Float {
+        guard let ch = buffer.floatChannelData, buffer.frameLength > 0 else { return 0 }
+        let n = Int(buffer.frameLength)
+        let data = ch[0]
+        var sum: Float = 0
+        for i in 0..<n { let s = data[i]; sum += s * s }
+        return (sum / Float(n)).squareRoot()
     }
 }

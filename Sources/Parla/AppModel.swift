@@ -51,6 +51,8 @@ final class AppModel {
     var dictationPasteIntoFrontmost: Bool { didSet { UserDefaults.standard.set(dictationPasteIntoFrontmost, forKey: Keys.dictationPaste) } }
     /// Hotkey behavior: press-to-toggle (default) vs hold-to-talk.
     var dictationMode: DictationMode { didSet { UserDefaults.standard.set(dictationMode.rawValue, forKey: Keys.dictationMode) } }
+    /// Auto-stop a dictation after a short run of silence (opt-in, off by default).
+    var dictationVADEnabled: Bool { didSet { UserDefaults.standard.set(dictationVADEnabled, forKey: Keys.dictationVAD) } }
 
     /// UI language — separate from the speech-recognition language (`language`). `.system` follows the OS.
     var uiLanguage: UILanguage {
@@ -108,6 +110,7 @@ final class AppModel {
         static let dictationPaste = "dictationPasteIntoFrontmost"
         static let dictationPasteAXPrompted = "dictationPasteAXPrompted"   // one-time AX prompt guard
         static let dictationMode = "dictationMode"
+        static let dictationVAD = "dictationVADEnabled"
         static let lastBookmark = "lastSourceBookmark"
         static let uiLanguage = "uiLanguage"
     }
@@ -129,6 +132,7 @@ final class AppModel {
         keepDictationAudio = d.bool(forKey: Keys.keepDictationAudio)    // off — dictation audio is throwaway
         dictationPasteIntoFrontmost = d.bool(forKey: Keys.dictationPaste)   // off — the only Accessibility feature
         dictationMode = DictationMode(rawValue: d.string(forKey: Keys.dictationMode) ?? "") ?? .toggle
+        dictationVADEnabled = d.bool(forKey: Keys.dictationVAD)   // opt-in, off by default
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()

@@ -63,7 +63,7 @@ extension AppModel {
                 QuickToast.shared.show(L("toast.mic.denied"))
                 return
             }
-            let rec = MicRecorder()
+            let rec = MicRecorder(vad: dictationVADEnabled ? SilenceDetector() : nil)
             do {
                 try rec.start(onAutoStop: { [weak self] in self?.stopAndTranscribeDictation() })
                 recorder = rec

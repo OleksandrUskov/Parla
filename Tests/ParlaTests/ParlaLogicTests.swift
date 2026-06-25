@@ -856,6 +856,35 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(DictationMode.allCases.count, 2)
     }
 
+    // MARK: VAD silence detector (MIC_DICTATION P3 part 2)
+
+    func testSilenceDetectorArmsAfterSpeechThenStops() {
+        var d = SilenceDetector(threshold: 0.01, silenceToStop: 1.0, minSpeechToArm: 0.5)
+        XCTAssertFalse(d.feed(rms: 0.2, dt: 0.3))   // 0.3 s speech
+        XCTAssertFalse(d.feed(rms: 0.2, dt: 0.3))   // 0.6 s speech → armed
+        XCTAssertFalse(d.feed(rms: 0.0, dt: 0.5))   // 0.5 s silence
+        XCTAssertTrue(d.feed(rms: 0.0, dt: 0.5))    // 1.0 s silence → stop
+    }
+
+    func testSilenceDetectorNeverStopsBeforeSpeech() {
+        var d = SilenceDetector(threshold: 0.01, silenceToStop: 0.5, minSpeechToArm: 0.4)
+        for _ in 0..<10 { XCTAssertFalse(d.feed(rms: 0.0, dt: 0.5)) }   // pure silence → never arms
+    }
+
+    func testSilenceDetectorResetsSilenceOnRenewedSpeech() {
+        var d = SilenceDetector(threshold: 0.01, silenceToStop: 1.0, minSpeechToArm: 0.2)
+        XCTAssertFalse(d.feed(rms: 0.5, dt: 0.3))   // armed
+        XCTAssertFalse(d.feed(rms: 0.0, dt: 0.6))   // 0.6 s silence
+        XCTAssertFalse(d.feed(rms: 0.5, dt: 0.1))   // speech resets the silence run
+        XCTAssertFalse(d.feed(rms: 0.0, dt: 0.6))   // 0.6 s again (not 1.2)
+        XCTAssertTrue(d.feed(rms: 0.0, dt: 0.5))    // 1.1 s ≥ 1.0 → stop
+    }
+
+    func testSilenceDetectorIgnoresNonPositiveDt() {
+        var d = SilenceDetector(threshold: 0.01, silenceToStop: 0.1, minSpeechToArm: 0.0)
+        XCTAssertFalse(d.feed(rms: 0.0, dt: 0))     // dt <= 0 → no-op
+    }
+
     // MARK: AVFoundation-direct decode path (BUNDLE_FFMPEG P0)
 
     func testAvDecodableMirrorsDirectlyPlayable() {

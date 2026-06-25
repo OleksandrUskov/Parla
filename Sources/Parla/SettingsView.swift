@@ -81,6 +81,7 @@ struct SettingsView: View {
                 Picker(L("settings.dictation.mode"), selection: $model.dictationMode) {
                     ForEach(DictationMode.allCases) { mode in Text(mode.label).tag(mode) }
                 }
+                Toggle(L("settings.dictation.vad"), isOn: $model.dictationVADEnabled)
                 Toggle(L("settings.dictation.keepaudio"), isOn: $model.keepDictationAudio)
                 Toggle(L("settings.dictation.paste"), isOn: $model.dictationPasteIntoFrontmost)
                 if model.dictationPasteIntoFrontmost {

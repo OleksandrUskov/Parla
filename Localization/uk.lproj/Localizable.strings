@@ -157,6 +157,7 @@
 "settings.dictation.mode"        = "Тригер";
 "settings.dictation.mode.toggle" = "Натискання — старт / стоп";
 "settings.dictation.mode.hold"   = "Утримувати для запису";
+"settings.dictation.vad"         = "Зупиняти автоматично, коли я замовкаю";
 "settings.dictation.keepaudio" = "Зберігати записане аудіо для прослуховування";
 "settings.dictation.paste"         = "Вставляти в активний застосунок після диктування";
 "settings.dictation.paste.caption" = "Потрібен Універсальний доступ — Parla спитає один раз, під час першого використання. Це єдина функція, якій він потрібен. Якщо вимкнено — текст просто копіюється в буфер.";
