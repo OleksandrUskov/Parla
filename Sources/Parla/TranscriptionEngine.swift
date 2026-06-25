@@ -105,7 +105,13 @@ actor TranscriptionEngine {
         }
 
         progress(.downloading(0))
-        let folder = try await WhisperKit.download(variant: model, progressCallback: { p in
+        // `@Sendable` is LOAD-BEARING, not cosmetic: WhisperKit's `progressCallback` is `((Progress) -> Void)?`
+        // (NOT @Sendable), so without it this closure inherits THIS actor's isolation — and WhisperKit invokes
+        // it off-actor on the cooperative pool (Hub download thread), which traps (`swift_task_isCurrentExecutor`,
+        // the same crash class as the MicRecorder tap). `@Sendable` strips the isolation (it only reads `p` and
+        // calls the already-@Sendable `progress`). The sibling call site in `AppModel+Models.swift` is @Sendable
+        // for the same reason — keep BOTH that way.
+        let folder = try await WhisperKit.download(variant: model, progressCallback: { @Sendable p in
             progress(.downloading(p.fractionCompleted))
         })
         progress(.loading)
