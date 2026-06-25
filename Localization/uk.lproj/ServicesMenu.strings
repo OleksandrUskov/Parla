@@ -1,0 +1,3 @@
+/* Services menu item title localization (Apple QA1605): key = the English NSMenuItem `default` from
+   Info.plist (build_app.sh), value = translation. Auto-bundled via build_app.sh's `cp -R *.lproj`. */
+"Transcribe with Parla" = "Розпізнати через Parla";
