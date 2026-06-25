@@ -114,6 +114,73 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(MicRecorder.normalize([]).count, 0)
     }
 
+    // MARK: Streaming reconciler (MIC_DICTATION P3c)
+
+    private func seg(_ start: Double, _ end: Double, _ text: String) -> Segment {
+        Segment(start: start, end: end, text: text)
+    }
+
+    /// Confirm all but the last `holdback` segments; the tail is the dimmed hypothesis; the cursor advances
+    /// to the last confirmed segment's absolute end.
+    func testReconcilerConfirmsAllButHoldback() {
+        var r = StreamingReconciler(holdback: 2)
+        r.ingest(segments: [seg(0, 1, "a"), seg(1, 2, "b"), seg(2, 3, "c")], windowStart: 0)
+        XCTAssertEqual(r.confirmedText, "a")
+        XCTAssertEqual(r.hypothesisText, "b c")
+        XCTAssertEqual(r.confirmedSeconds, 1, accuracy: 1e-9)
+        XCTAssertEqual(r.liveText, "a b c")
+    }
+
+    /// With ≤ holdback segments nothing is stable yet: confirm nothing, hold the cursor, everything is hypothesis.
+    func testReconcilerWithholdsWhenTooFewSegments() {
+        var r = StreamingReconciler(holdback: 2)
+        r.ingest(segments: [seg(0, 1, "only"), seg(1, 2, "two")], windowStart: 0)
+        XCTAssertEqual(r.confirmedText, "")
+        XCTAssertEqual(r.hypothesisText, "only two")
+        XCTAssertEqual(r.confirmedSeconds, 0, accuracy: 1e-9)
+    }
+
+    /// Across ticks the confirmed text accumulates IN ORDER with no double-counting: segments that were the
+    /// hypothesis tail one tick get confirmed the next (the window restarts at the advanced cursor).
+    func testReconcilerAccumulatesAcrossTicksNoDoubleCount() {
+        var r = StreamingReconciler(holdback: 2)
+        // Tick 1: window @0 → confirm "a", hold "b c".
+        r.ingest(segments: [seg(0, 1, "a"), seg(1, 2, "b"), seg(2, 3, "c")], windowStart: 0)
+        // Tick 2: window restarts @ confirmedSeconds (1.0); decode is window-relative → "b c" now confirm-able.
+        r.ingest(segments: [seg(0, 1, "b"), seg(1, 2, "c"), seg(2, 3, "d"), seg(3, 4, "e")],
+                 windowStart: r.confirmedSeconds)
+        XCTAssertEqual(r.confirmedText, "a b c")          // b, c counted exactly once
+        XCTAssertEqual(r.hypothesisText, "d e")
+        XCTAssertEqual(r.confirmedSeconds, 3, accuracy: 1e-9)   // 1.0 windowStart + 2.0 last confirmed end
+    }
+
+    /// An empty (silent) window doesn't disturb the confirmed prefix or cursor; it just clears the hypothesis.
+    func testReconcilerEmptyWindowKeepsConfirmed() {
+        var r = StreamingReconciler(holdback: 2)
+        r.ingest(segments: [seg(0, 1, "a"), seg(1, 2, "b"), seg(2, 3, "c")], windowStart: 0)
+        r.ingest(segments: [], windowStart: r.confirmedSeconds)
+        XCTAssertEqual(r.confirmedText, "a")
+        XCTAssertEqual(r.hypothesisText, "")
+        XCTAssertEqual(r.confirmedSeconds, 1, accuracy: 1e-9)
+    }
+
+    /// holdback 0 confirms everything (a "flush"-style decode), nothing held back.
+    func testReconcilerHoldbackZeroConfirmsAll() {
+        var r = StreamingReconciler(holdback: 0)
+        r.ingest(segments: [seg(0, 1, "a"), seg(1, 2, "b")], windowStart: 5)
+        XCTAssertEqual(r.confirmedText, "a b")
+        XCTAssertEqual(r.hypothesisText, "")
+        XCTAssertEqual(r.confirmedSeconds, 7, accuracy: 1e-9)   // 5 windowStart + 2 last end
+    }
+
+    /// Joining trims each segment, drops empties, and uses single spaces (Whisper segment text often carries
+    /// leading spaces / blank tokens after stripping).
+    func testReconcilerJoinNormalizesSpacing() {
+        var r = StreamingReconciler(holdback: 0)
+        r.ingest(segments: [seg(0, 1, "  hello "), seg(1, 2, ""), seg(2, 3, " world")], windowStart: 0)
+        XCTAssertEqual(r.confirmedText, "hello world")
+    }
+
     // MARK: TranscriptItem
 
     func testDisplayPlain() {
