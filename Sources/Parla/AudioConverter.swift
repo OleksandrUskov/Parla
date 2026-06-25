@@ -96,7 +96,10 @@ enum AudioConverter {
         proc.executableURL = ffmpeg
         proc.arguments = wavArgs(src: src.path, out: out.path)
         let (status, tail) = try runCapturingStderr(proc)
-        guard status == 0 else { throw Failure.conversionFailed(tail) }
+        guard status == 0 else {
+            try? FileManager.default.removeItem(at: out)   // ffmpeg -y may have written a partial/0-byte WAV before failing
+            throw Failure.conversionFailed(tail)
+        }
         return out
     }
 
@@ -109,7 +112,10 @@ enum AudioConverter {
         proc.executableURL = ffmpeg
         proc.arguments = m4aArgs(src: src.path, dest: dest.path)
         let (status, tail) = try runCapturingStderr(proc)
-        guard status == 0 else { throw Failure.conversionFailed(tail) }
+        guard status == 0 else {
+            try? FileManager.default.removeItem(at: dest)   // drop a partial rendition so it can't masquerade as playable
+            throw Failure.conversionFailed(tail)
+        }
     }
 
     // MARK: Long-audio support
@@ -145,8 +151,15 @@ enum AudioConverter {
         proc.arguments = chunkArgs(src: src.path, segmentTime: Int(chunkLength),
                                    outPattern: dir.appendingPathComponent("chunk_%04d.wav").path)
         let (status, tail) = try runCapturingStderr(proc)
-        guard status == 0 else { throw Failure.conversionFailed(tail) }
+        guard status == 0 else {
+            try? FileManager.default.removeItem(at: dir)   // failed split → don't leak the temp chunk dir
+            throw Failure.conversionFailed(tail)
+        }
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-        return files.filter { $0.pathExtension == "wav" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let wavs = files.filter { $0.pathExtension == "wav" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        // Produced nothing (no audio stream / empty input): the caller derives the dir to clean from the
+        // first chunk URL, so with zero chunks it can't — remove the empty temp dir here instead.
+        if wavs.isEmpty { try? FileManager.default.removeItem(at: dir) }
+        return wavs
     }
 }
