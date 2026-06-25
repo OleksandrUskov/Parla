@@ -26,6 +26,20 @@ let samplesDir = args[1]
 let referenceMD = args[2]
 let model = args[3]
 let language = args.count >= 5 ? args[4] : "ru"
+// [thresholds] (6th arg): apply Whisper's anti-hallucination decoding thresholds (noSpeech / logProb /
+// compressionRatio) — suppresses the "Спасибо"-on-silence garbage. Off by default to measure the baseline.
+let useThresholds = args.count >= 6 && (args[5] == "thresholds" || args[5] == "1")
+
+/// Decoding options, optionally with the anti-hallucination thresholds applied (the same knobs the app would set).
+func decodeOpts() -> DecodingOptions {
+    var o = DecodingOptions(task: .transcribe, language: language, detectLanguage: false)
+    if useThresholds {
+        o.compressionRatioThreshold = 2.4   // repetitive/looping output → fallback
+        o.logProbThreshold = -1.0           // very low-confidence tokens → drop/fallback
+        o.noSpeechThreshold = 0.6           // high no-speech prob → treat as silence (kills trailing hallucinations)
+    }
+    return o
+}
 
 // MARK: - ffmpeg (bundled, for Ogg/Opus → wav)
 
@@ -149,9 +163,7 @@ func joinSegs(_ segs: ArraySlice<TranscriptionSegment>) -> String {
 
 func simulateStream(_ floats: [Float], kit: WhisperKit) async throws -> String {
     func decode(_ window: [Float]) async throws -> [TranscriptionSegment] {
-        let r: [TranscriptionResult] = try await kit.transcribe(
-            audioArray: window,
-            decodeOptions: DecodingOptions(task: .transcribe, language: language, detectLanguage: false))
+        let r: [TranscriptionResult] = try await kit.transcribe(audioArray: window, decodeOptions: decodeOpts())
         return r.flatMap { $0.segments }
     }
 
@@ -201,9 +213,7 @@ func loadModel() async throws -> WhisperKit {
 }
 
 func offlineText(_ floats: [Float], kit: WhisperKit) async throws -> String {
-    let r: [TranscriptionResult] = try await kit.transcribe(
-        audioArray: floats,
-        decodeOptions: DecodingOptions(task: .transcribe, language: language, detectLanguage: false))
+    let r: [TranscriptionResult] = try await kit.transcribe(audioArray: floats, decodeOptions: decodeOpts())
     return r.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
@@ -212,11 +222,12 @@ let files = ((try? FileManager.default.contentsOfDirectory(atPath: samplesDir)) 
     .filter { $0.hasSuffix(".ogg") || $0.hasSuffix(".wav") || $0.hasSuffix(".m4a") || $0.hasSuffix(".mp3") }
     .sorted()
 
-print("model=\(model)  lang=\(language)  files=\(files.count)  references=\(refs.count)\n")
+print("model=\(model)  lang=\(language)  thresholds=\(useThresholds ? "ON" : "off")  files=\(files.count)\n")
 
 let kit = try await loadModel()
 
 var offSum = 0.0, strSum = 0.0, n = 0
+var offTimeSum = 0.0, strTimeSum = 0.0, durSum = 0.0
 for file in files {
     let path = samplesDir + "/" + file
     do {
@@ -224,18 +235,25 @@ for file in files {
         let floats = try AudioProcessor.loadAudioAsFloatArray(fromPath: wav)
         let dur = Double(floats.count) / kRate
 
+        let offStart = Date()
         let offline = try await offlineText(floats, kit: kit)
+        let offTime = Date().timeIntervalSince(offStart)
+        let strStart = Date()
         let streamed = try await simulateStream(floats, kit: kit)
+        let strTime = Date().timeIntervalSince(strStart)
         let ref = refs[file] ?? ""
 
         let offWER = ref.isEmpty ? Double.nan : wer(hyp: offline, ref: ref)
         let strWER = ref.isEmpty ? Double.nan : wer(hyp: streamed, ref: ref)
         if !offWER.isNaN { offSum += offWER; strSum += strWER; n += 1 }
+        offTimeSum += offTime; strTimeSum += strTime; durSum += dur
 
         func pct(_ x: Double) -> String { x.isNaN ? "  n/a" : String(format: "%5.1f%%", x * 100) }
+        // RTF = decode time / audio length. <1 = faster than real time. Streamed re-decodes overlapping windows,
+        // so its total compute is higher (that's the "RU is slow" cost we're quantifying).
         print("── \(file)  (\(String(format: "%.1f", dur))s)")
-        print("   offline  WER \(pct(offWER))")
-        print("   streamed WER \(pct(strWER))   Δ \(offWER.isNaN ? "n/a" : String(format: "%+.1f pts", (strWER - offWER) * 100))")
+        print("   offline  WER \(pct(offWER))   \(String(format: "%.1fs (%.2f× RT)", offTime, offTime / dur))")
+        print("   streamed WER \(pct(strWER))   Δ \(offWER.isNaN ? "n/a" : String(format: "%+.1f pts", (strWER - offWER) * 100))   \(String(format: "%.1fs (%.2f× RT)", strTime, strTime / dur))")
         print("   [streamed] \(streamed)")
         print("")
     } catch {
@@ -244,7 +262,7 @@ for file in files {
 }
 
 if n > 0 {
-    print("════ AVERAGE over \(n) files ════")
-    print(String(format: "   offline  WER %5.1f%%", offSum / Double(n) * 100))
-    print(String(format: "   streamed WER %5.1f%%   Δ %+.1f pts", strSum / Double(n) * 100, (strSum - offSum) / Double(n) * 100))
+    print("════ AVERAGE over \(n) files (model=\(model), thresholds=\(useThresholds ? "ON" : "off")) ════")
+    print(String(format: "   offline  WER %5.1f%%   %.2f× RT", offSum / Double(n) * 100, offTimeSum / durSum))
+    print(String(format: "   streamed WER %5.1f%%   Δ %+.1f pts   %.2f× RT", strSum / Double(n) * 100, (strSum - offSum) / Double(n) * 100, strTimeSum / durSum))
 }
