@@ -81,8 +81,14 @@ if [ -f "Vendor/ffmpeg/ffmpeg" ]; then
   mkdir -p "$APPDIR/Contents/Resources/Helpers"
   cp "Vendor/ffmpeg/ffmpeg" "$APPDIR/Contents/Resources/Helpers/ffmpeg"
   chmod +x "$APPDIR/Contents/Resources/Helpers/ffmpeg"
+  # LGPL 2.1 §6: the license text AND a source/relink notice must travel WITH the binary the end
+  # user receives (they get the .app, not the git repo). LICENSE.LGPL = the full license; SOURCE.md =
+  # exact version + upstream URL + configure line + reproducible build recipe (the "how to get/relink
+  # the source" notice). Without these in the bundle, distributing the static LGPL binary is non-compliant.
+  [ -f "Vendor/ffmpeg/LICENSE.LGPL" ] && cp "Vendor/ffmpeg/LICENSE.LGPL" "$APPDIR/Contents/Resources/Helpers/LICENSE.LGPL"
+  [ -f "Vendor/ffmpeg/SOURCE.md" ]    && cp "Vendor/ffmpeg/SOURCE.md"    "$APPDIR/Contents/Resources/Helpers/ffmpeg-SOURCE.md"
   codesign --force --options runtime --sign - "$APPDIR/Contents/Resources/Helpers/ffmpeg" >/dev/null 2>&1 || true
-  echo "• Вшит LGPL ffmpeg → Helpers/ffmpeg"
+  echo "• Вшит LGPL ffmpeg + LICENSE/SOURCE → Helpers/"
 fi
 
 codesign --force --deep --sign - "$APPDIR" >/dev/null 2>&1 || true
