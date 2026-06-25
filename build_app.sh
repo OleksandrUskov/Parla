@@ -91,6 +91,9 @@ if [ -f "Vendor/ffmpeg/ffmpeg" ]; then
   echo "• Вшит LGPL ffmpeg + LICENSE/SOURCE → Helpers/"
 fi
 
+# NOTE: ad-hoc, no hardened runtime — fine for local/dev runs and doesn't block exec'ing the helper.
+# At the notarization milestone, sign the outer app with a Developer ID + `--options runtime` (and prefer
+# explicit per-binary signing over `--deep`, which is unreliable for nested code).
 codesign --force --deep --sign - "$APPDIR" >/dev/null 2>&1 || true
 
 echo "✅ Готово: $(pwd)/$APPDIR"

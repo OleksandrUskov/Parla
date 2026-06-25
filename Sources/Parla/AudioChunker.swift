@@ -34,6 +34,10 @@ enum AudioChunker {
 
     /// Offset one chunk's segments into the global timeline: chunk `k` covers `[k*chunkLength, …)`,
     /// so every local timecode shifts by `k*chunkLength`.
+    /// NOTE: ffmpeg's segment muxer cuts on frame boundaries, so a real chunk's start drifts from the
+    /// nominal `k*chunkLength` by tens of ms (measured ≤ ~20 ms accumulated over a 25-min file) — a
+    /// constant per-chunk offset, not compounding. Imperceptible for subtitles, and `stitch`'s sort +
+    /// `subtitleCues`'s end≥start clamp absorb any tiny overlap. Left nominal for simplicity.
     static func offsetSegments(_ segs: [Segment], chunkIndex k: Int,
                                chunkLength: Double = chunkLengthSec) -> [Segment] {
         let shift = Double(k) * chunkLength

@@ -231,8 +231,9 @@ enum HistoryStore {
         guard let data = try? Data(contentsOf: fileURL) else { return [] }
         // Happy path: a clean array of records.
         if let items = try? JSONDecoder().decode([TranscriptItem].self, from: data) { return items }
-        // Corrupt: salvage every still-decodable record so one bad element (truncated write, manual
-        // edit, a future-schema field the decoder rejects) never costs the whole archive.
+        // Corrupt: salvage every still-decodable record so one bad element (a truncated write, a manual
+        // edit, or a record whose required field changed type) never costs the whole archive. (Unknown
+        // *extra* keys don't need salvaging — Codable ignores them; the real risk is a required field.)
         if let salvaged = try? JSONDecoder().decode([FailableDecodable<TranscriptItem>].self, from: data) {
             let items = salvaged.compactMap(\.value)
             if items.count < salvaged.count {   // we actually dropped corrupt elements
