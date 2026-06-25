@@ -145,7 +145,7 @@ final class AppModel {
         dictationPasteIntoFrontmost = d.bool(forKey: Keys.dictationPaste)   // off — the only Accessibility feature
         dictationMode = DictationMode(rawValue: d.string(forKey: Keys.dictationMode) ?? "") ?? .toggle
         dictationVADEnabled = d.bool(forKey: Keys.dictationVAD)   // opt-in, off by default
-        dictationLiveStreaming = d.bool(forKey: Keys.dictationLiveStreaming)   // opt-in, off by default
+        dictationLiveStreaming = (d.object(forKey: Keys.dictationLiveStreaming) as? Bool) ?? true   // ON by default (safe + measured; preview-only)
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()
