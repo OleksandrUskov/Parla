@@ -20,6 +20,7 @@ struct ParlaApp: App {
                     OnboardingView { didOnboard = true; showOnboarding = false }
                         .environment(model)
                 }
+                .onOpenURL { model.handleParlaURL($0) }   // parla:// scheme (Raycast/Alfred/terminal/Shortcuts)
                 .task {
                     appDelegate.model = model            // let the terminate-guard see in-flight work
                     if Onboarding.shouldShowOnboarding(didOnboard: didOnboard, hasHistory: !model.history.isEmpty) {

@@ -65,6 +65,13 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>ru</string><string>uk</string></array>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>com.parla.app.url</string>
+      <key>CFBundleURLSchemes</key><array><string>parla</string></array>
+    </dict>
+  </array>
   $ICON_LINE
 </dict>
 </plist>

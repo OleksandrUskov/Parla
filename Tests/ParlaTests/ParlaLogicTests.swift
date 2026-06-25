@@ -1255,6 +1255,24 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(CompletionSound.isHeadless)   // the sound can never beep during the test suite
     }
 
+    // MARK: parla:// URL scheme (pure parser)
+
+    func testParseParlaURL() {
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://transcribe?path=/a/v.ogg")!),
+                       .transcribe(paths: ["/a/v.ogg"], dirs: []))
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://transcribe?path=/a/v.ogg&path=/b/w.mp3")!),
+                       .transcribe(paths: ["/a/v.ogg", "/b/w.mp3"], dirs: []))   // repeatable path=
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://transcribe?dir=/Users/me/voices")!),
+                       .transcribe(paths: [], dirs: ["/Users/me/voices"]))
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://transcribe?path=/a/my%20file.ogg")!),
+                       .transcribe(paths: ["/a/my file.ogg"], dirs: []))         // percent-decoded
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://transcribe-last")!), .transcribeLast)
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://clipboard")!), .clipboard)
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://show")!), .show)
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://bogus")!), .unknown)   // unknown verb
+        XCTAssertEqual(parseParlaURL(URL(string: "https://evil.com/x")!), .unknown)   // wrong scheme
+    }
+
     // MARK: First-run onboarding (pure decision logic)
 
     func testShouldShowOnboarding() {
