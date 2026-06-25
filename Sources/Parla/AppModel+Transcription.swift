@@ -219,6 +219,9 @@ extension AppModel {
     func retranscribe(_ item: TranscriptItem, with model: String) {
         guard !isBusy, downloadingModel == nil else { return }
         guard model != item.model else { return }            // same model — nothing to recompute
+        // A re-transcribe is NOT a "last drop": clear it so the error chip's «Try again» (which replays
+        // lastAttemptedURLs) can't fire the wrong file/model if this re-transcribe fails.
+        lastAttemptedURLs = []
         phase = .preparing(item.sourceName)                   // claim the phase synchronously — closes the race (like handleDrop)
         Task { await runRetranscribe(item, with: model) }
     }

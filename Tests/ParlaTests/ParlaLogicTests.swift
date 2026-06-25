@@ -1381,6 +1381,19 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testRetranscribeClearsLastAttemptedSoChipWontReplayOldDrop() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine())
+            m.lastAttemptedURLs = [URL(fileURLWithPath: "/tmp/old-drop.ogg")]   // a prior manual drop
+            XCTAssertTrue(m.canRetryLast)
+            var item = makeItem(text: "orig", model: "openai_whisper-tiny")
+            item.sourcePath = "/tmp/missing-\(UUID().uuidString).ogg"           // re-transcribe will fail to resolve
+            m.history = [item]
+            m.retranscribe(item, with: "openai_whisper-base")                   // different model → proceeds + clears
+            XCTAssertTrue(m.lastAttemptedURLs.isEmpty)                          // chip's «Try again» can't replay the old drop
+        }
+    }
+
     @MainActor func testCanRetranscribe() throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).ogg")
