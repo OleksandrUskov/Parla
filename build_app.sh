@@ -82,6 +82,7 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
       <key>NSReturnTypes</key><array/>
     </dict>
   </array>
+  <key>NSMicrophoneUsageDescription</key><string>Parla records your microphone only while you are dictating, and transcribes it on-device. Audio never leaves your Mac.</string>
   $ICON_LINE
 </dict>
 </plist>

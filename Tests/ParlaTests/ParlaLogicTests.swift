@@ -1,5 +1,6 @@
 import XCTest
 import os
+import AVFoundation
 @testable import Parla
 
 /// Unit tests for pure logic (no WhisperKit/audio/UI):
@@ -69,6 +70,19 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(formatBytes(-5), "—")
         XCTAssertEqual(formatBytes(500 * 1_048_576), "500 МБ")
         XCTAssertEqual(formatBytes(Int64(1.5 * 1024 * 1_048_576)), "1.5 ГБ")
+    }
+
+    // MARK: Dictation (MIC_DICTATION P0)
+
+    /// The recorder writes WhisperKit's native input format. If this constant drifts, dictation would
+    /// silently produce the wrong sample rate / channel count and tank recognition quality. (The live
+    /// mic path itself is manual-only — this pins the one piece that's pure and regressable.)
+    @MainActor
+    func testDictationTargetFormatIs16kMonoInt16() {
+        let f = MicRecorder.targetFormat
+        XCTAssertEqual(f.sampleRate, 16_000)
+        XCTAssertEqual(f.channelCount, 1)
+        XCTAssertEqual(f.commonFormat, .pcmFormatInt16)
     }
 
     // MARK: TranscriptItem
