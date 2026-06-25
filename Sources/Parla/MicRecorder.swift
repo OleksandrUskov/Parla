@@ -93,11 +93,7 @@ final class MicRecorder {
             throw Failure.sinkSetupFailed
         }
 
-        // `sink` is transferred into the @Sendable tap block and used ONLY on the audio thread — it is
-        // never referenced from the main actor again, so this is a clean region transfer (no shared state).
-        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { buffer, _ in
-            sink.append(buffer)
-        }
+        installMicTap(on: input, format: inFormat, sink: sink)
 
         do {
             engine.prepare()
@@ -165,6 +161,19 @@ final class MicRecorder {
     /// `nonisolated`: it's pure and the audio-thread sink calls it off the main actor.
     nonisolated static func normalize(_ samples: [Int16]) -> [Float] {
         samples.map { Float($0) / 32768.0 }
+    }
+}
+
+/// Install the real-time input tap from a NONISOLATED context, so the tap block does NOT inherit
+/// `MicRecorder`'s `@MainActor` isolation. AVFAudio invokes the block on CoreAudio's render thread; an
+/// isolated block asserts it's on the main actor there and traps (`EXC_BREAKPOINT` in
+/// `swift_task_isCurrentExecutor`). A nonisolated, non-`@Sendable` block runs correctly off-main, and the
+/// `@preconcurrency import AVFoundation` downgrades the block's `@Sendable`-parameter mismatch (so no
+/// Sendable-capture warning — the same clean compile the main-actor version had, minus the crash). `sink` is
+/// confined to this block (the audio thread); its only main-actor-shared state is the Sendable `liveBuffer` lock.
+private func installMicTap(on input: AVAudioInputNode, format: AVAudioFormat, sink: WavSink) {
+    input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+        sink.append(buffer)
     }
 }
 
