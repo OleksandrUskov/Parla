@@ -7,6 +7,9 @@ Resources/AppIcon.icns
 # Internal dev/ notes — kept local, not part of the public portfolio repo
 
 
+#  local config (hooks / permissions) — personal, not public
+
+
 # Vendored ffmpeg — keep the binary + recipe + license; ignore build intermediates
 Vendor/ffmpeg/ffmpeg-*/
 Vendor/ffmpeg/*.tar.xz
