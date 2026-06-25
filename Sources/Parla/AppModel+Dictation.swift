@@ -26,7 +26,11 @@ extension AppModel {
         guard canDictate else { QuickToast.shared.show(L("toast.busy")); return }
         recordingStartedAt = Date()                 // claim synchronously (→ isBusy) so a drop can't race in
         Task {
-            guard await MicRecorder.ensureMicAccess() else {
+            let granted = await MicRecorder.ensureMicAccess()
+            // A stop landed during the permission prompt → our claim was already cleared. Abort silently
+            // so we never start an orphaned, un-stoppable recording behind the user's back.
+            guard isRecordingDictation else { return }
+            guard granted else {
                 recordingStartedAt = nil
                 QuickToast.shared.show(L("toast.mic.denied"))
                 return
@@ -47,7 +51,10 @@ extension AppModel {
     /// Stop the recorder and transcribe the captured WAV (reusing the standard result path).
     func stopAndTranscribeDictation() {
         guard isRecordingDictation else { return }
-        let wav = recorder?.stop()
+        // Stop pressed before capture began (e.g. during the first-run mic-permission prompt → the recorder
+        // isn't created yet): silently cancel. Don't show a "didn't catch anything" error for a non-recording.
+        guard let rec = recorder else { recordingStartedAt = nil; return }
+        let wav = rec.stop()
         recorder = nil
         recordingStartedAt = nil
         guard let wav else { QuickToast.shared.show(L("error.dictation.empty")); return }
@@ -59,6 +66,7 @@ extension AppModel {
     /// (the WAV is already 16 kHz mono). Best-effort + always toasts (dictation has no in-window chip flow).
     func finishDictation(wav: URL) async {
         defer { try? FileManager.default.removeItem(at: wav) }   // throwaway temp; keepAudio copies what it needs
+        defer { drainQueue() }   // resume the shared lane: a watched file may have queued during the dictation
         let model = selectedModel
 
         // Drop a near-silent / too-short clip before spinning up the model. (A real WAV opens via
@@ -110,8 +118,9 @@ extension AppModel {
             if soundOnComplete { CompletionSound.success() }
             dictationToast(empty: false, failed: false)
         } catch {
-            let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            phase = .failed(Lf("error.transcribe.failed", msg))
+            // Dictation is toast-driven (no in-window chip): report via toast + sound and leave phase .idle,
+            // so we don't strand a `.failed` chip whose "Try again" would replay an unrelated earlier drop.
+            phase = .idle
             if soundOnComplete { CompletionSound.failure() }
             dictationToast(empty: false, failed: true)
         }

@@ -100,7 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = L("quit.busy.message")
         alert.addButton(withTitle: L("quit.busy.cancel"))   // default (first) → safe: don't lose work
         alert.addButton(withTitle: L("quit.busy.quit"))
-        return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
+        guard alert.runModal() != .alertFirstButtonReturn else { return .terminateCancel }
+        // Quitting anyway: if a dictation is recording, stop the mic cleanly and drop its temp WAV
+        // (we're discarding the in-flight work the user just confirmed losing).
+        MainActor.assumeIsolated { model.recorder?.cancel() }
+        return .terminateNow
     }
 }
 

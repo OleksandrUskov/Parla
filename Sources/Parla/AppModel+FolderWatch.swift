@@ -72,8 +72,9 @@ extension AppModel {
     }
 
     /// Single-flight: run one at a time, only when the engine is free. Manual drop and watching
-    /// share one «lane» via `isBusy` — they never overlap.
-    private func drainQueue() {
+    /// share one «lane» via `isBusy` — they never overlap. (Internal: also re-pumped by +Dictation
+    /// after a dictation releases the lane.)
+    func drainQueue() {
         guard !isBusy, downloadingModel == nil, !watchQueue.isEmpty else { return }
         let next = watchQueue.removeFirst()
         watchQueueCount = watchQueue.count

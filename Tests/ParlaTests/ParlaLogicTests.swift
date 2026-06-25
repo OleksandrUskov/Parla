@@ -744,6 +744,36 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(m.canDictate)           // already recording → can't start another
     }
 
+    @MainActor func testDictationFailureIsToastOnlyNotChip() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(throwOnTranscribe: true)
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.finishDictation(wav: wav)
+
+            XCTAssertTrue(m.history.isEmpty)                 // failed dictation → nothing inserted
+            // Toast-only: phase stays .idle (NOT .failed), so no stale "Try again" chip can replay an old drop.
+            if case .idle = m.phase {} else { XCTFail("dictation failure should leave phase .idle, not .failed") }
+        }
+    }
+
+    @MainActor func testDictationStopBeforeCaptureIsSilent() {
+        let m = AppModel(engine: FakeEngine())
+        m.history = []
+        m.recordingStartedAt = Date()      // claimed, but the recorder isn't created yet (permission window)
+        XCTAssertNil(m.recorder)
+        m.stopAndTranscribeDictation()     // stop pressed pre-capture → silent cancel, no "empty" error
+        XCTAssertNil(m.recordingStartedAt)
+        XCTAssertFalse(m.isRecordingDictation)
+        XCTAssertTrue(m.history.isEmpty)
+        if case .idle = m.phase {} else { XCTFail("phase should stay .idle on a pre-capture cancel") }
+    }
+
     // MARK: AVFoundation-direct decode path (BUNDLE_FFMPEG P0)
 
     func testAvDecodableMirrorsDirectlyPlayable() {

@@ -60,7 +60,7 @@ final class MicRecorder {
     /// be set up. `onAutoStop` fires on the main actor if `maxSeconds` elapses first. The mic-permission
     /// check is the caller's job (`ensureMicAccess()`) — `start()` assumes access is granted.
     @discardableResult
-    func start(onAutoStop: (@MainActor () -> Void)? = nil) throws -> URL {
+    func start(onAutoStop: @escaping @MainActor () -> Void) throws -> URL {
         guard !isRecording else { throw Failure.alreadyRecording }
 
         let url = FileManager.default.temporaryDirectory
@@ -91,11 +91,11 @@ final class MicRecorder {
         isRecording = true
 
         if maxSeconds > 0 {
-            let work = DispatchWorkItem { [weak self] in
-                guard let self else { return }
-                _ = self.stop()
-                onAutoStop?()
-            }
+            // Only NOTIFY on timeout — the owner (AppModel) performs the single `stop()` that captures the
+            // WAV URL and transcribes it. Stopping here too would DOUBLE-stop: the owner's `stop()` then
+            // hits its `guard isRecording` and returns nil → the whole recording is lost and a false
+            // "empty" error shows. (`stop()` is idempotent, so the manual-stop path is unaffected.)
+            let work = DispatchWorkItem { onAutoStop() }
             autoStop = work
             DispatchQueue.main.asyncAfter(deadline: .now() + maxSeconds, execute: work)
         }
@@ -113,6 +113,12 @@ final class MicRecorder {
         engine.stop()
         isRecording = false
         return outputURL
+    }
+
+    /// Stop and DISCARD the recording without transcribing — for app teardown (e.g. quit while recording).
+    /// Removes the temp WAV too, so it can't orphan in the temp dir.
+    func cancel() {
+        if let url = stop() { try? FileManager.default.removeItem(at: url) }
     }
 }
 
