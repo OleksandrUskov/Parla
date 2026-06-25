@@ -159,6 +159,8 @@ final class AppModel {
 
     var isBusy: Bool {
         if recordingStartedAt != nil { return true }   // recording a dictation blocks other jobs (single-flight)
+        if !refiningDictations.isEmpty { return true }  // a hybrid refine is decoding — hold the lane (no concurrent
+                                                        // job, and the edit pencil stays hidden so it can't clobber)
         switch phase { case .idle, .failed: return false; default: return true }
     }
 

@@ -99,9 +99,13 @@ extension AppModel {
             phase = .preparing(L("dictation.label"))    // claim the phase synchronously (like handleDrop)
             Task { await finishDictation(wav: wav) }
         } else {
-            // Hybrid: save the streamed text INSTANTLY, then refine it in place with the full decode.
-            phase = .idle
-            Task { await refineDictation(wav: wav, streamed: streamed) }
+            // Hybrid: save the streamed text INSTANTLY, then refine it in place with the full decode. Claim the
+            // single-flight lane SYNCHRONOUSLY here (refiningDictations → isBusy) so nothing can start a
+            // concurrent job in the gap before the async refine begins. phase stays .idle (no busy chip — the
+            // per-item "refining" badge is the only signal); the refine releases the lane when it finishes.
+            let id = UUID()
+            refiningDictations.insert(id)
+            Task { await refineDictation(wav: wav, streamed: streamed, id: id) }
         }
     }
 
@@ -119,13 +123,16 @@ extension AppModel {
     /// flagged "refining" in the UI), then run the full offline decode and replace the text in place for max
     /// accuracy. The instant result is never lost — an empty or failed decode keeps the streamed text. Paste
     /// + copy + the completion signal all fire on the instant insert, so Stop feels instantaneous.
-    func refineDictation(wav: URL, streamed: String) async {
+    func refineDictation(wav: URL, streamed: String, id: UUID) async {
         defer { try? FileManager.default.removeItem(at: wav) }   // throwaway temp; keepAudio copies what it needs
-        defer { drainQueue() }                                   // resume the shared folder-watch lane
+        // Release the lane FIRST at exit (drainQueue, declared earlier, then sees isBusy false and can pump).
+        defer { drainQueue() }
+        defer { refiningDictations.remove(id) }
         let model = selectedModel
 
-        // 1) Instant: the streamed text, marked refining.
+        // 1) Instant: the streamed text, marked refining (caller already claimed the lane via refiningDictations).
         let item = TranscriptItem(
+            id: id,
             sourceName: Self.dictationTitle(date: Date()),
             language: language,              // best-known now; the refine corrects it
             durationSec: 0,                  // the refine fills the real duration
@@ -136,34 +143,36 @@ extension AppModel {
             sourceBookmark: nil
         )
         history.insert(item, at: 0)
-        selection = item.id
-        refiningDictations.insert(item.id)
+        selection = id
+        refiningDictations.insert(id)        // idempotent (caller pre-inserted); keeps the badge + the lane
         HistoryStore.save(history)
         if autoCopy || dictationPasteIntoFrontmost { copy(item.text) }
         if soundOnComplete { CompletionSound.success() }
         if dictationPasteIntoFrontmost { pasteDictationResult() }
         else { dictationToast(empty: false, failed: false) }
 
-        // 2) Refine: full offline decode replaces the text in place (badge clears either way).
-        defer { refiningDictations.remove(item.id) }
+        // 2) Refine: full offline decode replaces the text in place (badge clears via the defer either way).
         do {
             try await engine.ensureLoaded(model: model, progress: { _ in })   // silent — the badge is the signal
             let lang = language.isEmpty ? nil : language
             let r = try await engine.transcribe(wavPath: wav.path, language: lang,
                                                 model: model, translate: translateToEnglish)
             let clean = r.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Empty decode → keep the streamed text (don't blank a good instant result).
-            if !clean.isEmpty, let idx = history.firstIndex(where: { $0.id == item.id }) {
+            // Replace the text ONLY if the decode found something AND the user hasn't taken ownership by editing
+            // it (the lane being busy hides the edit pencil, but guard anyway — never clobber a user edit). An
+            // empty decode keeps the streamed text.
+            if !clean.isEmpty, let idx = history.firstIndex(where: { $0.id == id }), !history[idx].isEdited {
                 history[idx].text = clean
                 history[idx].segments = r.segments
                 history[idx].durationSec = r.duration
                 history[idx].language = r.language
                 HistoryStore.save(history)
-                if keepDictationAudio { await keepDictationAudioFor(item.id, wav: wav) }
             }
         } catch {
             // Refine failed → keep the instant streamed text (already saved, copied, pasted). Nothing to undo.
         }
+        // Keep the audio if requested — regardless of whether the decode refined the text (the record exists).
+        if keepDictationAudio { await keepDictationAudioFor(id, wav: wav) }
         await pruneAudioCache()
     }
 

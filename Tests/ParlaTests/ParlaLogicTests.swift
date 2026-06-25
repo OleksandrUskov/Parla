@@ -851,7 +851,7 @@ final class ParlaLogicTests: XCTestCase {
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
 
-            await m.refineDictation(wav: wav, streamed: "стрим текст")
+            await m.refineDictation(wav: wav, streamed: "стрим текст", id: UUID())
 
             XCTAssertEqual(m.history.count, 1)
             XCTAssertEqual(m.history.first?.text, "полный точный декод")   // refined to the full decode
@@ -873,7 +873,7 @@ final class ParlaLogicTests: XCTestCase {
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
 
-            await m.refineDictation(wav: wav, streamed: "стрим текст")
+            await m.refineDictation(wav: wav, streamed: "стрим текст", id: UUID())
 
             XCTAssertEqual(m.history.count, 1)
             XCTAssertEqual(m.history.first?.text, "стрим текст")   // instant result kept
@@ -893,11 +893,45 @@ final class ParlaLogicTests: XCTestCase {
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
 
-            await m.refineDictation(wav: wav, streamed: "стрим текст")
+            await m.refineDictation(wav: wav, streamed: "стрим текст", id: UUID())
 
             XCTAssertEqual(m.history.count, 1)
             XCTAssertEqual(m.history.first?.text, "стрим текст")   // survives a failed refine
             XCTAssertTrue(m.refiningDictations.isEmpty)
+        }
+    }
+
+    /// A refining dictation holds the single-flight lane (isBusy) so no concurrent job (folder-watch, drop, a
+    /// new dictation) starts mid-refine and the edit pencil stays hidden — the fix for the lane/clobber HIGHs.
+    @MainActor func testRefiningDictationHoldsBusyLane() {
+        let m = AppModel(engine: FakeEngine())
+        m.history = []
+        XCTAssertFalse(m.isBusy)
+        let id = UUID()
+        m.refiningDictations.insert(id)
+        XCTAssertTrue(m.isBusy)            // refine in flight → busy
+        m.refiningDictations.remove(id)
+        XCTAssertFalse(m.isBusy)           // released
+    }
+
+    /// keepDictationAudio must attach the audio even when the full decode came back empty (the record exists
+    /// with the streamed text either way).
+    @MainActor func testRefineDictationKeepsAudioWhenDecodeEmpty() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "   ", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            m.keepDictationAudio = true
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.refineDictation(wav: wav, streamed: "стрим текст", id: UUID())
+
+            XCTAssertEqual(m.history.first?.text, "стрим текст")   // streamed kept (empty decode)
+            XCTAssertNotNil(m.history.first?.audioFile)            // audio kept anyway
         }
     }
 
