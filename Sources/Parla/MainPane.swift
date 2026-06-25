@@ -417,6 +417,7 @@ struct TranscriptCard: View {
                 HStack(spacing: 6) {
                     Text(meta).font(.caption).foregroundStyle(.secondary)
                     if item.isEdited { editedChip }
+                    if model.refiningDictations.contains(item.id) { refiningChip }
                 }
             }
             Spacer()
@@ -485,6 +486,20 @@ struct TranscriptCard: View {
             .buttonStyle(.plain)
             .keyboardShortcut(.return, modifiers: .command)   // ⌘↩
         }
+    }
+
+    /// Shown on a dictation saved from the live stream while the full decode refines it in place. Makes the
+    /// text update EXPECTED ("it's still finalizing") instead of a surprising silent change.
+    private var refiningChip: some View {
+        HStack(spacing: 4) {
+            ProgressView().controlSize(.mini)
+            Text(L("transcript.refining"))
+        }
+        .font(.caption2.weight(.medium))
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Brand.accent.opacity(0.18), in: Capsule())
+        .foregroundStyle(Brand.accent)
+        .help(Text(L("transcript.refining.help")))
     }
 
     private var editedChip: some View {

@@ -63,6 +63,8 @@
 
 /* Transcript card */
 "transcript.edited"           = "edited";
+"transcript.refining"         = "refining…";
+"transcript.refining.help"    = "Saved live as you spoke — finalizing a full, more accurate pass. The text will settle in a moment.";
 "transcript.edited.at"        = "Edited %@";
 "transcript.edited.manually"  = "Text edited manually";
 "transcript.edit.help"        = "Edit text";

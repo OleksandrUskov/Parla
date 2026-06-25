@@ -79,6 +79,9 @@ final class AppModel {
     var streamingTask: Task<Void, Never>?              // +DictationStream: the live decode loop (single-flight)
     var dictationConfirmedText = ""                    // +DictationStream: stable streamed prefix (render solid)
     var dictationHypothesisText = ""                   // +DictationStream: live streamed tail (render dimmed)
+    var refiningDictations: Set<UUID> = []             // +Dictation: items showing the streamed text while a full
+                                                       // decode refines them (transient — never persisted, so a
+                                                       // quit mid-refine just leaves the good streamed text)
     var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys

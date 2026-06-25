@@ -836,6 +836,71 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: Hybrid streaming save (refine the instant streamed text with a full decode)
+
+    /// The streamed text is saved instantly, then the full decode REPLACES it in place and the refining
+    /// badge clears.
+    @MainActor func testRefineDictationReplacesStreamedWithFullDecode() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "полный точный декод", language: "ru", segments: [], duration: 3)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.refineDictation(wav: wav, streamed: "стрим текст")
+
+            XCTAssertEqual(m.history.count, 1)
+            XCTAssertEqual(m.history.first?.text, "полный точный декод")   // refined to the full decode
+            XCTAssertTrue(m.refiningDictations.isEmpty)                    // badge cleared
+            XCTAssertNil(m.history.first?.sourcePath)                      // dictation → no source
+            XCTAssertEqual(fake.transcribeCalls, 1)
+        }
+    }
+
+    /// An empty full decode must NOT blank the instant result — the streamed text is kept.
+    @MainActor func testRefineDictationKeepsStreamedWhenDecodeEmpty() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "   ", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.refineDictation(wav: wav, streamed: "стрим текст")
+
+            XCTAssertEqual(m.history.count, 1)
+            XCTAssertEqual(m.history.first?.text, "стрим текст")   // instant result kept
+            XCTAssertTrue(m.refiningDictations.isEmpty)
+        }
+    }
+
+    /// A failed full decode keeps the instant streamed result (already saved/copied/pasted) — nothing lost.
+    @MainActor func testRefineDictationKeepsStreamedWhenDecodeFails() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(throwOnTranscribe: true)
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            let wav = makeTempSource("d.wav")
+            defer { try? FileManager.default.removeItem(at: wav) }
+
+            await m.refineDictation(wav: wav, streamed: "стрим текст")
+
+            XCTAssertEqual(m.history.count, 1)
+            XCTAssertEqual(m.history.first?.text, "стрим текст")   // survives a failed refine
+            XCTAssertTrue(m.refiningDictations.isEmpty)
+        }
+    }
+
     @MainActor func testDictationEmptyTextDropsRecord() async {
         await withTemporaryHistoryStoreAsync {
             let fake = FakeEngine(results: [EngineResult(text: "   ", language: "ru", segments: [], duration: 1)])

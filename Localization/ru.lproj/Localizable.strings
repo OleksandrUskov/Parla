@@ -63,6 +63,8 @@
 
 /* Transcript card */
 "transcript.edited"            = "изменено";
+"transcript.refining"          = "уточняю…";
+"transcript.refining.help"     = "Сохранено вживую, пока ты говорил — сейчас догоняю полным, более точным проходом. Текст вот-вот устаканится.";
 "transcript.edited.at"         = "Отредактировано %@";
 "transcript.edited.manually"   = "Текст изменён вручную";
 "transcript.edit.help"         = "Редактировать текст";

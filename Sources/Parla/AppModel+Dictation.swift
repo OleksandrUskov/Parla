@@ -84,7 +84,9 @@ extension AppModel {
     /// Stop the recorder and transcribe the captured WAV (reusing the standard result path).
     func stopAndTranscribeDictation() {
         guard isRecordingDictation else { return }
-        stopStreamingLoop()   // end the live-preview loop; the saved transcript comes from the full decode below
+        // Capture what the user SAW streaming (confirmed + the live tail) BEFORE stopStreamingLoop clears it.
+        let streamed = streamedDictationText()
+        stopStreamingLoop()   // end the live-preview loop
         // Stop pressed before capture began (e.g. during the first-run mic-permission prompt → the recorder
         // isn't created yet): silently cancel. Don't show a "didn't catch anything" error for a non-recording.
         guard let rec = recorder else { recordingStartedAt = nil; return }
@@ -92,8 +94,77 @@ extension AppModel {
         recorder = nil
         recordingStartedAt = nil
         guard let wav else { QuickToast.shared.show(L("error.dictation.empty")); return }
-        phase = .preparing(L("dictation.label"))    // claim the phase synchronously (like handleDrop)
-        Task { await finishDictation(wav: wav) }
+        if streamed.isEmpty {
+            // No streamed preview (streaming off, or it produced nothing) → the plain record-then-transcribe path.
+            phase = .preparing(L("dictation.label"))    // claim the phase synchronously (like handleDrop)
+            Task { await finishDictation(wav: wav) }
+        } else {
+            // Hybrid: save the streamed text INSTANTLY, then refine it in place with the full decode.
+            phase = .idle
+            Task { await refineDictation(wav: wav, streamed: streamed) }
+        }
+    }
+
+    /// The streamed preview as one string (confirmed prefix + the live tail) — what the user was looking at
+    /// when they hit Stop. Empty when streaming wasn't running.
+    private func streamedDictationText() -> String {
+        guard isStreamingDictation else { return "" }
+        return [dictationConfirmedText, dictationHypothesisText]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    /// Hybrid streaming save: insert the streamed preview as a record IMMEDIATELY (instant, WYSIWYG result,
+    /// flagged "refining" in the UI), then run the full offline decode and replace the text in place for max
+    /// accuracy. The instant result is never lost — an empty or failed decode keeps the streamed text. Paste
+    /// + copy + the completion signal all fire on the instant insert, so Stop feels instantaneous.
+    func refineDictation(wav: URL, streamed: String) async {
+        defer { try? FileManager.default.removeItem(at: wav) }   // throwaway temp; keepAudio copies what it needs
+        defer { drainQueue() }                                   // resume the shared folder-watch lane
+        let model = selectedModel
+
+        // 1) Instant: the streamed text, marked refining.
+        let item = TranscriptItem(
+            sourceName: Self.dictationTitle(date: Date()),
+            language: language,              // best-known now; the refine corrects it
+            durationSec: 0,                  // the refine fills the real duration
+            model: model,
+            text: streamed,
+            segments: [],
+            sourcePath: nil,                 // dictation has no re-transcribable source file
+            sourceBookmark: nil
+        )
+        history.insert(item, at: 0)
+        selection = item.id
+        refiningDictations.insert(item.id)
+        HistoryStore.save(history)
+        if autoCopy || dictationPasteIntoFrontmost { copy(item.text) }
+        if soundOnComplete { CompletionSound.success() }
+        if dictationPasteIntoFrontmost { pasteDictationResult() }
+        else { dictationToast(empty: false, failed: false) }
+
+        // 2) Refine: full offline decode replaces the text in place (badge clears either way).
+        defer { refiningDictations.remove(item.id) }
+        do {
+            try await engine.ensureLoaded(model: model, progress: { _ in })   // silent — the badge is the signal
+            let lang = language.isEmpty ? nil : language
+            let r = try await engine.transcribe(wavPath: wav.path, language: lang,
+                                                model: model, translate: translateToEnglish)
+            let clean = r.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Empty decode → keep the streamed text (don't blank a good instant result).
+            if !clean.isEmpty, let idx = history.firstIndex(where: { $0.id == item.id }) {
+                history[idx].text = clean
+                history[idx].segments = r.segments
+                history[idx].durationSec = r.duration
+                history[idx].language = r.language
+                HistoryStore.save(history)
+                if keepDictationAudio { await keepDictationAudioFor(item.id, wav: wav) }
+            }
+        } catch {
+            // Refine failed → keep the instant streamed text (already saved, copied, pasted). Nothing to undo.
+        }
+        await pruneAudioCache()
     }
 
     /// Transcribe a finished dictation WAV and fold the result into history. Bypasses `wavConverter`
@@ -140,15 +211,7 @@ extension AppModel {
             HistoryStore.save(history)
             // Paste-into-frontmost (opt-in) needs the text on the clipboard for the synthetic ⌘V.
             if autoCopy || dictationPasteIntoFrontmost { copy(item.text) }
-            if keepDictationAudio {
-                let kept = await Self.keepAudio(from: wav, id: item.id)
-                if (kept.file != nil || kept.playable != nil),
-                   let idx = history.firstIndex(where: { $0.id == item.id }) {
-                    history[idx].audioFile = kept.file
-                    history[idx].audioPlayable = kept.playable
-                    HistoryStore.save(history)
-                }
-            }
+            if keepDictationAudio { await keepDictationAudioFor(item.id, wav: wav) }
             phase = .idle
             if soundOnComplete { CompletionSound.success() }
             if dictationPasteIntoFrontmost { pasteDictationResult() }
@@ -183,6 +246,17 @@ extension AppModel {
                 PasteService.requestAccessibility()
             }
             QuickToast.shared.show(L("toast.dictation.paste.needsax"))
+        }
+    }
+
+    /// Copy the kept dictation audio into the item (shared by the plain and hybrid-refine save paths).
+    private func keepDictationAudioFor(_ id: UUID, wav: URL) async {
+        let kept = await Self.keepAudio(from: wav, id: id)
+        if (kept.file != nil || kept.playable != nil),
+           let idx = history.firstIndex(where: { $0.id == id }) {
+            history[idx].audioFile = kept.file
+            history[idx].audioPlayable = kept.playable
+            HistoryStore.save(history)
         }
     }
 
