@@ -54,10 +54,13 @@ extension AppModel {
         guard canDictate else { QuickToast.shared.show(L("toast.busy")); return }
         recordingStartedAt = Date()                 // claim synchronously (→ isBusy) so a drop can't race in
         Task {
+            // If the dictation aborts before a recorder is committed (stop during the prompt, mic denied,
+            // start throws, or a newer start won the race), re-pump the folder-watch lane we were holding.
+            defer { if recorder == nil { drainQueue() } }
             let granted = await MicRecorder.ensureMicAccess()
-            // A stop landed during the permission prompt → our claim was already cleared. Abort silently
-            // so we never start an orphaned, un-stoppable recording behind the user's back.
-            guard isRecordingDictation else { return }
+            // Abort if a stop landed during the permission prompt, OR a newer start already committed a
+            // recorder — never start a SECOND engine (that orphans the first: hot mic + leak, no deinit).
+            guard isRecordingDictation, recorder == nil else { return }
             guard granted else {
                 recordingStartedAt = nil
                 QuickToast.shared.show(L("toast.mic.denied"))
