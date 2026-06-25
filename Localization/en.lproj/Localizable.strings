@@ -179,3 +179,9 @@
 "export.title" = "# Parla — transcript history\n\n";
 "unit.gb.fmt"  = "%.1f GB";
 "unit.mb.fmt"  = "%.0f MB";
+
+/* Confirm quit while a transcription is in flight */
+"quit.busy.title"   = "A transcription is still running";
+"quit.busy.message" = "If you quit now, the in-progress transcript will be lost.";
+"quit.busy.cancel"  = "Keep Running";
+"quit.busy.quit"    = "Quit Anyway";

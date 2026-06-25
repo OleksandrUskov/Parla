@@ -15,6 +15,7 @@ struct ParlaApp: App {
                 .environment(model)
                 .environment(\.locale, model.resolvedLocale)   // reading resolvedLocale in App.body → re-render on language change
                 .task {
+                    appDelegate.model = model            // let the terminate-guard see in-flight work
                     NotificationClickHandler.install()   // click on completion notification → bring window forward
                     installHotkeyOnce()                  // install hotkey handler + sync enabled/disabled to the setting
                     model.startWatchingIfEnabled()       // resume folder watching if enabled
@@ -63,8 +64,24 @@ struct ParlaApp: App {
 /// (the macOS default that forces a manual right-click → Quit). The `MenuBarExtra` is a status item,
 /// not a window, so closing the main window terminates the app, giving a normal desktop-app feel.
 /// (⌘Q still works; the menu-bar quick-transcribe lives only while the app is running.)
+///
+/// But a transcription is saved only when it finishes, so closing the window (or ⌘Q) mid-job would
+/// silently discard it. `applicationShouldTerminate` is the single gate for ALL termination paths
+/// (close-last-window, ⌘Q, Apple-menu Quit), so we confirm there when work is in flight.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    weak var model: AppModel?
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model, MainActor.assumeIsolated({ model.shouldConfirmQuit }) else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = L("quit.busy.title")
+        alert.informativeText = L("quit.busy.message")
+        alert.addButton(withTitle: L("quit.busy.cancel"))   // default (first) → safe: don't lose work
+        alert.addButton(withTitle: L("quit.busy.quit"))
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
+    }
 }
 
 /// Click on the batch-completion notification → activate Parla and bring its window forward.

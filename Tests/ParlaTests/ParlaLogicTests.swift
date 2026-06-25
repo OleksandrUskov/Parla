@@ -1157,6 +1157,16 @@ final class ParlaLogicTests: XCTestCase {
         if case .preparing = m.phase {} else { XCTFail("dismissError must not touch a non-failed phase") }
     }
 
+    @MainActor func testShouldConfirmQuitTracksInFlightWork() {
+        let m = AppModel()
+        XCTAssertFalse(m.shouldConfirmQuit)                 // idle → safe to quit, no prompt
+        m.phase = .transcribing("x")
+        XCTAssertTrue(m.shouldConfirmQuit)                  // job running → confirm before quitting
+        m.phase = .idle
+        m.downloadingModel = "openai_whisper-tiny"
+        XCTAssertTrue(m.shouldConfirmQuit)                  // model download in flight → confirm
+    }
+
     @MainActor func testCanRetryLastReflectsLastAttempt() {
         let m = AppModel()
         m.lastAttemptedURLs = []

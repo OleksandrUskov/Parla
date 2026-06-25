@@ -179,3 +179,9 @@
 "export.title" = "# Parla — история расшифровок\n\n";
 "unit.gb.fmt"  = "%.1f ГБ";
 "unit.mb.fmt"  = "%.0f МБ";
+
+/* Confirm quit while a transcription is in flight */
+"quit.busy.title"   = "Идёт расшифровка";
+"quit.busy.message" = "Если выйти сейчас, текущая расшифровка будет потеряна.";
+"quit.busy.cancel"  = "Не выходить";
+"quit.busy.quit"    = "Всё равно выйти";

@@ -116,6 +116,10 @@ final class AppModel {
         switch phase { case .idle, .failed: return false; default: return true }
     }
 
+    /// Quitting now would discard work in flight (a transcription job — only saved at the end —
+    /// or an in-progress model download). The AppDelegate gates termination on this.
+    var shouldConfirmQuit: Bool { isBusy || downloadingModel != nil }
+
     /// Item for the right pane — taken from the VISIBLE (filtered) list, so the pane and
     /// the sidebar don't diverge while a search is active.
     var selectedItem: TranscriptItem? {
