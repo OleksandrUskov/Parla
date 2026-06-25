@@ -52,29 +52,28 @@ extension AppModel {
     /// Begin recording after a mic-permission check. Single-flight: refuses while busy/downloading.
     func startDictation() {
         guard canDictate else { QuickToast.shared.show(L("toast.busy")); return }
-        recordingStartedAt = Date()                 // claim synchronously (→ isBusy) so a drop can't race in
+        guard recorder == nil, !requestingMic else { return }
+        requestingMic = true   // claim the lane synchronously (→ isBusy) so a drop can't race in during the prompt
         Task {
-            // If the dictation aborts before a recorder is committed (stop during the prompt, mic denied,
-            // start throws, or a newer start won the race), re-pump the folder-watch lane we were holding.
-            defer { if recorder == nil { drainQueue() } }
+            // Clear the claim + re-pump the watch lane if the dictation aborts before a recorder is committed
+            // (mic denied, start throws, or a newer start won).
+            defer { requestingMic = false; if recorder == nil { drainQueue() } }
+            // Ask for mic permission BEFORE any recording UI appears. On first use the system prompt shows with
+            // NOTHING claiming to record yet — the chip / timer / "Listening…" only start once capture actually
+            // does (below). Avoids the "it's already recording while asking permission" feeling + a timer that
+            // counts the dialog time.
             let granted = await MicRecorder.ensureMicAccess()
-            // Abort if a stop landed during the permission prompt, OR a newer start already committed a
-            // recorder — never start a SECOND engine (that orphans the first: hot mic + leak, no deinit).
-            guard isRecordingDictation, recorder == nil else { return }
-            guard granted else {
-                recordingStartedAt = nil
-                QuickToast.shared.show(L("toast.mic.denied"))
-                return
-            }
+            // A newer start already committed a recorder → don't start a SECOND engine (orphans the first).
+            guard recorder == nil else { return }
+            guard granted else { QuickToast.shared.show(L("toast.mic.denied")); return }
             let rec = MicRecorder(vad: dictationVADEnabled ? SilenceDetector() : nil,
                                   streaming: dictationLiveStreaming)
             do {
                 try rec.start(onAutoStop: { [weak self] in self?.stopAndTranscribeDictation() })
                 recorder = rec
-                recordingStartedAt = Date()         // re-stamp to the real capture start (after the permission await)
+                recordingStartedAt = Date()         // NOW the recording UI appears — real capture has begun
                 if dictationLiveStreaming { startStreamingLoop(for: rec) }   // live preview (full decode still saves)
             } catch {
-                recordingStartedAt = nil
                 recorder = nil
                 QuickToast.shared.show(L("toast.dictation.failed"))
             }

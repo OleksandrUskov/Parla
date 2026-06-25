@@ -997,6 +997,20 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(m.canDictate)           // already recording → can't start another
     }
 
+    /// While the mic-permission prompt is up, the lane is held (no drop/second-start races in) but the
+    /// recording UI is NOT shown — capture (and its chip/timer/"Listening…") only begins after the grant.
+    @MainActor func testRequestingMicHoldsLaneWithoutRecordingUI() {
+        let m = AppModel(engine: FakeEngine())
+        m.history = []
+        XCTAssertTrue(m.canDictate)
+        m.requestingMic = true
+        XCTAssertTrue(m.isBusy)                  // permission check holds the lane…
+        XCTAssertFalse(m.canDictate)             // …so nothing else can start
+        XCTAssertFalse(m.isRecordingDictation)   // …but no "recording" UI yet (recordingStartedAt still nil)
+        m.requestingMic = false
+        XCTAssertFalse(m.isBusy)
+    }
+
     @MainActor func testDictationFailureIsToastOnlyNotChip() async {
         await withTemporaryHistoryStoreAsync {
             let fake = FakeEngine(throwOnTranscribe: true)

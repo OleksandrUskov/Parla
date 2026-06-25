@@ -76,6 +76,8 @@ final class AppModel {
     var watcher: FolderWatcher?                        // +FolderWatch
     var recorder: MicRecorder?                         // +Dictation (live mic capture)
     var recordingStartedAt: Date?                      // +Dictation: non-nil while recording (drives isBusy + the chip timer)
+    var requestingMic = false                          // +Dictation: holds the lane during the mic-permission check,
+                                                       // BEFORE any recording UI shows (recordingStartedAt stays nil)
     var streamingTask: Task<Void, Never>?              // +DictationStream: the live decode loop (single-flight)
     var dictationConfirmedText = ""                    // +DictationStream: stable streamed prefix (render solid)
     var dictationHypothesisText = ""                   // +DictationStream: live streamed tail (render dimmed)
@@ -159,6 +161,7 @@ final class AppModel {
 
     var isBusy: Bool {
         if recordingStartedAt != nil { return true }   // recording a dictation blocks other jobs (single-flight)
+        if requestingMic { return true }                // mic-permission check in flight — hold the lane (no gap)
         if !refiningDictations.isEmpty { return true }  // a hybrid refine is decoding — hold the lane (no concurrent
                                                         // job, and the edit pencil stays hidden so it can't clobber)
         switch phase { case .idle, .failed: return false; default: return true }
