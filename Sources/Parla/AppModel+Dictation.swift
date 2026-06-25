@@ -133,10 +133,21 @@ extension AppModel {
     /// Accessibility isn't granted we fall back to a "it's on your clipboard" note + a one-time AX prompt
     /// (never auto-prompted — only when the user has enabled paste and a dictation actually completes).
     private func pasteDictationResult() {
+        // Don't synthesize ⌘V into our OWN window (e.g. dictation stopped via the in-window Stop button) —
+        // that would paste into Parla's search / edit field. Fall back to clipboard-only (text is copied).
+        if PasteService.isSelfFrontmost {
+            dictationToast(empty: false, failed: false)
+            return
+        }
         if attemptPaste() {
             dictationToast(empty: false, failed: false)   // pasted into the active app — normal done signal
         } else {
-            PasteService.requestAccessibility()           // not trusted → prompt once (no-op under tests)
+            // Not Accessibility-trusted. Prompt at most ONCE (the Settings caption promises "asks once");
+            // the clipboard-fallback toast still shows every time so the text is never silently lost.
+            if !UserDefaults.standard.bool(forKey: Keys.dictationPasteAXPrompted) {
+                UserDefaults.standard.set(true, forKey: Keys.dictationPasteAXPrompted)
+                PasteService.requestAccessibility()
+            }
             QuickToast.shared.show(L("toast.dictation.paste.needsax"))
         }
     }

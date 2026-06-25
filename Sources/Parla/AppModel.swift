@@ -97,6 +97,7 @@ final class AppModel {
         static let dictationHotkey = "dictationHotkeyEnabled"
         static let keepDictationAudio = "keepDictationAudio"
         static let dictationPaste = "dictationPasteIntoFrontmost"
+        static let dictationPasteAXPrompted = "dictationPasteAXPrompted"   // one-time AX prompt guard
         static let lastBookmark = "lastSourceBookmark"
         static let uiLanguage = "uiLanguage"
     }

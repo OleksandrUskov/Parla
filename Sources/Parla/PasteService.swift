@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import ApplicationServices
 import CoreGraphics
 
@@ -13,6 +14,14 @@ enum PasteService {
 
     /// Whether we're allowed to synthesize a paste (Accessibility trust granted). Cheap; safe anytime.
     static var canPaste: Bool { AXIsProcessTrusted() }
+
+    /// Whether Parla itself is the frontmost app — a synthetic ⌘V would then land in OUR own window
+    /// (e.g. dictation stopped via the in-window button), so the caller skips the paste. Headless-guarded
+    /// so the unit-test seam stays exercised (a `swift test` process is never frontmost).
+    static var isSelfFrontmost: Bool {
+        guard !isHeadless else { return false }
+        return NSRunningApplication.current.isActive
+    }
 
     /// Prompt for Accessibility + reveal the System Settings pane. Call ONLY when the user has opted into
     /// auto-paste and isn't trusted yet — NEVER on launch / unprompted (macOS shows the dialog once).
