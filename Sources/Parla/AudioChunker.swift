@@ -40,6 +40,12 @@ enum AudioChunker {
             .sorted { $0.start < $1.start }
     }
 
+    /// Representation of a FAILED chunk on the timeline: a ZERO-width marker segment carrying `label`
+    /// (offsetSegments later shifts it to the chunk's start). Zero width so it can't claim a fake
+    /// 2-min span that would overlap the next chunk. The caller feeds the same `label` into the flat
+    /// text too, so a gap shows in BOTH the segment view and copy/TXT/MD — not only in segments.
+    static func failedChunkSegment(label: String) -> Segment { Segment(start: 0, end: 0, text: label) }
+
     /// Language for a stitched long-audio result: the first chunk's actually-reported language wins
     /// (mirrors the single-pass path, which returns the engine's reported language — the requested one
     /// if requested, else the detected one), falling back to the requested language, then "". Empty

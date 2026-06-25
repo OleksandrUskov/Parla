@@ -177,10 +177,11 @@ extension AppModel {
                 texts.append(r.text)
                 langs.append(r.language)
             } catch {
-                // resilience: one bad chunk doesn't lose the whole transcript
-                perChunkSegments.append([Segment(start: 0, end: AudioChunker.chunkLengthSec,
-                                                 text: Lf("chunk.failed", k + 1))])
-                texts.append("")
+                // resilience: one bad chunk doesn't lose the whole transcript. Put the marker in BOTH
+                // the segments AND the flat text, so the gap is visible in copy/TXT/MD (not only SRT/VTT).
+                let mark = Lf("chunk.failed", k + 1)
+                perChunkSegments.append([AudioChunker.failedChunkSegment(label: mark)])
+                texts.append(mark)
                 langs.append("")
             }
             try? FileManager.default.removeItem(at: chunk)   // free each chunk WAV as we go

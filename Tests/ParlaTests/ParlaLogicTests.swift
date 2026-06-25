@@ -920,6 +920,17 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(stitched[2].start, 120)                        // chunk1's local 0 → global 120
     }
 
+    func testFailedChunkSegmentIsZeroWidthMarker() {
+        let seg = AudioChunker.failedChunkSegment(label: "(chunk 3 failed)")
+        XCTAssertEqual(seg.start, 0)
+        XCTAssertEqual(seg.end, 0)                               // zero width → no fake 2-min span
+        XCTAssertEqual(seg.text, "(chunk 3 failed)")
+        // after stitching it lands at the chunk's start offset, still zero width
+        let placed = AudioChunker.offsetSegments([seg], chunkIndex: 2, chunkLength: 120)[0]
+        XCTAssertEqual(placed.start, 240)
+        XCTAssertEqual(placed.end, 240)
+    }
+
     func testResolveChunkedLanguage() {
         // first non-empty chunk language wins → Auto-detected language survives on long files
         XCTAssertEqual(AudioChunker.resolveLanguage(chunkLanguages: ["", "ru", "en"], requested: nil), "ru")
