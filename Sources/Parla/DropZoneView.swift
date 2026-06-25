@@ -15,13 +15,28 @@ struct DropZoneView: View {
                               style: StrokeStyle(lineWidth: 2, dash: [9, 7]))
 
             VStack(spacing: 9) {
-                Image(systemName: dropIcon)
-                    .font(.system(size: 38, weight: .semibold))
-                    .foregroundStyle(model.isRecordingDictation ? AnyShapeStyle(.red) : AnyShapeStyle(Brand.gradient))
-                    .symbolEffect(.pulse, isActive: model.isBusy || targeted)
+                // The status icon. While recording it's a tappable red mic → STOP, so you end the recording
+                // right where you started it (no hunting for the separate Stop button).
+                if model.isRecordingDictation {
+                    Button { model.stopAndTranscribeDictation() } label: {
+                        Image(systemName: "mic.circle.fill")
+                            .font(.system(size: 38, weight: .semibold))
+                            .foregroundStyle(.red)
+                            .symbolEffect(.pulse, isActive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .help(Text(L("dictation.stop")))
+                } else {
+                    Image(systemName: dropIcon)
+                        .font(.system(size: 38, weight: .semibold))
+                        .foregroundStyle(Brand.gradient)
+                        .symbolEffect(.pulse, isActive: model.isBusy || targeted)
+                }
                 Text(dropTitle)
                     .font(.system(.headline, design: .rounded))
-                if !model.isBusy {
+                if model.isRecordingDictation {
+                    Text(L("drop.tap.stop")).font(.caption2).foregroundStyle(.secondary)
+                } else if !model.isBusy {
                     Button(L("drop.choose")) { showImporter = true }
                         .buttonStyle(.plain)
                         .font(.subheadline)

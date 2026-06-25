@@ -26,6 +26,7 @@
 "drop.dictate" = "Dictate";
 "drop.dictate.help" = "Record from your microphone and transcribe on-device (⌃⌥⌘D). Press again to stop.";
 "drop.dictate.hint" = "Saved to History & copied to the clipboard";
+"drop.tap.stop" = "Tap the mic to stop";
 
 /* Header / watch chip */
 "header.translate.help"     = "The result is translated into English";
