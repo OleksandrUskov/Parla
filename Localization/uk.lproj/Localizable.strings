@@ -12,6 +12,7 @@
 "lang.auto" = "Авто (визначати)";
 "lang.auto.short" = "Авто";
 "lang.chip.help" = "Мова розпізнавання — Авто визначає сама, або закріпи RU/UK/EN для точності";
+"lang.menu.header" = "Мова розпізнавання";
 
 /* History (sidebar) */
 "history.title"       = "Історія";
@@ -48,7 +49,7 @@
 "model.tier.tiny.hint"  = "дуже швидко · чернетка";
 "model.tier.base.hint"  = "швидко · базова якість";
 "model.tier.small.hint" = "баланс швидкість / точність";
-"model.tier.turbo.hint" = "швидка · найкраща якість і розмір · топ для RU/UK";
+"model.tier.turbo.hint" = "швидка, компактна · топ для EN/UK · добра RU";
 "model.tier.large.hint" = "повна модель · більша й повільніша";
 
 /* Model size estimates */

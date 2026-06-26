@@ -12,6 +12,7 @@
 "lang.auto" = "Auto (detect)";
 "lang.auto.short" = "Auto";
 "lang.chip.help" = "Recognition language — Auto detects it, or pin RU/UK/EN for accuracy";
+"lang.menu.header" = "Recognition language";
 
 /* History (sidebar) */
 "history.title"       = "History";
@@ -48,7 +49,7 @@
 "model.tier.tiny.hint"  = "very fast · draft";
 "model.tier.base.hint"  = "fast · basic quality";
 "model.tier.small.hint" = "balance of speed / accuracy";
-"model.tier.turbo.hint" = "fast · best quality & size · top for RU/UK";
+"model.tier.turbo.hint" = "fast, compact · top for EN/UK · good RU";
 "model.tier.large.hint" = "full model · larger & slower";
 
 /* Model size estimates */

@@ -108,15 +108,17 @@ struct LanguageButton: View {
 
     var body: some View {
         Menu {
-            ForEach(whisperLanguages, id: \.code) { lang in
-                Button {
-                    model.language = lang.code
-                } label: {
-                    let title = lang.code.isEmpty ? L("lang.auto") : lang.name
-                    if model.language == lang.code {
-                        Label(title, systemImage: "checkmark")
-                    } else {
-                        Text(title)
+            Section(L("lang.menu.header")) {
+                ForEach(whisperLanguages, id: \.code) { lang in
+                    Button {
+                        model.language = lang.code
+                    } label: {
+                        let title = lang.code.isEmpty ? L("lang.auto") : lang.name
+                        if model.language == lang.code {
+                            Label(title, systemImage: "checkmark")
+                        } else {
+                            Text(title)
+                        }
                     }
                 }
             }
