@@ -96,7 +96,10 @@ extension AppModel {
     }
 
     nonisolated static func bestDefault(from models: [String]) -> String {
-        if let exact = models.first(where: { $0 == "openai_whisper-large-v3-v20240930" }) { return exact }
+        // Prefer the quantized 626MB turbo: measured best quality-per-size on RU + smallest "large" download
+        // (the full-precision 1.5GB variant decoded WORSE on real RU; full large-v3 worse still). Falls back to
+        // any large-v3-v20240930 variant, then large-v3, then base.
+        if let q = models.first(where: { $0 == "openai_whisper-large-v3-v20240930_626MB" }) { return q }
         if let turbo = models.first(where: { $0.contains("large-v3-v20240930") }) { return turbo }
         if let v3 = models.first(where: { $0.contains("large-v3") }) { return v3 }
         if let base = models.first(where: { $0.contains("base") && !$0.contains(".en") }) { return base }

@@ -339,6 +339,10 @@ final class ParlaLogicTests: XCTestCase {
                        "openai_whisper-large-v3-v20240930")
         XCTAssertEqual(AppModel.bestDefault(from: ["openai_whisper-base", "openai_whisper-large-v3-v20240930_626MB"]),
                        "openai_whisper-large-v3-v20240930_626MB")
+        // 626MB quantized turbo wins over the full-precision 1.5GB variant when BOTH are present
+        // (measured: quantized decodes RU better + is smaller).
+        XCTAssertEqual(AppModel.bestDefault(from: ["openai_whisper-large-v3-v20240930", "openai_whisper-large-v3-v20240930_626MB"]),
+                       "openai_whisper-large-v3-v20240930_626MB")
         XCTAssertEqual(AppModel.bestDefault(from: ["openai_whisper-large-v3", "openai_whisper-tiny"]),
                        "openai_whisper-large-v3")
         XCTAssertEqual(AppModel.bestDefault(from: ["openai_whisper-small", "openai_whisper-base"]),

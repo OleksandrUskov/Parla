@@ -46,8 +46,8 @@
 "model.tier.tiny.hint"  = "very fast · draft";
 "model.tier.base.hint"  = "fast · basic quality";
 "model.tier.small.hint" = "balance of speed / accuracy";
-"model.tier.turbo.hint" = "fast, near-best · top for ru/uk";
-"model.tier.large.hint" = "best accuracy · slower";
+"model.tier.turbo.hint" = "fast · best quality & size · top for RU/UK";
+"model.tier.large.hint" = "full model · larger & slower";
 
 /* Model size estimates */
 "model.size.tiny"  = "~75 MB";

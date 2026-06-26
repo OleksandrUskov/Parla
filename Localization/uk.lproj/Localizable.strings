@@ -46,8 +46,8 @@
 "model.tier.tiny.hint"  = "дуже швидко · чернетка";
 "model.tier.base.hint"  = "швидко · базова якість";
 "model.tier.small.hint" = "баланс швидкість / точність";
-"model.tier.turbo.hint" = "швидко, майже максимум · топ для ru/uk";
-"model.tier.large.hint" = "максимум точності · повільніше";
+"model.tier.turbo.hint" = "швидка · найкраща якість і розмір · топ для RU/UK";
+"model.tier.large.hint" = "повна модель · більша й повільніша";
 
 /* Model size estimates */
 "model.size.tiny"  = "~75 МБ";
