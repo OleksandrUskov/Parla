@@ -10,6 +10,8 @@
 
 /* Speech-language picker */
 "lang.auto" = "Авто (определять)";
+"lang.auto.short" = "Авто";
+"lang.chip.help" = "Язык распознавания — Авто определяет сам, или закрепи RU/UK/EN для точности";
 
 /* History (sidebar) */
 "history.title"       = "История";

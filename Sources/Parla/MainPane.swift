@@ -54,6 +54,7 @@ struct BrandHeader: View {
                       : L("header.watch.help")))
             }
             Spacer()
+            LanguageButton()
             ModelButton()
             SettingsLink {
                 Image(systemName: "gearshape.fill").font(.title3).foregroundStyle(.secondary)
@@ -89,6 +90,49 @@ struct ModelButton: View {
         .popover(isPresented: $show, arrowEdge: .bottom) {
             ModelManagerView()
         }
+    }
+}
+
+// MARK: - Recognition-language picker (global: drives dictation + file transcription)
+
+/// Top-bar pill (paired with `ModelButton`) to pin the speech-recognition language. Default «Auto»
+/// (`language == ""`) detects per-clip; pinning RU/UK/EN avoids mis-detection (Whisper often reads UK as
+/// RU) and the per-window re-detect flap in streaming. Binds the same `model.language` as Settings.
+struct LanguageButton: View {
+    @Environment(AppModel.self) private var model
+
+    /// Compact pill label: localized "Auto" for auto-detect, else the language code (RU/UK/EN…).
+    private var pillLabel: String {
+        model.language.isEmpty ? L("lang.auto.short") : model.language.uppercased()
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(whisperLanguages, id: \.code) { lang in
+                Button {
+                    model.language = lang.code
+                } label: {
+                    let title = lang.code.isEmpty ? L("lang.auto") : lang.name
+                    if model.language == lang.code {
+                        Label(title, systemImage: "checkmark")
+                    } else {
+                        Text(title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "globe").font(.caption)
+                Text(pillLabel).font(.caption.weight(.medium)).lineLimit(1)
+                Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .help(Text(L("lang.chip.help")))
     }
 }
 
