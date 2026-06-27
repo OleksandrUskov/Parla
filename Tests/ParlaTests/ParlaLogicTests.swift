@@ -865,6 +865,17 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(kw3.contains { ["стягивать", "синхронизировать", "параллельный"].contains($0) })
     }
 
+    func testBundledStopwordsQuality() {
+        XCTAssertGreaterThan(keywordStopwords.count, 1000)   // canonical + complete, not a hand sample
+        for filler in ["если", "просто", "вообще", "якщо", "взагалі", "like", "well", "actually", "блин", "типа"] {
+            XCTAssertTrue(keywordStopwords.contains(filler), "\(filler) should be a stopword")
+        }
+        // Content words + tech homonyms must NOT be stoplisted — the embedding ranking decides those.
+        for content in ["данные", "биржа", "стартап", "портфель", "код", "сериал", "проект", "дело", "робота"] {
+            XCTAssertFalse(keywordStopwords.contains(content), "\(content) is content, must not be stoplisted")
+        }
+    }
+
     func testLooksLikeVerbLemma() {
         for verb in ["гонять", "долбить", "стягивать", "синхронизировать", "кидать", "делать", "писать", "учиться"] {
             XCTAssertTrue(looksLikeVerbLemma(verb), "\(verb) is a verb infinitive")

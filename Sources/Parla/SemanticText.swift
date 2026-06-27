@@ -22,18 +22,7 @@ func sentences(in text: String) -> [String] {
     return out
 }
 
-/// Function words / fillers the POS tagger sometimes mislabels as nouns in casual speech — never useful
-/// as keywords. Matched (lowercased) against the lemma. Small on purpose; real nouns rarely collide.
-private let keywordStopwords: Set<String> = [
-    // ru
-    "это", "этот", "тот", "весь", "если", "когда", "потом", "сейчас", "вообще", "короче", "типа",
-    "вот", "там", "тут", "так", "такой", "свой", "наш", "ваш", "который", "чтобы", "дело", "вещь", "раз",
-    "ещё", "еще", "где", "уже", "просто", "очень", "куча", "более", "менее", "каждый",
-    // uk
-    "це", "цей", "той", "якщо", "коли", "потім", "зараз", "взагалі", "який", "щоб", "діло", "річ", "раз",
-    // en
-    "this", "that", "these", "those", "thing", "stuff", "kind", "lot", "way", "okay", "yeah", "bit",
-]
+// `keywordStopwords` (the curated RU/UK/EN function-word set) lives in `Stopwords.swift`.
 
 /// RU + UK vowels — for the verb-infinitive discriminator below.
 private let cyrillicVowels: Set<Character> = ["а", "е", "ё", "и", "о", "у", "ы", "э", "ю", "я", "і", "ї", "є"]
