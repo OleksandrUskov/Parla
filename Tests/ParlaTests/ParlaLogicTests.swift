@@ -895,14 +895,16 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     func testDynamicKeywordCount() {
-        // Relative-band + elbow over a long note (cap is generous).
-        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.62, 0.58, 0.55, 0.51], wordCount: 200), 4)
-        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.61, 0.34], wordCount: 200), 1)   // cliff after #1
-        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.59, 0.55, 0.31], wordCount: 200), 2)
-        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.28, 0.26], wordCount: 200), 0)   // below floor → none
-        // Short note is length-capped even when scores stay flat-high.
-        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.5, 0.49, 0.48, 0.47, 0.46], wordCount: 40), 2)
-        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [], wordCount: 200), 0)
+        // Band/elbow choose WITHIN [min 3 … cap 6]; a tight cluster keeps several.
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.62, 0.58, 0.55, 0.51]), 4)
+        // A sharp cliff would cut to 1, but the floor lifts it to 3 (there are 3+ candidates to show).
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.61, 0.34, 0.30, 0.29]), 3)
+        // Fewer candidates than the floor → return what's there, never invent.
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.61, 0.34]), 2)
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.9]), 1)
+        // Flat-high cluster is capped at 6, not unbounded.
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: Array(repeating: 0.5, count: 9)), 6)
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: []), 0)
     }
 
     func testMMR() {
@@ -923,7 +925,7 @@ final class ParlaLogicTests: XCTestCase {
             await m.backfillInsights()
             let lt = m.history.first { $0.id == long.id }
             XCTAssertEqual(lt?.title, "Первое предложение тут.")   // central sentence (constant vectors → first)
-            XCTAssertEqual(lt?.aiModel, "extractive-v4")
+            XCTAssertEqual(lt?.aiModel, "extractive-v5")
             XCTAssertNotNil(lt?.summary)                           // 5 sentences > 4 → summary present
             XCTAssertNotNil(lt?.keywords)                          // embedding-ranked tags populated
             let st = m.history.first { $0.id == short.id }

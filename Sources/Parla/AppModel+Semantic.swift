@@ -63,8 +63,8 @@ extension AppModel {
 
     /// Provenance tag for the current extractive pipeline; bumped when the pipeline gains a capability so
     /// older records reprocess once (v2 = embedding-ranked keywords; v3 = morphology filter + dynamic count
-    /// + MMR; v4 = in-context candidate vectors).
-    static var extractiveModelTag: String { "extractive-v4" }
+    /// + MMR; v4 = in-context candidate vectors; v5 = min-3 keyword count + isolated fallback).
+    static var extractiveModelTag: String { "extractive-v5" }
 
     /// Backfill search embeddings for items missing a vector, then persist. Best-effort: an item the
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
@@ -115,7 +115,11 @@ extension AppModel {
         var terms: [String] = [], vectors: [Embedding] = [], scores: [Double] = []
         for candidate in candidates {
             let pooled = tokens.filter { token in candidate.ranges.contains { token.range.overlaps($0) } }.map(\.vector)
-            guard let vector = SemanticIndex.meanPool(pooled) else { continue }   // ranges didn't line up → skip
+            // In-context vector; if the candidate's ranges didn't line up with any token (rare), fall back to
+            // embedding the term on its own so a good keyword is never silently lost.
+            var vector = SemanticIndex.meanPool(pooled)
+            if vector == nil { vector = await embedder.embed(candidate.term, language: item.language) }
+            guard let vector else { continue }
             terms.append(candidate.term); vectors.append(vector); scores.append(SemanticIndex.cosine(vector, document))
         }
         guard !scores.isEmpty else { return [] }
@@ -123,7 +127,7 @@ extension AppModel {
         let sortedTerms = order.map { terms[$0] }
         let sortedVectors = order.map { vectors[$0] }
         let sortedScores = order.map { scores[$0] }
-        let count = SemanticIndex.dynamicKeywordCount(scores: sortedScores, wordCount: item.wordCount)
+        let count = SemanticIndex.dynamicKeywordCount(scores: sortedScores)
         guard count > 0 else { return [] }
         return SemanticIndex.mmr(scores: sortedScores, vectors: sortedVectors, count: count).map { sortedTerms[$0] }
     }

@@ -121,24 +121,23 @@ enum SemanticIndex {
         return (title, summary)
     }
 
-    /// How many keywords to keep from descending cosine scores — instead of a hardcoded count. Pure.
-    /// Layered (research-validated): (1) ZERO-GATE — if the top raw cosine is below `floor`, nothing is
-    /// salient → 0. (2) RELATIVE-TO-TOP band — keep candidate i only while it's ≥ `relBand`·top
-    /// (self-calibrates per note). (3) ELBOW — stop at the first sharp drop (> `elbowGap`). (4) LENGTH CAP
-    /// — a 40-word note can't assert as many themes as a 110-word one. Returns 0…cap.
-    static func dynamicKeywordCount(scores: [Double], wordCount: Int,
-                                    floor: Double = 0.30, relBand: Double = 0.80,
-                                    elbowGap: Double = 0.06, hardCap: Int = 6) -> Int {
-        guard let top = scores.first, top >= floor else { return 0 }
-        let lengthCap = min(hardCap, Swift.max(1, Int((Double(wordCount) / 25.0).rounded())))
+    /// How many keywords to keep from descending cosine scores — instead of a hardcoded count. Aims for a
+    /// MEANINGFUL band: at least `minKeywords` whenever that many candidates exist (so a note never shows a
+    /// single lonely tag), up to `hardCap`, with the relative-to-top band + elbow choosing WITHIN that range
+    /// (more tags only when several are genuinely on-topic). Returns 0 only when there are no candidates. Pure.
+    static func dynamicKeywordCount(scores: [Double], minKeywords: Int = 3, hardCap: Int = 6,
+                                    relBand: Double = 0.80, elbowGap: Double = 0.06) -> Int {
+        guard let top = scores.first else { return 0 }
         var k = 1
-        while k < scores.count, k < lengthCap {
+        while k < scores.count, k < hardCap {
             let score = scores[k]
             if score < relBand * top { break }            // outside the relative-to-top band
             if scores[k - 1] - score > elbowGap { break } // sharp drop from the previous (elbow)
             k += 1
         }
-        return Swift.min(k, lengthCap)
+        let lower = Swift.min(minKeywords, scores.count)   // at least minKeywords, but not more than we have
+        let upper = Swift.min(hardCap, scores.count)
+        return Swift.min(Swift.max(k, lower), upper)
     }
 
     /// Maximal Marginal Relevance: greedily pick `count` items balancing relevance (`scores`, descending)
