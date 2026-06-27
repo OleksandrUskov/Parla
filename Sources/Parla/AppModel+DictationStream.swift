@@ -48,6 +48,14 @@ extension AppModel {
         current ?? (detected.isEmpty ? nil : detected)
     }
 
+    /// Pure (unit-tested): re-pin the streaming language lock when the user changes the explicit pick
+    /// mid-dictation. If `explicit` differs from `lastExplicit`, adopt it (a new language, or nil = back to
+    /// auto-detect); otherwise keep the current `locked` (which `lockedLanguage` may have auto-pinned).
+    nonisolated static func repinnedLanguage(explicit: String?, lastExplicit: String?, locked: String?)
+        -> (locked: String?, lastExplicit: String?) {
+        explicit != lastExplicit ? (explicit, explicit) : (locked, lastExplicit)
+    }
+
     /// Start the live decode loop for `recorder`. Single-flight (cancels any prior loop). Best-effort: a
     /// transient decode error just skips a frame; a missing model means no preview (the final
     /// `finishDictation` surfaces the real error).
@@ -78,8 +86,9 @@ extension AppModel {
 
                 // If the user changed the language pill mid-dictation, re-pin to the new explicit choice
                 // (or back to auto-detect) so the live preview matches the language the saved decode will use.
-                let explicit = self.language.isEmpty ? nil : self.language
-                if explicit != lastExplicit { lockedLang = explicit; lastExplicit = explicit }
+                let repin = AppModel.repinnedLanguage(explicit: self.language.isEmpty ? nil : self.language,
+                                                      lastExplicit: lastExplicit, locked: lockedLang)
+                lockedLang = repin.locked; lastExplicit = repin.lastExplicit
 
                 let cursorSample = Int(reconciler.confirmedSeconds * AppModel.streamSampleRate)
                 let from = AppModel.streamWindowStartSample(cursorSample: cursorSample,

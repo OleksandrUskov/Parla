@@ -351,6 +351,18 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(AppModel.bestDefault(from: []), "openai_whisper-base")
     }
 
+    func testRepinnedLanguage() {
+        // Unchanged explicit pick → keep the current lock (which auto-detect may have pinned).
+        XCTAssertEqual(AppModel.repinnedLanguage(explicit: "ru", lastExplicit: "ru", locked: "ru").locked, "ru")
+        XCTAssertEqual(AppModel.repinnedLanguage(explicit: nil, lastExplicit: nil, locked: "uk").locked, "uk")
+        // User switches the pill mid-dictation RU→EN → re-pin the lock to the new explicit choice.
+        let toEN = AppModel.repinnedLanguage(explicit: "en", lastExplicit: "ru", locked: "ru")
+        XCTAssertEqual(toEN.locked, "en"); XCTAssertEqual(toEN.lastExplicit, "en")
+        // User switches to Auto (explicit nil) → drop the lock to nil so detection re-pins next window.
+        let toAuto = AppModel.repinnedLanguage(explicit: nil, lastExplicit: "ru", locked: "ru")
+        XCTAssertNil(toAuto.locked); XCTAssertNil(toAuto.lastExplicit)
+    }
+
     // MARK: Model paths / sizes
 
     func testLocalFolderPath() {
