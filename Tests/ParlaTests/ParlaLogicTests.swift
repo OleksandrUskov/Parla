@@ -850,10 +850,13 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     func testKeywordList() {
-        XCTAssertTrue(keywordList(from: "   ").isEmpty)
-        let kw = keywordList(from: "Купить молоко и хлеб в магазине у дома", max: 2)
+        XCTAssertTrue(keywordList(from: "   ", language: "ru").isEmpty)
+        let kw = keywordList(from: "Купить молоко и хлеб в магазине у дома", language: "ru", max: 2)
         XCTAssertFalse(kw.isEmpty)                  // pulls some nouns out
         XCTAssertLessThanOrEqual(kw.count, 2)       // respects max
+        // Stopwords are never keywords, even if the tagger mislabels them (the casual-speech failure mode).
+        let kw2 = keywordList(from: "Если честно это вообще ерунда какая-то", language: "ru", max: 4)
+        XCTAssertFalse(kw2.contains { ["если", "это", "вообще"].contains($0.lowercased()) })
     }
 
     @MainActor func testBackfillInsightsSetsTitleAndSummary() async {

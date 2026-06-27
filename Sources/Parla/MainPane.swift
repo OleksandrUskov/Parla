@@ -433,6 +433,7 @@ struct TranscriptCard: View {
     @State private var isEditingTitle = false
     @State private var titleDraft = ""
     @FocusState private var titleFocused: Bool
+    @State private var summaryExpanded = false
 
     private var text: String { item.display(timestamps: model.showTimestamps) }
     private var justCopied: Bool { model.lastCopiedID == item.id }
@@ -454,6 +455,7 @@ struct TranscriptCard: View {
         .onChange(of: item.id, initial: true) { _, _ in
             if isEditing { cancelEdit() }
             if isEditingTitle { cancelTitleEdit() }
+            summaryExpanded = false          // each record opens with the transcript primary; expand the summary on demand
             player.load(audioURL)
         }
         .onDisappear { player.stop() }
@@ -507,7 +509,7 @@ struct TranscriptCard: View {
     /// toggle is on AND there's something to show (so the card stays clean for short notes / disabled fields).
     @ViewBuilder private var insights: some View {
         if model.showKeywords {
-            let keywords = keywordList(from: item.text)
+            let keywords = keywordList(from: item.text, language: item.language)
             if !keywords.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "tag").font(.caption2).foregroundStyle(.secondary)
@@ -523,13 +525,24 @@ struct TranscriptCard: View {
                 .accessibilityLabel(Text(L("transcript.keywords")))
             }
         }
+        // Collapsible so it never crowds out the timestamped transcript (which stays the primary content);
+        // collapsed by default → click the header to reveal the TL;DR.
         if model.showSummaries, let summary = item.summary, !summary.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L("transcript.summary").uppercased())
-                    .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                Text(summary)
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { summaryExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: summaryExpanded ? "chevron.down" : "chevron.right").font(.caption2)
+                        Text(L("transcript.summary").uppercased()).font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if summaryExpanded {
+                    Text(summary).font(.callout).fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
@@ -640,6 +653,7 @@ struct TranscriptCard: View {
                 TransportBar(player: player, hasAudio: audioURL != nil)
                 readBody
             }
+            .frame(maxHeight: .infinity)   // the transcript is the primary, space-filling region (scrolls within)
         }
     }
 
