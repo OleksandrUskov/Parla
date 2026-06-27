@@ -57,7 +57,7 @@
 "model.size.base"  = "~150 МБ";
 "model.size.small" = "~500 МБ";
 "model.size.turbo" = "~630 МБ";
-"model.size.large" = "~1 ГБ";
+"model.size.large" = "~3 ГБ";
 
 /* Status bar */
 "status.preparing"    = "Готовлю %@…";

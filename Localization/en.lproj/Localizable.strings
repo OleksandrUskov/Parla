@@ -57,7 +57,7 @@
 "model.size.base"  = "~150 MB";
 "model.size.small" = "~500 MB";
 "model.size.turbo" = "~630 MB";
-"model.size.large" = "~1 GB";
+"model.size.large" = "~3 GB";
 
 /* Status bar */
 "status.preparing"    = "Preparing %@…";
