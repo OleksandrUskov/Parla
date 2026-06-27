@@ -45,6 +45,11 @@
 "model.recommended"   = "recommended";
 "model.delete.help"   = "Delete the model from disk";
 "model.current.hint"  = "currently selected";
+"mlx.section.title"    = "AI insights model (RU/UK)";
+"mlx.model.title"      = "Qwen3-4B — Russian & Ukrainian";
+"mlx.model.hint"       = "On-device generative title, summary and action items for Russian & Ukrainian notes. Downloaded once, runs fully offline. Apple Silicon only.";
+"mlx.model.estimate"   = "~2.3 GB";
+"error.mlx.download"   = "Couldn't download the AI model: %@";
 
 /* Model tiers */
 "model.tier.tiny.hint"  = "very fast · draft";

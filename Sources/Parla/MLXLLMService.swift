@@ -153,6 +153,18 @@ actor MLXEngine {
         let session = ChatSession(container, instructions: instructions)
         return try await session.respond(to: prompt)
     }
+
+    /// Download (or refresh from cache) the model files WITHOUT loading them into memory — the explicit opt-in
+    /// "Download" action. Generation later loads lazily from this cache via `loadContainer`.
+    func downloadModel(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws {
+        _ = try await MLXHubDownloader(downloadBase: MLXModelSpec.downloadBase())
+            .download(
+                id: MLXModelSpec.repoId, revision: MLXModelSpec.revision,
+                matching: MLXModelSpec.downloadPatterns, useLatest: false, progressHandler: progressHandler)
+    }
+
+    /// Drop the in-memory model (e.g. after the user deletes the download) so a later load re-reads from disk.
+    func unload() { container = nil }
 }
 
 // MARK: Service — the LocalLLMService seam (Backend B)
@@ -174,7 +186,9 @@ struct MLXLLMService: LocalLLMService {
     there are none, return an empty array. Do not invent information. Output no text outside the JSON object.
     """
 
-    private var isAppleSilicon: Bool {
+    /// MLX runs on Apple Silicon only. The app ships arm64; under Rosetta (x86_64) this is false → the backend
+    /// reports `.noAppleSilicon` and the UI hides the download. Also drives whether the MLX model row is shown.
+    static var isSupportedHardware: Bool {
         #if arch(arm64)
         return true
         #else
@@ -183,7 +197,7 @@ struct MLXLLMService: LocalLLMService {
     }
 
     func availability(forLanguage language: String) -> AIAvailability {
-        guard isAppleSilicon else { return .noAppleSilicon }
+        guard Self.isSupportedHardware else { return .noAppleSilicon }
         guard Self.supportedLanguages.contains(languagePrimarySubtag(language)) else { return .languageUnsupported }
         // Downloading the model IS the opt-in (a row in ModelManagerView). Until then: dormant, never .ready.
         guard MLXModelSpec.isDownloaded() else { return .needsModelDownload }

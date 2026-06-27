@@ -45,6 +45,11 @@
 "model.recommended"   = "рекомендую";
 "model.delete.help"   = "Удалить модель с диска";
 "model.current.hint"  = "текущая выбранная";
+"mlx.section.title"    = "Модель ИИ-инсайтов (RU/UK)";
+"mlx.model.title"      = "Qwen3-4B — русский и украинский";
+"mlx.model.hint"       = "Генеративные заголовок, краткое содержание и задачи для русских и украинских заметок — на устройстве. Скачивается один раз, работает полностью офлайн. Только Apple Silicon.";
+"mlx.model.estimate"   = "~2,3 ГБ";
+"error.mlx.download"   = "Не удалось скачать модель ИИ: %@";
 
 /* Model tiers */
 "model.tier.tiny.hint"  = "очень быстро · черновик";

@@ -153,15 +153,78 @@ struct ModelManagerView: View {
                     ModelRow(tier: tier)
                 }
             }
+            if MLXLLMService.isSupportedHardware {
+                Divider()
+                Text(L("mlx.section.title")).font(.system(.subheadline, design: .rounded).weight(.semibold))
+                MLXModelRow()
+            }
             Divider()
             HStack {
                 Text(L("model.disk.used")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Text(formatBytes(model.totalModelsBytes)).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                Text(formatBytes(model.totalModelsBytes + model.mlxModelBytes)).font(.caption.weight(.medium)).foregroundStyle(.secondary)
             }
         }
         .padding(16)
         .frame(width: 440)
+        .task { model.refreshMLXModelState() }
+    }
+}
+
+/// The opt-in RU/UK generative model (MLX/Qwen3) row — mirrors `ModelRow` but for the single AI model, with its
+/// own download/progress/delete state (`AppModel+MLXModel.swift`). Shown only on Apple Silicon.
+struct MLXModelRow: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "sparkles")
+                .foregroundStyle(model.mlxModelDownloaded ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.tertiary))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L("mlx.model.title")).font(.callout).lineLimit(1)
+                Text(L("mlx.model.hint")).font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            trailing
+        }
+        .padding(8)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder private var trailing: some View {
+        if model.mlxDownloading {
+            HStack(spacing: 6) {
+                ProgressView(value: model.mlxDownloadProgress).frame(width: 64)
+                Text("\(Int(model.mlxDownloadProgress * 100))%").font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+            }
+        } else if model.mlxModelDownloaded {
+            HStack(spacing: 8) {
+                if model.mlxModelBytes > 0 {
+                    Text(formatBytes(model.mlxModelBytes)).font(.caption2).foregroundStyle(.secondary)
+                }
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Button { Task { await model.deleteMLXModel() } } label: {
+                    Image(systemName: "trash").font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .tint(.secondary)
+                .help(Text(L("model.delete.help")))
+                .accessibilityLabel(Text(L("model.delete.help")))
+                .disabled(model.isBusy)
+            }
+        } else {
+            HStack(spacing: 8) {
+                Text(L("mlx.model.estimate")).font(.caption2).foregroundStyle(.secondary)
+                Button { Task { await model.downloadMLXModel() } } label: {
+                    Label(L("common.download"), systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(Brand.accent)
+                .disabled(model.isBusy)
+            }
+        }
     }
 }
 

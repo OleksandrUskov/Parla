@@ -34,6 +34,11 @@ final class AppModel {
     var lemmaIndex: [UUID: Set<String>] = [:]                         // per-item lemma set for morphology search; OBSERVED — filteredHistory depends on it, so it must re-evaluate when the index builds
     var downloadedSet: Set<String> = []        // which models are on disk (reactive)
     var modelSizes: [String: Int64] = [:]      // size of each downloaded model
+    // MLX RU/UK generative model (AI P3) — separate opt-in download, distinct from the WhisperKit variants.
+    var mlxModelDownloaded: Bool = false       // RU/UK AI model present on disk (reactive)
+    var mlxModelBytes: Int64 = 0               // its on-disk size (for the "disk used" line)
+    var mlxDownloading: Bool = false           // single-flight + busy guard for the MLX download
+    var mlxDownloadProgress: Double = 0
 
     // Settings (mirrored into UserDefaults).
     var selectedModel: String { didSet { UserDefaults.standard.set(selectedModel, forKey: Keys.model) } }
@@ -204,6 +209,7 @@ final class AppModel {
     var isBusy: Bool {
         if recordingStartedAt != nil { return true }   // recording a dictation blocks other jobs (single-flight)
         if requestingMic { return true }                // mic-permission check in flight — hold the lane (no gap)
+        if mlxDownloading { return true }               // downloading the ~2.3GB RU/UK model — hold the lane
         if !refiningDictations.isEmpty { return true }  // a hybrid refine is decoding — hold the lane (no concurrent
                                                         // job, and the edit pencil stays hidden so it can't clobber)
         switch phase { case .idle, .failed: return false; default: return true }

@@ -45,6 +45,11 @@
 "model.recommended"   = "рекомендую";
 "model.delete.help"   = "Видалити модель з диска";
 "model.current.hint"  = "поточна вибрана";
+"mlx.section.title"    = "Модель ШІ-інсайтів (RU/UK)";
+"mlx.model.title"      = "Qwen3-4B — російська та українська";
+"mlx.model.hint"       = "Генеративні заголовок, стислий зміст і завдання для російських та українських нотаток — на пристрої. Завантажується один раз, працює повністю офлайн. Лише Apple Silicon.";
+"mlx.model.estimate"   = "~2,3 ГБ";
+"error.mlx.download"   = "Не вдалося завантажити модель ШІ: %@";
 
 /* Model tiers */
 "model.tier.tiny.hint"  = "дуже швидко · чернетка";
