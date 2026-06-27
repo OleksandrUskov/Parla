@@ -10,13 +10,6 @@ enum DictationMode: String, CaseIterable, Identifiable {
     var label: String { self == .hold ? L("settings.dictation.mode.hold") : L("settings.dictation.mode.toggle") }
 }
 
-/// How a transcript is labelled in the sidebar list (Local-AI Layer P1): the extractive key sentence
-/// (default), a keyword phrase, or the raw file name (the pre-AI behavior). User-switchable for A/B.
-enum SidebarTitleStyle: String, CaseIterable, Identifiable {
-    case sentence, keywords, filename
-    var id: String { rawValue }
-    var labelKey: String { "settings.insights.titlestyle.\(rawValue)" }
-}
 
 /// The single `@Observable` view-model SwiftUI binds to. STATE and SETTINGS live here;
 /// behavior is split across domain extensions:
@@ -59,8 +52,10 @@ final class AppModel {
     var dictationPasteIntoFrontmost: Bool { didSet { UserDefaults.standard.set(dictationPasteIntoFrontmost, forKey: Keys.dictationPaste) } }
     /// Hotkey behavior: press-to-toggle (default) vs hold-to-talk.
     var dictationMode: DictationMode { didSet { UserDefaults.standard.set(dictationMode.rawValue, forKey: Keys.dictationMode) } }
-    /// How transcripts are labelled in the sidebar (P1). Default = extractive key sentence.
-    var sidebarTitleStyle: SidebarTitleStyle { didSet { UserDefaults.standard.set(sidebarTitleStyle.rawValue, forKey: Keys.titleStyle) } }
+    // AI insights, shown as editable fields in the card (P1). Each is independently toggleable; ON by default.
+    var showTitles: Bool { didSet { UserDefaults.standard.set(showTitles, forKey: Keys.showTitles) } }
+    var showKeywords: Bool { didSet { UserDefaults.standard.set(showKeywords, forKey: Keys.showKeywords) } }
+    var showSummaries: Bool { didSet { UserDefaults.standard.set(showSummaries, forKey: Keys.showSummaries) } }
     /// Auto-stop a dictation after a short run of silence (opt-in, off by default).
     var dictationVADEnabled: Bool { didSet { UserDefaults.standard.set(dictationVADEnabled, forKey: Keys.dictationVAD) } }
     /// Live segment-level streaming preview while dictating (opt-in, off by default). PREVIEW ONLY — the
@@ -135,7 +130,9 @@ final class AppModel {
         static let dictationPaste = "dictationPasteIntoFrontmost"
         static let dictationPasteAXPrompted = "dictationPasteAXPrompted"   // one-time AX prompt guard
         static let dictationMode = "dictationMode"
-        static let titleStyle = "sidebarTitleStyle"
+        static let showTitles = "aiShowTitles"
+        static let showKeywords = "aiShowKeywords"
+        static let showSummaries = "aiShowSummaries"
         static let dictationVAD = "dictationVADEnabled"
         static let dictationLiveStreaming = "dictationLiveStreaming"
         static let lastBookmark = "lastSourceBookmark"
@@ -163,7 +160,9 @@ final class AppModel {
         keepDictationAudio = d.bool(forKey: Keys.keepDictationAudio)    // off — dictation audio is throwaway
         dictationPasteIntoFrontmost = d.bool(forKey: Keys.dictationPaste)   // off — the only Accessibility feature
         dictationMode = DictationMode(rawValue: d.string(forKey: Keys.dictationMode) ?? "") ?? .toggle
-        sidebarTitleStyle = SidebarTitleStyle(rawValue: d.string(forKey: Keys.titleStyle) ?? "") ?? .sentence
+        showTitles = (d.object(forKey: Keys.showTitles) as? Bool) ?? true        // AI insight fields ON by default…
+        showKeywords = (d.object(forKey: Keys.showKeywords) as? Bool) ?? true    // …each independently disableable
+        showSummaries = (d.object(forKey: Keys.showSummaries) as? Bool) ?? true
         dictationVADEnabled = d.bool(forKey: Keys.dictationVAD)   // opt-in, off by default
         dictationLiveStreaming = (d.object(forKey: Keys.dictationLiveStreaming) as? Bool) ?? true   // ON by default (safe + measured; preview-only)
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)

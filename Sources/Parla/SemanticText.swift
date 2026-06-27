@@ -22,12 +22,12 @@ func sentences(in text: String) -> [String] {
     return out
 }
 
-/// A short keyword-phrase title: the most frequent content words (nouns), top `max`, joined. Lexical
-/// only (NLTagger) — no embeddings, no assets. "" when nothing salient (the caller falls back to the
-/// sentence title / sourceName). The "keyword-phrase" title style.
-func keywordPhrase(from text: String, max: Int = 3, separator: String = " · ") -> String {
+/// Keyword tags: the most frequent content words (nouns), top `max`, best first. Lexical only
+/// (NLTagger) — no embeddings, no assets. [] when nothing salient. Shown as chips in the card; quality
+/// varies by language → user-evaluated live.
+func keywordList(from text: String, max: Int = 4) -> [String] {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return "" }
+    guard !trimmed.isEmpty else { return [] }
     let tagger = NLTagger(tagSchemes: [.lexicalClass])
     tagger.string = trimmed
     var nouns: [String] = []
@@ -40,5 +40,5 @@ func keywordPhrase(from text: String, max: Int = 3, separator: String = " · ") 
         }
         return true
     }
-    return topTerms(nouns, max: max).joined(separator: separator)
+    return topTerms(nouns, max: max)
 }

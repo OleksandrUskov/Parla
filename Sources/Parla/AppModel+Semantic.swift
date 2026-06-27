@@ -3,17 +3,25 @@ import Foundation
 // MARK: - Semantic index orchestration (Local-AI Layer P1c/P1d)
 
 extension AppModel {
-    /// The sidebar label for an item, per the chosen style: the extractive key sentence (persisted
-    /// `title`, falling back to sourceName), a live keyword phrase (falling back to the sentence/name),
-    /// or the raw file name. Keyword extraction is cheap and lazy (computed per visible row).
+    /// The sidebar label for an item: the title (AI/extractive or hand-edited, falling back to sourceName)
+    /// when titles are on, else the raw file name (the feature fully off).
     func sidebarTitle(for item: TranscriptItem) -> String {
-        switch sidebarTitleStyle {
-        case .filename: return item.sourceName
-        case .sentence: return item.displayTitle
-        case .keywords:
-            let phrase = keywordPhrase(from: item.text)
-            return phrase.isEmpty ? item.displayTitle : phrase
-        }
+        showTitles ? item.displayTitle : item.sourceName
+    }
+
+    /// Rename an item's title by hand (the 5% who want a different label). Sets `titleEdited` so a later
+    /// regeneration never overwrites it; an empty title reverts to the generated/sourceName fallback.
+    /// Returns whether anything changed.
+    @discardableResult
+    func setTitle(_ raw: String, for id: TranscriptItem.ID) -> Bool {
+        guard let idx = history.firstIndex(where: { $0.id == id }) else { return false }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newTitle: String? = trimmed.isEmpty ? nil : trimmed
+        guard newTitle != history[idx].title else { return false }
+        history[idx].title = newTitle
+        history[idx].titleEdited = newTitle == nil ? nil : true   // empty → back to auto; else pinned
+        HistoryStore.save(history)
+        return true
     }
 
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight

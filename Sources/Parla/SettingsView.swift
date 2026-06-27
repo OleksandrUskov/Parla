@@ -50,11 +50,9 @@ struct SettingsView: View {
             }
 
             Section(L("settings.section.insights")) {
-                Picker(L("settings.insights.titlestyle"), selection: $model.sidebarTitleStyle) {
-                    ForEach(SidebarTitleStyle.allCases) { style in
-                        Text(L(style.labelKey)).tag(style)
-                    }
-                }
+                Toggle(L("settings.insights.titles"), isOn: $model.showTitles)
+                Toggle(L("settings.insights.keywords"), isOn: $model.showKeywords)
+                Toggle(L("settings.insights.summary"), isOn: $model.showSummaries)
                 Text(L("settings.insights.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }

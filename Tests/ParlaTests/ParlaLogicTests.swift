@@ -599,7 +599,8 @@ final class ParlaLogicTests: XCTestCase {
         let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8))
         XCTAssertEqual(items.count, 1)
         let it = try XCTUnwrap(items.first)
-        XCTAssertNil(it.title); XCTAssertNil(it.summary); XCTAssertNil(it.actions); XCTAssertNil(it.aiModel)
+        XCTAssertNil(it.title); XCTAssertNil(it.summary); XCTAssertNil(it.actions)
+        XCTAssertNil(it.aiModel); XCTAssertNil(it.titleEdited)
         XCTAssertEqual(it.displayTitle, "msg123.ogg")   // nil title → sourceName
     }
 
@@ -848,11 +849,11 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(s.first, "Привет мир.")
     }
 
-    func testKeywordPhrase() {
-        XCTAssertEqual(keywordPhrase(from: "   "), "")
-        let kw = keywordPhrase(from: "Купить молоко и хлеб в магазине у дома", max: 2)
-        XCTAssertFalse(kw.isEmpty)                                          // pulls some nouns out
-        XCTAssertLessThanOrEqual(kw.components(separatedBy: " · ").count, 2)   // respects max
+    func testKeywordList() {
+        XCTAssertTrue(keywordList(from: "   ").isEmpty)
+        let kw = keywordList(from: "Купить молоко и хлеб в магазине у дома", max: 2)
+        XCTAssertFalse(kw.isEmpty)                  // pulls some nouns out
+        XCTAssertLessThanOrEqual(kw.count, 2)       // respects max
     }
 
     @MainActor func testBackfillInsightsSetsTitleAndSummary() async {
@@ -881,20 +882,36 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
-    @MainActor func testSidebarTitleStyle() {
+    @MainActor func testSidebarTitleHonorsToggle() {
         let m = AppModel(engine: FakeEngine())
-        var item = self.makeItem(name: "msg.ogg", text: "Купить молоко и хлеб в магазине у дома")
-        item.title = "Ключевое предложение тут"
-        m.sidebarTitleStyle = .sentence
-        XCTAssertEqual(m.sidebarTitle(for: item), "Ключевое предложение тут")   // persisted extractive title
-        m.sidebarTitleStyle = .filename
-        XCTAssertEqual(m.sidebarTitle(for: item), "msg.ogg")                    // raw name
-        m.sidebarTitleStyle = .keywords
-        let kw = m.sidebarTitle(for: item)
-        XCTAssertFalse(kw.isEmpty)
-        XCTAssertNotEqual(kw, "msg.ogg")                                        // a keyword phrase, not the name
-        // Keyword fallback: nothing extractable → fall back to displayTitle (here sourceName).
-        XCTAssertEqual(m.sidebarTitle(for: self.makeItem(name: "x.ogg", text: "...")), "x.ogg")
+        var item = self.makeItem(name: "msg.ogg", text: "тело")
+        item.title = "Сгенерённый заголовок"
+        m.showTitles = true
+        XCTAssertEqual(m.sidebarTitle(for: item), "Сгенерённый заголовок")   // title shown
+        m.showTitles = false
+        XCTAssertEqual(m.sidebarTitle(for: item), "msg.ogg")                 // feature off → raw name
+        // Titles on but no title yet → falls back to sourceName.
+        m.showTitles = true
+        XCTAssertEqual(m.sidebarTitle(for: self.makeItem(name: "x.ogg", text: "t")), "x.ogg")
+    }
+
+    @MainActor func testSetTitleEditsAndProtects() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine())
+            var item = self.makeItem(name: "msg.ogg", text: "тело")
+            item.title = "Авто заголовок"            // pretend the engine generated this
+            m.history = [item]
+            // Hand-rename → title set + pinned against regeneration.
+            XCTAssertTrue(m.setTitle("Мой заголовок", for: item.id))
+            XCTAssertEqual(m.history.first?.title, "Мой заголовок")
+            XCTAssertEqual(m.history.first?.titleEdited, true)
+            // No-op rename → false, nothing rewritten.
+            XCTAssertFalse(m.setTitle("Мой заголовок", for: item.id))
+            // Empty → reverts to the generated/sourceName fallback, edit flag cleared.
+            XCTAssertTrue(m.setTitle("   ", for: item.id))
+            XCTAssertNil(m.history.first?.title)
+            XCTAssertNil(m.history.first?.titleEdited)
+        }
     }
 
     @MainActor func testSaveEditPersistsAndStamps() {
