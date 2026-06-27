@@ -57,8 +57,10 @@ extension AppModel {
         // Same-script items only — cross-script vectors live in a different space, so cosine is meaningless.
         let pool = history.filter { !literal.contains($0.id) && store[$0.id] != nil && dominantScript($0.text) == script }
         let embedLanguage = script == "cyrillic" ? "ru" : "en"
-        guard !pool.isEmpty, let rawQuery = await embedder.embed(query, language: embedLanguage) else { relatedIDs = []; return }
-        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }   // query moved on → never write
+        guard !pool.isEmpty else { relatedIDs = []; return }                 // pre-await, query still current
+        let rawQuery = await embedder.embed(query, language: embedLanguage)
+        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }   // stale → no write AT ALL
+        guard let rawQuery else { relatedIDs = []; return }                  // current query, embed unavailable
         let rawVectors = pool.map { store[$0.id]! }
         guard let mean = SemanticIndex.centroid(rawVectors + [rawQuery]) else { relatedIDs = []; return }
         let q = SemanticIndex.centered(rawQuery, by: mean)
