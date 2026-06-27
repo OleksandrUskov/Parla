@@ -859,6 +859,48 @@ final class ParlaLogicTests: XCTestCase {
         // Stopwords are never candidates, even if the tagger mislabels them (the casual-speech failure mode).
         let kw2 = keywordCandidates(from: "Если честно это вообще ерунда какая-то", language: "ru", max: 8)
         XCTAssertFalse(kw2.contains { ["если", "это", "вообще"].contains($0.lowercased()) })
+        // Verbs/adjectives the POS tagger mislabels as nouns are dropped by the morphology filter.
+        let kw3 = keywordCandidates(from: "стягивает данные и синхронизирует портфель параллельно", language: "ru", max: 8)
+            .map { $0.lowercased() }
+        XCTAssertFalse(kw3.contains { ["стягивать", "синхронизировать", "параллельный"].contains($0) })
+    }
+
+    func testLooksLikeVerbLemma() {
+        for verb in ["гонять", "долбить", "стягивать", "синхронизировать", "кидать", "делать", "писать", "учиться"] {
+            XCTAssertTrue(looksLikeVerbLemma(verb), "\(verb) is a verb infinitive")
+        }
+        for noun in ["часть", "власть", "новость", "сеть", "путь", "портфель", "биржа", "спринт", "код"] {
+            XCTAssertFalse(looksLikeVerbLemma(noun), "\(noun) is a noun, keep it")
+        }
+    }
+
+    func testLooksLikeAdjectiveLemma() {
+        for adj in ["далёкий", "параллельный", "быстрый", "короткий", "читающий", "сделанный"] {
+            XCTAssertTrue(looksLikeAdjectiveLemma(adj), "\(adj) is an adjective/participle")
+        }
+        for noun in ["код", "утро", "биржа", "история", "музыка", "созвон"] {
+            XCTAssertFalse(looksLikeAdjectiveLemma(noun), "\(noun) is a noun, keep it")
+        }
+    }
+
+    func testDynamicKeywordCount() {
+        // Relative-band + elbow over a long note (cap is generous).
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.62, 0.58, 0.55, 0.51], wordCount: 200), 4)
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.61, 0.34], wordCount: 200), 1)   // cliff after #1
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.59, 0.55, 0.31], wordCount: 200), 2)
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.28, 0.26], wordCount: 200), 0)   // below floor → none
+        // Short note is length-capped even when scores stay flat-high.
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [0.5, 0.49, 0.48, 0.47, 0.46], wordCount: 40), 2)
+        XCTAssertEqual(SemanticIndex.dynamicKeywordCount(scores: [], wordCount: 200), 0)
+    }
+
+    func testMMR() {
+        // Two near-identical top vectors + one diverse: MMR picks the top, then the diverse one over the near-dup.
+        let vectors: [Embedding] = [[1, 0], [0.99, 0.01], [0, 1]]
+        let scores = [0.9, 0.88, 0.6]
+        let picked = SemanticIndex.mmr(scores: scores, vectors: vectors, count: 2, lambda: 0.6)
+        XCTAssertEqual(picked.first, 0)            // most relevant first
+        XCTAssertEqual(picked, [0, 2])             // diverse #2 beats the near-duplicate #1
     }
 
     @MainActor func testBackfillInsightsSetsTitleAndSummary() async {
@@ -870,7 +912,7 @@ final class ParlaLogicTests: XCTestCase {
             await m.backfillInsights()
             let lt = m.history.first { $0.id == long.id }
             XCTAssertEqual(lt?.title, "Первое предложение тут.")   // central sentence (constant vectors → first)
-            XCTAssertEqual(lt?.aiModel, "extractive-v2")
+            XCTAssertEqual(lt?.aiModel, "extractive-v3")
             XCTAssertNotNil(lt?.summary)                           // 5 sentences > 4 → summary present
             XCTAssertNotNil(lt?.keywords)                          // embedding-ranked tags populated
             let st = m.history.first { $0.id == short.id }

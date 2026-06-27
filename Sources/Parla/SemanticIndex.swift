@@ -121,6 +121,46 @@ enum SemanticIndex {
         return (title, summary)
     }
 
+    /// How many keywords to keep from descending cosine scores — instead of a hardcoded count. Pure.
+    /// Layered (research-validated): (1) ZERO-GATE — if the top raw cosine is below `floor`, nothing is
+    /// salient → 0. (2) RELATIVE-TO-TOP band — keep candidate i only while it's ≥ `relBand`·top
+    /// (self-calibrates per note). (3) ELBOW — stop at the first sharp drop (> `elbowGap`). (4) LENGTH CAP
+    /// — a 40-word note can't assert as many themes as a 110-word one. Returns 0…cap.
+    static func dynamicKeywordCount(scores: [Double], wordCount: Int,
+                                    floor: Double = 0.30, relBand: Double = 0.80,
+                                    elbowGap: Double = 0.06, hardCap: Int = 6) -> Int {
+        guard let top = scores.first, top >= floor else { return 0 }
+        let lengthCap = min(hardCap, Swift.max(1, Int((Double(wordCount) / 25.0).rounded())))
+        var k = 1
+        while k < scores.count, k < lengthCap {
+            let score = scores[k]
+            if score < relBand * top { break }            // outside the relative-to-top band
+            if scores[k - 1] - score > elbowGap { break } // sharp drop from the previous (elbow)
+            k += 1
+        }
+        return Swift.min(k, lengthCap)
+    }
+
+    /// Maximal Marginal Relevance: greedily pick `count` items balancing relevance (`scores`, descending)
+    /// against diversity (cosine to already-picked) so tags aren't near-duplicates. `lambda` leans
+    /// relevance. Returns indices into the input, best first. Pure. Validated by research (EmbedRank/KeyBERT).
+    static func mmr(scores: [Double], vectors: [Embedding], count: Int, lambda: Double = 0.6) -> [Int] {
+        guard count > 0, !scores.isEmpty else { return [] }
+        var selected: [Int] = []
+        var remaining = Array(scores.indices)
+        while selected.count < Swift.min(count, scores.count), !remaining.isEmpty {
+            var best = remaining[0], bestValue = -Double.infinity
+            for i in remaining {
+                let diversity = selected.map { cosine(vectors[i], vectors[$0]) }.max() ?? 0
+                let value = lambda * scores[i] - (1 - lambda) * diversity
+                if value > bestValue { bestValue = value; best = i }
+            }
+            selected.append(best)
+            remaining.removeAll { $0 == best }
+        }
+        return selected
+    }
+
     /// Mean-pool per-token vectors into one document vector (the standard way to turn `NLContextualEmbedding`'s
     /// per-token output into a single sentence/item embedding). nil for no tokens or zero-dim. Pure.
     static func meanPool(_ vectors: [[Double]]) -> Embedding? {

@@ -62,8 +62,8 @@ extension AppModel {
     }
 
     /// Provenance tag for the current extractive pipeline; bumped when the pipeline gains a capability so
-    /// older records reprocess once (v2 = adds embedding-ranked keywords).
-    static var extractiveModelTag: String { "extractive-v2" }
+    /// older records reprocess once (v2 = embedding-ranked keywords; v3 = morphology filter + dynamic count + MMR).
+    static var extractiveModelTag: String { "extractive-v3" }
 
     /// Backfill search embeddings for items missing a vector, then persist. Best-effort: an item the
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
@@ -99,18 +99,26 @@ extension AppModel {
         return (title, summary, keywords)
     }
 
-    /// KeyBERT-style keyword ranking: score candidate nouns by cosine similarity to the document vector
-    /// → on-topic terms win regardless of position (so intro filler stops dominating). Top 4. Best-effort:
-    /// a candidate that can't be embedded is skipped; nil doc vector → no keywords.
+    /// KeyBERT-style keyword ranking: score morphology-filtered candidates by cosine similarity to the
+    /// document vector (on-topic terms win regardless of position), choose HOW MANY dynamically (relevance
+    /// floor + relative-to-top band + elbow + length cap — so a low-signal note returns few or zero), then
+    /// MMR-select for diversity. Best-effort: an un-embeddable candidate is skipped; nil doc vector → none.
     private func rankedKeywords(for item: TranscriptItem, documentVector: Embedding?) async -> [String] {
         guard let document = documentVector else { return [] }
         let candidates = keywordCandidates(from: item.text, language: item.language, max: 16)
         guard !candidates.isEmpty else { return [] }
-        var scored: [(term: String, score: Double)] = []
+        var terms: [String] = [], vectors: [Embedding] = [], scores: [Double] = []
         for candidate in candidates {
             guard let vector = await embedder.embed(candidate, language: item.language) else { continue }
-            scored.append((candidate, SemanticIndex.cosine(vector, document)))
+            terms.append(candidate); vectors.append(vector); scores.append(SemanticIndex.cosine(vector, document))
         }
-        return scored.sorted { $0.score > $1.score }.prefix(4).map(\.term)
+        guard !scores.isEmpty else { return [] }
+        let order = scores.indices.sorted { scores[$0] > scores[$1] }   // by relevance, descending
+        let sortedTerms = order.map { terms[$0] }
+        let sortedVectors = order.map { vectors[$0] }
+        let sortedScores = order.map { scores[$0] }
+        let count = SemanticIndex.dynamicKeywordCount(scores: sortedScores, wordCount: item.wordCount)
+        guard count > 0 else { return [] }
+        return SemanticIndex.mmr(scores: sortedScores, vectors: sortedVectors, count: count).map { sortedTerms[$0] }
     }
 }
