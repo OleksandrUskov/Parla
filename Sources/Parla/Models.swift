@@ -31,6 +31,21 @@ struct ActionItem: Codable, Hashable, Sendable {
     var done: Bool = false
 }
 
+extension ActionItem {
+    private enum CodingKeys: String, CodingKey { case text, done }
+    /// Tolerant decode: a missing `done` defaults to false instead of throwing. Synthesized Decodable
+    /// does NOT apply the `= false` for an absent key, and an `ActionItem` decodes nested inside
+    /// `FailableDecodable<TranscriptItem>` on the salvage path — a `keyNotFound` there would drop the
+    /// WHOLE record (text/segments/audio), not just this field. Mirrors Parla's Optional-field decode
+    /// discipline for the nested non-Optional type. Living in an extension keeps the memberwise init +
+    /// the synthesized `encode(to:)` (which always writes both keys).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(text: try c.decode(String.self, forKey: .text),
+                  done: try c.decodeIfPresent(Bool.self, forKey: .done) ?? false)
+    }
+}
+
 /// A single transcript in the history.
 struct TranscriptItem: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
@@ -57,8 +72,12 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var isEdited: Bool { edited == true }
 
     /// Sidebar/title text: the AI/extractive title when present, else the raw source name (e.g. `msg123.ogg`).
-    /// nil OR empty title → fall back to `sourceName`, so legacy/disabled records stay identical.
-    var displayTitle: String { (title?.isEmpty == false) ? title! : sourceName }
+    /// nil, empty, OR whitespace-only title → fall back to `sourceName`, so legacy/disabled records stay
+    /// identical and a model that emits a blank/whitespace title (P1/P2) can't render an empty sidebar label.
+    var displayTitle: String {
+        if let t = title, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return t }
+        return sourceName
+    }
 
     /// Text with or without timecodes — for display/copying.
     /// For edited records timecodes are suppressed: the edited text no longer matches

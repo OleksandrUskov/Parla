@@ -622,14 +622,28 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(r.displayTitle, "Звонок с командой")
     }
 
-    /// T3: displayTitle — non-empty title wins; nil OR empty → sourceName (legacy/disabled stay identical).
+    /// T3: displayTitle — non-empty title wins; nil / empty / whitespace-only → sourceName
+    /// (legacy/disabled stay identical; a model emitting a blank title can't render an empty label).
     func testDisplayTitleFallback() {
         var item = makeItem(name: "msg.ogg", text: "t")
         XCTAssertEqual(item.displayTitle, "msg.ogg")     // nil
         item.title = ""
         XCTAssertEqual(item.displayTitle, "msg.ogg")     // empty → fallback, not a blank title
+        item.title = "  \n\t "
+        XCTAssertEqual(item.displayTitle, "msg.ogg")     // whitespace-only → fallback, not a blank label
         item.title = "Покупки"
         XCTAssertEqual(item.displayTitle, "Покупки")     // present → wins
+    }
+
+    /// A stored/hand-edited ActionItem missing `done` defaults to false instead of throwing — a throw
+    /// would drop the WHOLE record via the salvage path (FailableDecodable<TranscriptItem>).
+    func testActionItemDecodesWithoutDoneKey() throws {
+        let bare = try JSONDecoder().decode(ActionItem.self, from: Data(#"{"text":"позвонить"}"#.utf8))
+        XCTAssertEqual(bare, ActionItem(text: "позвонить", done: false))
+        // …and it survives nested in a record (the path the salvage code walks).
+        let rec = #"[{"id":"\#(UUID().uuidString)","date":1,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"m","text":"t","segments":[],"actions":[{"text":"купить хлеб"}]}]"#
+        let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(rec.utf8))
+        XCTAssertEqual(items.first?.actions?.first, ActionItem(text: "купить хлеб", done: false))
     }
 
     /// Pure: BCP-47 primary subtag, lowercased + normalized (drives the language-aware gate).
