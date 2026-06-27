@@ -149,8 +149,14 @@ final class AppModel {
         NSClassFromString("XCTestCase") != nil ? NoopEmbedder() : NLEmbedder()
     }
 
+    /// Default AI backend: the real `DefaultAIService` in production, a `NoopAIService` under unit tests — so a
+    /// test that doesn't inject a fake never calls the real on-device FoundationModels session (slow + non-deterministic).
+    static func defaultAI() -> any LocalLLMService {
+        NSClassFromString("XCTestCase") != nil ? NoopAIService() : DefaultAIService()
+    }
+
     init(engine: any TranscribingEngine = TranscriptionEngine(),
-         ai: any LocalLLMService = DefaultAIService(),
+         ai: any LocalLLMService = AppModel.defaultAI(),
          embedder: any TextEmbedder = AppModel.defaultEmbedder()) {
         self.engine = engine
         self.ai = ai

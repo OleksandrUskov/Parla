@@ -1028,6 +1028,53 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testEnrichUpgradesInsightsForSupportedLanguage() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "Sprint planning", summary: "Discussed the roadmap.", actions: [ActionItem(text: "Email Bob")])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "we discussed the roadmap and i'll email bob", lang: "en")]
+            await m.enrichInsights()
+            XCTAssertEqual(m.history.first?.title, "Sprint planning")
+            XCTAssertEqual(m.history.first?.summary, "Discussed the roadmap.")
+            XCTAssertEqual(m.history.first?.actions?.map(\.text), ["Email Bob"])
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.foundationModelTag)
+        }
+    }
+
+    @MainActor func testEnrichSkipsUnsupportedLanguage() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .languageUnsupported), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "обсудили дорожную карту", lang: "ru")]
+            await m.enrichInsights()
+            XCTAssertNil(m.history.first?.actions)
+            XCTAssertNotEqual(m.history.first?.aiModel, AppModel.foundationModelTag)   // RU keeps extractive (no generative backend)
+        }
+    }
+
+    @MainActor func testEnrichPreservesHandEditedTitle() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "Generated", summary: "S", actions: [])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "english note", lang: "en")]
+            if let i = m.history.indices.first { m.history[i].title = "Мой заголовок"; m.history[i].titleEdited = true }
+            await m.enrichInsights()
+            XCTAssertEqual(m.history.first?.title, "Мой заголовок")   // hand-edited title preserved
+            XCTAssertEqual(m.history.first?.summary, "S")            // summary still upgraded
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.foundationModelTag)
+        }
+    }
+
+    @MainActor func testBackfillInsightsSkipsGenerativeItems() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "english note here", lang: "en")]
+            if let i = m.history.indices.first { m.history[i].title = "Gen"; m.history[i].aiModel = AppModel.foundationModelTag }
+            await m.backfillInsights()
+            XCTAssertEqual(m.history.first?.title, "Gen")                          // extractive must NOT clobber generative
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.foundationModelTag)
+        }
+    }
+
     @MainActor func testSaveEditInvalidatesSemanticIndexes() {
         withTemporaryHistoryStore {
             let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())

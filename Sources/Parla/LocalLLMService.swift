@@ -84,9 +84,76 @@ struct FoundationModelsService: LocalLLMService {
         return .unsupportedOS
     }
 
+    /// Chars fed to the model in one pass — comfortably inside the ~4096-token session budget for a typical
+    /// voice note. A transcript longer than this is truncated (and retried tighter on a context-window error);
+    /// full per-chapter map-reduce for long recordings is a later refinement (P2d/P4).
+    static let maxInputChars = 8000
+
+    static let instructions = """
+    You extract a title, a short summary, and any action items from a voice-message transcript.
+    ALWAYS respond in the SAME language as the transcript. Keep the title to a few words. Keep the summary to \
+    1–3 sentences. Only list action items that are explicitly stated as tasks/intentions; if there are none, \
+    return an empty list. Do not invent information.
+    """
+
     func insights(forTranscript text: String, language: String) async throws -> AIInsights {
-        throw AIError.notImplemented   // P2 wires @Generable {title, summary, actions} guided decoding
+        #if canImport(FoundationModels)
+        if #available(macOS 26, *) {
+            guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
+            do {
+                return try await Self.generate(String(text.prefix(Self.maxInputChars)))
+            } catch is LanguageModelSession.GenerationError {
+                // Usually the context window was exceeded → one tighter retry. (Running-summary map-reduce for
+                // long/chunked transcripts is a planned refinement; this keeps it best-effort meanwhile.)
+                return try await Self.generate(String(text.prefix(Self.maxInputChars / 2)))
+            }
+        }
+        #endif
+        throw AIError.unavailable
     }
+
+    #if canImport(FoundationModels)
+    @available(macOS 26, *)
+    private static func generate(_ text: String) async throws -> AIInsights {
+        let response = try await LanguageModelSession(instructions: instructions)
+            .respond(to: text, generating: GeneratedInsights.self)
+        return response.content.asInsights
+    }
+    #endif
+}
+
+#if canImport(FoundationModels)
+/// Guided-decoding output type: the framework generates DIRECTLY into this struct (no parsing/regex), which is
+/// FoundationModels' headline feature. `@Guide` steers each field. Mapped to the backend-neutral `AIInsights`.
+@available(macOS 26, *)
+@Generable
+struct GeneratedInsights {
+    @Guide(description: "A concise title for the note — at most about six words, in the SAME language as the transcript")
+    var title: String
+    @Guide(description: "A 1–3 sentence summary of the key points, in the same language as the transcript")
+    var summary: String
+    @Guide(description: "Concrete tasks or action items explicitly stated in the transcript; an empty list if there are none")
+    var actions: [String]
+
+    var asInsights: AIInsights {
+        AIInsights(
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
+            actions: actions
+                .map { ActionItem(text: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                .filter { !$0.text.isEmpty }
+        )
+    }
+}
+#endif
+
+// MARK: - No-op backend (unit tests)
+
+/// Reports no generative backend and never generates. The default `ai` under unit tests (see
+/// `AppModel.defaultAI`) so a test never calls the real on-device model; the wiring is exercised with a fake.
+struct NoopAIService: LocalLLMService {
+    func availability(forLanguage language: String) -> AIAvailability { .modelUnavailable }
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights { throw AIError.unavailable }
 }
 
 // MARK: - Selector — DefaultAIService

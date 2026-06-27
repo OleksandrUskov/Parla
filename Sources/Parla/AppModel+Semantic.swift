@@ -86,10 +86,11 @@ extension AppModel {
         lemmaIndex[id] = nil
         if let idx = history.firstIndex(where: { $0.id == id }) {
             history[idx].aiModel = nil                                       // re-derive insights from the new text
-            // Clear summary + keywords: backfillInsights only OVERWRITES them when the new text yields one, so a
-            // now-short (or now-empty-keyword) edit would otherwise leave the OLD summary/keywords stranded.
+            // Clear summary + keywords + actions: the backfill/enrich passes only OVERWRITE them when the new
+            // text yields one, so a now-short (or now-actionless) edit would otherwise strand the OLD values.
             history[idx].summary = nil
             history[idx].keywords = nil
+            history[idx].actions = nil
             if history[idx].titleEdited != true { history[idx].title = nil } // auto-title regenerates; hand titles kept
         }
         refreshRelatedNotes()                                               // clear the now-stale "Related" footer
@@ -106,7 +107,8 @@ extension AppModel {
         defer { semanticRefreshInFlight = false }
         repeat {
             semanticRefreshPending = false
-            await backfillInsights()
+            await backfillInsights()    // extractive (all languages) — instant fallback
+            await enrichInsights()      // generative upgrade for languages with a backend (FoundationModels: EN, macOS 26)
             await backfillEmbeddings()
             backfillLemmas()
         } while semanticRefreshPending
@@ -132,7 +134,9 @@ extension AppModel {
     /// across the awaits). A user-edited title is never overwritten; assets-missing items are left unmarked
     /// so they retry on a later pass.
     func backfillInsights() async {
-        let targets = history.filter { $0.aiModel != Self.extractiveModelTag }
+        // Skip items already at the extractive tag AND items the generative pass owns (foundationModelTag) — so
+        // extractive never clobbers a model-generated insight on a later pass.
+        let targets = history.filter { $0.aiModel != Self.extractiveModelTag && $0.aiModel != Self.foundationModelTag }
         guard !targets.isEmpty else { return }
         var changed = false
         for item in targets {
@@ -151,6 +155,34 @@ extension AppModel {
     /// older records reprocess once (v2 = embedding-ranked keywords; v3 = morphology filter + dynamic count
     /// + MMR; v4 = in-context candidate vectors; v5 = min-3 keyword count + isolated fallback).
     static var extractiveModelTag: String { "extractive-v5" }
+
+    /// Provenance tag for model-generated (FoundationModels) insights — distinguishes them from extractive so the
+    /// extractive pass never clobbers them and the generative pass doesn't reprocess. Bump on prompt/schema change.
+    static var foundationModelTag: String { "foundation-v1" }
+
+    /// Generative UPGRADE for transcripts whose LANGUAGE has an on-device generative backend (FoundationModels:
+    /// English + a few, macOS 26): replace the extractive title/summary with model output and add real action
+    /// items. Language-gated by `ai.availability` (RU/UK aren't `.ready` here → keep extractive until P3).
+    /// Best-effort: any failure leaves the extractive fallback. A hand-edited title is preserved. Tagged
+    /// `foundationModelTag`. TOCTOU-safe: re-finds the item after the await and skips it if the text changed.
+    func enrichInsights() async {
+        let targets = history.filter {
+            $0.aiModel != Self.foundationModelTag && ai.availability(forLanguage: $0.language) == .ready
+        }
+        guard !targets.isEmpty else { return }
+        var changed = false
+        for item in targets {
+            guard let result = try? await ai.insights(forTranscript: item.text, language: item.language),
+                  let idx = history.firstIndex(where: { $0.id == item.id }),
+                  history[idx].text == item.text else { continue }   // edited mid-generate → skip; a later pass redoes it
+            if history[idx].titleEdited != true, !result.title.isEmpty { history[idx].title = result.title }
+            if !result.summary.isEmpty { history[idx].summary = result.summary }
+            history[idx].actions = result.actions.isEmpty ? nil : result.actions
+            history[idx].aiModel = Self.foundationModelTag
+            changed = true
+        }
+        if changed { HistoryStore.save(history) }
+    }
 
     /// Backfill search embeddings for items missing a vector, then persist. Best-effort: an item the
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
