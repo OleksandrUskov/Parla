@@ -21,6 +21,10 @@ extension AppModel {
         history[idx].title = newTitle
         history[idx].titleEdited = newTitle == nil ? nil : true   // empty → back to auto; else pinned
         if newTitle == nil { history[idx].aiModel = nil }         // cleared → re-eligible for regeneration next pass
+        // The title is part of `embedText`, so the doc-vector is now stale → drop it; the caller (commitTitle)
+        // kicks the re-embed. (Lemmas/insights are unaffected — they derive from the body text, not the title.)
+        embeddingIndex[id] = nil
+        EmbeddingStore.remove([id])
         HistoryStore.save(history)
         return true
     }
@@ -70,6 +74,22 @@ extension AppModel {
     /// Min centered doc↔doc cosine to count as "related". Calibrated on real data (LOCAL_AI_LAYER.md §5):
     /// true topic pairs land ≈0.4–0.7, unrelated/noise notes go negative; 0.30 keeps the former, drops the latter.
     static var relatedFloor: Double { 0.30 }
+
+    /// Drop ALL derived data for an item whose text changed in place — edit (`saveEdit`), re-transcribe
+    /// (`runRetranscribe`), dictation refine (`refineDictation`) — so the next `refreshSemanticIndex` recomputes
+    /// it from the CURRENT text: search lemmas, the "Related" doc-vector, and the extractive insights
+    /// (title/summary/keywords). A hand-edited title is preserved (`titleEdited`). Synchronous; mutates
+    /// `history[idx]`, so call it BEFORE the caller's `HistoryStore.save`, and the caller kicks the recompute.
+    func invalidateDerivedData(for id: TranscriptItem.ID) {
+        embeddingIndex[id] = nil
+        EmbeddingStore.remove([id])
+        lemmaIndex[id] = nil
+        if let idx = history.firstIndex(where: { $0.id == id }) {
+            history[idx].aiModel = nil                                       // re-derive insights from the new text
+            if history[idx].titleEdited != true { history[idx].title = nil } // auto-title regenerates; hand titles kept
+        }
+        refreshRelatedNotes()                                               // clear the now-stale "Related" footer
+    }
 
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight
     /// — a change that arrives mid-run schedules exactly one more pass after (so the new item is picked up

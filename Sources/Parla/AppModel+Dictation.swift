@@ -181,12 +181,13 @@ extension AppModel {
                 history[idx].segments = r.segments
                 history[idx].durationSec = r.duration
                 history[idx].language = r.language
+                invalidateDerivedData(for: id)   // refined text → drop vector/lemmas/insights from the rough stream
                 HistoryStore.save(history)
             }
         } catch {
             // Refine failed → keep the instant streamed text (already saved, copied, pasted). Nothing to undo.
         }
-        Task { await refreshSemanticIndex() }   // title/summary from the FINAL dictation text, not the rough stream (P1)
+        await refreshSemanticIndex()   // title/summary/search from the FINAL dictation text, not the rough stream (inline → test-safe)
         // Keep the audio if requested — regardless of whether the decode refined the text (the record exists).
         if keepDictationAudio { await keepDictationAudioFor(id, wav: wav) }
         await pruneAudioCache()

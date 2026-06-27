@@ -19,6 +19,14 @@ protocol TextEmbedder: Sendable {
     func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]?
 }
 
+/// No-op embedder: returns nil for everything. Used as the default UNDER UNIT TESTS (see `AppModel.defaultEmbedder`)
+/// so a test never triggers the real `NLContextualEmbedding` model load / on-device asset download, and the
+/// kicked semantic refresh stays instant + deterministic. Production always gets the real `NLEmbedder`.
+struct NoopEmbedder: TextEmbedder {
+    func embed(_ text: String, language: String) async -> Embedding? { nil }
+    func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? { nil }
+}
+
 /// Real `NLContextualEmbedding` backend (macOS 14+). The Cyrillic script-model covers RU + UK and English
 /// has its own — so this serves Parla's core languages on the full floor with NO LLM download (the model
 /// assets download on first use). Loaded models are kept actor-internal (never cross isolation) per the

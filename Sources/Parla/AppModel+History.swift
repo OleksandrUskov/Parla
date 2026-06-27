@@ -31,20 +31,12 @@ extension AppModel {
         history[idx].text = newText
         history[idx].edited = true
         history[idx].editedAt = Date()
-        // The text changed → the derived search/related data is stale. Drop the vector + lemma set so the
-        // backfill recomputes them from the edited text (otherwise search would still match the old words and
-        // "Related" would rank on the old meaning). Insights (title/summary/keywords) are left for P4's manual
-        // regenerate; a hand-edited title is protected regardless.
-        embeddingIndex[id] = nil
-        EmbeddingStore.remove([id])
-        lemmaIndex[id] = nil
+        selection = id                        // keep the selection on the edited entry (before invalidating Related)
+        invalidateDerivedData(for: id)        // drop stale vector/lemmas/insights from the OLD text + clear Related
         HistoryStore.save(history)
-        selection = id                        // keep the selection on the edited entry
-        refreshRelatedNotes()                 // clear the now-stale "Related" footer at once (selfVec is nil → [])
         // NOTE: saveEdit stays fully SYNCHRONOUS. The re-embed/re-lemmatize pass (refreshSemanticIndex) is kicked
-        // by the CALLER (the editor's commit handler), NOT here — a fire-and-forget Task from a store mutation
-        // can outlive a test's temporary-store scope and clobber the real history.json. Indexes are invalidated
-        // synchronously above, so the model is already consistent; the async recompute is a UI concern.
+        // by the CALLER (the editor's commit handler), NOT here — a fire-and-forget Task from a store mutation can
+        // outlive a test's temp-store scope. Indexes are invalidated synchronously above (model already consistent).
         return true
     }
 

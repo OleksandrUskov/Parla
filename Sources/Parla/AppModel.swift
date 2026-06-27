@@ -142,9 +142,16 @@ final class AppModel {
         static let uiLanguage = "uiLanguage"
     }
 
+    /// Default embedder: the real on-device `NLEmbedder` in production, a `NoopEmbedder` under unit tests — so a
+    /// test that doesn't inject a fake never loads the `NLContextualEmbedding` model or downloads its assets, and
+    /// the kicked refresh stays instant (same `XCTestCase` headless gate as `PasteService`/`CompletionSound`).
+    static func defaultEmbedder() -> any TextEmbedder {
+        NSClassFromString("XCTestCase") != nil ? NoopEmbedder() : NLEmbedder()
+    }
+
     init(engine: any TranscribingEngine = TranscriptionEngine(),
          ai: any LocalLLMService = DefaultAIService(),
-         embedder: any TextEmbedder = NLEmbedder()) {
+         embedder: any TextEmbedder = AppModel.defaultEmbedder()) {
         self.engine = engine
         self.ai = ai
         self.embedder = embedder

@@ -744,7 +744,11 @@ struct TranscriptCard: View {
         titleFocused = false
     }
     private func commitTitle() {
-        model.setTitle(titleDraft, for: item.id)
+        // setTitle invalidates the doc-vector synchronously (title is part of embedText); kick the re-embed here
+        // in the UI layer so a store mutation never spawns a Task that could outlive a test (see commitEdit).
+        if model.setTitle(titleDraft, for: item.id) {
+            Task { await model.refreshSemanticIndex() }
+        }
         isEditingTitle = false
         titleFocused = false
     }

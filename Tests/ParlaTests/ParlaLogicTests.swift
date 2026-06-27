@@ -31,6 +31,14 @@ final class ParlaLogicTests: XCTestCase {
         // Point legacy migration at a non-existent dir so tests never copy the real ~/…/Murmur dataset.
         HistoryStore.legacyBase = FileManager.default.temporaryDirectory
             .appendingPathComponent("ParlaTests-NoLegacy-\(UUID().uuidString)")
+        // CRITICAL ISOLATION: redirect the store itself to a throwaway dir for EVERY test, process-wide. This is
+        // the bulletproof guard (not the per-test drain): even a detached refresh Task that outlives a per-test
+        // `withTemporaryHistoryStore` scope writes here, never the user's real ~/Library/.../Parla data. Embedding/
+        // audio dirs derive from this path, so they're redirected too.
+        let storeDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ParlaTests-Store-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
+        HistoryStore.fileURL = storeDir.appendingPathComponent("history.json")
     }
 
     // MARK: Model names
@@ -860,6 +868,66 @@ final class ParlaLogicTests: XCTestCase {
             XCTAssertEqual(m.relatedIDs, [near.id])   // only the genuinely-close note clears the floor
             // The open note has no vector → no "Related", best-effort.
             m.embeddingIndex[open.id] = nil
+            m.refreshRelatedNotes()
+            XCTAssertTrue(m.relatedIDs.isEmpty)
+        }
+    }
+
+    @MainActor func testDeleteAndClearSyncSemanticIndexes() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let a = self.makeItem(text: "первая"), b = self.makeItem(text: "вторая")
+            m.history = [a, b]
+            m.embeddingIndex = [a.id: [1, 0], b.id: [0, 1]]
+            m.lemmaIndex = [a.id: ["первая"], b.id: ["вторая"]]
+            EmbeddingStore.save([a.id: [1, 0], b.id: [0, 1]])
+            m.delete(a)
+            XCTAssertNil(m.embeddingIndex[a.id]); XCTAssertNil(m.lemmaIndex[a.id]); XCTAssertNil(EmbeddingStore.load()[a.id])
+            XCTAssertNotNil(m.embeddingIndex[b.id])   // sibling untouched
+            m.clearHistory()
+            XCTAssertTrue(m.embeddingIndex.isEmpty); XCTAssertTrue(m.lemmaIndex.isEmpty)
+            XCTAssertTrue(EmbeddingStore.load().isEmpty); XCTAssertTrue(m.relatedIDs.isEmpty)
+        }
+    }
+
+    @MainActor func testInvalidateDerivedDataResetsAllButHandTitle() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let a = self.makeItem(text: "текст")
+            m.history = [a]; m.selection = a.id
+            m.embeddingIndex = [a.id: [1, 0]]; m.lemmaIndex = [a.id: ["текст"]]
+            EmbeddingStore.save([a.id: [1, 0]])
+            if let i = m.history.firstIndex(where: { $0.id == a.id }) { m.history[i].aiModel = "extractive-v5"; m.history[i].title = "Авто" }
+            m.invalidateDerivedData(for: a.id)
+            XCTAssertNil(m.embeddingIndex[a.id]); XCTAssertNil(m.lemmaIndex[a.id]); XCTAssertNil(EmbeddingStore.load()[a.id])
+            XCTAssertNil(m.history.first?.aiModel)   // insights re-eligible
+            XCTAssertNil(m.history.first?.title)     // auto-title cleared so it regenerates from new text
+            // A hand-edited title is preserved.
+            if let i = m.history.firstIndex(where: { $0.id == a.id }) { m.history[i].titleEdited = true; m.history[i].title = "Моё" }
+            m.invalidateDerivedData(for: a.id)
+            XCTAssertEqual(m.history.first?.title, "Моё")
+        }
+    }
+
+    @MainActor func testRefreshSemanticIndexIsSingleFlight() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "что-то")]
+            m.semanticRefreshInFlight = true        // pretend a pass is already running
+            await m.refreshSemanticIndex()          // must coalesce: set pending + return without doing work
+            XCTAssertTrue(m.semanticRefreshPending)
+            XCTAssertTrue(m.embeddingIndex.isEmpty) // no overlapping backfill happened
+        }
+    }
+
+    @MainActor func testRelatedNotesEmptyForHomogeneousCluster() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let a = self.makeItem(text: "крипта один"), b = self.makeItem(text: "крипта два"), c = self.makeItem(text: "крипта три")
+            m.history = [a, b, c]; m.selection = a.id
+            // Tight single-topic cluster (near-identical vectors): centering forces them ~120° apart → all below
+            // the floor → empty. Documented limitation (a raw fallback would re-admit hubness); pin it deliberately.
+            m.embeddingIndex = [a.id: [10, 1, 0], b.id: [10, 0, 1], c.id: [10, 0, 0]]
             m.refreshRelatedNotes()
             XCTAssertTrue(m.relatedIDs.isEmpty)
         }
@@ -2816,10 +2884,9 @@ final class ParlaLogicTests: XCTestCase {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         HistoryStore.fileURL = dir.appendingPathComponent("history.json")
         defer {
-            // SAFETY: drain any detached `Task { @MainActor ... }` (e.g. a refresh kicked during the body) so it
-            // runs against the TEMP path BEFORE we restore the real one — otherwise it could clobber the user's
-            // real history.json/embeddings.json. (A fire-and-forget Task from a store mutation once did exactly that.)
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+            // Restores to the setUp baseline (itself a temp dir), so a detached Task that outlives this scope
+            // can only ever touch temp data — the real store is unreachable for the whole test process. (No drain
+            // needed: process-wide isolation in setUp is the real guard, not a timing race against a kicked Task.)
             HistoryStore.fileURL = original
             try? FileManager.default.removeItem(at: dir)
         }
@@ -2835,12 +2902,13 @@ final class ParlaLogicTests: XCTestCase {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ParlaTest-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         HistoryStore.fileURL = dir.appendingPathComponent("history.json")
+        defer {
+            // See sync variant: restores to the setUp temp baseline, so a detached refresh Task that outlives this
+            // scope still can't reach the real store. Process-wide isolation in setUp is the guard, not a drain.
+            HistoryStore.fileURL = original
+            try? FileManager.default.removeItem(at: dir)
+        }
         await body()
-        // SAFETY: let any detached refresh Task settle on the TEMP path before restoring the real one (see the
-        // sync variant). 50 ms is ample with the fake embedder; prevents test writes from leaking to real data.
-        try? await Task.sleep(for: .milliseconds(50))
-        HistoryStore.fileURL = original
-        try? FileManager.default.removeItem(at: dir)
     }
 
     /// A real, directly-playable (.m4a) temp source so keepAudio's copy succeeds without ffmpeg.

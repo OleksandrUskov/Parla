@@ -270,8 +270,10 @@ extension AppModel {
                     }
                     history[idx] = updated      // IN-PLACE replacement: id/position/sourcePath preserved
                     selection = updated.id
+                    invalidateDerivedData(for: item.id)   // text fully changed → recompute search/Related/insights
                     HistoryStore.save(history)
                     if autoCopy, !r.text.isEmpty { copy(updated.text) }
+                    await refreshSemanticIndex()   // re-embed + re-lemmatize + re-insight from the new text (inline → test-safe)
                 }
                 phase = .idle
             } catch {
