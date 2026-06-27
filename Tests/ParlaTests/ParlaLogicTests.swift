@@ -999,6 +999,24 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    func testSearchLemmaSetGatesLatinAndCorrectsIrregulars() {
+        XCTAssertTrue(searchLemmaSet(of: "meeting running build").isEmpty)   // Latin → substring only (no flaky EN lemma)
+        XCTAssertTrue(searchLemmaSet(of: "работе").contains("работа"))       // Cyrillic still lemmatized
+        XCTAssertTrue(searchLemmaSet(of: "деньги").contains("деньга"))       // irregular override applied
+        XCTAssertEqual(searchLemmaSet(of: "денег"), searchLemmaSet(of: "деньги"))   // both collapse to one lemma
+    }
+
+    @MainActor func testMorphologyMatchesDengiIrregular() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let it = self.makeItem(text: "вчера потратил много денег на еду")
+            m.history = [it]
+            m.backfillLemmas()
+            m.searchQuery = "деньги"   // the headline case: «деньги» (nom) now finds «денег» via the override
+            XCTAssertEqual(m.filteredHistory.map(\.id), [it.id])
+        }
+    }
+
     @MainActor func testSaveEditInvalidatesSemanticIndexes() {
         withTemporaryHistoryStore {
             let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())

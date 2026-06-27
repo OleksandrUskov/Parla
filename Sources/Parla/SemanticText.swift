@@ -44,9 +44,20 @@ func sentences(in text: String) -> [String] {
 /// "uk" vs a query forced to "ru" would never match — the round-2 review caught exactly this.) Cyrillic→ru,
 /// Latin→en, else unset. RU/UK can't be told apart from a short query, so both ride the "ru" lemmatizer.
 func searchLemmaSet(of text: String) -> Set<String> {
-    let script = dominantScript(text)
-    return lemmaSet(of: text, language: script == "cyrillic" ? "ru" : (script == "latin" ? "en" : ""))
+    // Lemmatize ONLY Cyrillic (RU/UK — Parla's languages). Latin/other fall back to substring search: NLTagger's
+    // EN lemma is inconsistent (verified — «meeting»→«meet» conflates the verb, while «meeting»/«meetings» split
+    // to different lemmas), producing wrong/missed matches not worth it for a secondary language. UK has no
+    // on-device lemma model, so RU-routing reduces it only partially (робота/роботу→робот, but not роботі) — a
+    // best-effort tool limit; a real multilingual lemmatizer is a P3 download-tier option. (LOCAL_AI_LAYER.md §5b)
+    guard dominantScript(text) == "cyrillic" else { return [] }
+    return lemmaSet(of: text, language: "ru")
 }
+
+/// NLTagger lemma corrections for irregular words whose output isn't self-consistent across cases — so the
+/// nominative and oblique forms collapse to ONE lemma and actually match. «деньги» (pluralia tantum): oblique
+/// forms lemmatize to «деньга» but the nominative stays «деньги». A small CLOSED exceptions table (standard NLP
+/// practice — unlike the open-class stopword list); extend only as real, verified misses surface.
+let lemmaOverrides: [String: String] = ["деньги": "деньга"]
 
 /// Lemmatized content tokens of `text` as a lowercased set — the morphology primitive behind `searchLemmaSet`.
 /// «работа» reduces to the same lemma as «работе»/«работу», so a base-form query finds inflected notes. Uses
@@ -69,7 +80,7 @@ func lemmaSet(of text: String, language: String = "") -> Set<String> {
         let lemma = tag?.rawValue
         let word = (lemma?.isEmpty == false) ? lemma! : String(trimmed[tokenRange])
         let key = word.lowercased()
-        if key.count > 2 { out.insert(key) }
+        if key.count > 2 { out.insert(lemmaOverrides[key] ?? key) }   // correct known irregulars (e.g. деньги→деньга)
         return true
     }
     return out
