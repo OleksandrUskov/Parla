@@ -918,6 +918,38 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testMorphologySearchIgnoresStoredLanguage() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let it = self.makeItem(text: "вчера был на работе целый день", lang: "")   // empty stored language
+            m.history = [it]
+            m.backfillLemmas()
+            // Both sides route by SCRIPT (searchLemmaSet), so even an empty/auto item.language still matches —
+            // the round-2 fix that unified index+query lemmatization. «работу» → «работа» both sides.
+            m.searchQuery = "работу"
+            XCTAssertEqual(m.filteredHistory.map(\.id), [it.id])
+        }
+    }
+
+    @MainActor func testSaveEditInvalidatesSemanticIndexes() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let a = self.makeItem(text: "первая про крипту"), b = self.makeItem(text: "вторая про крипту")
+            let c = self.makeItem(text: "третья про крипту")
+            m.history = [a, b, c]
+            m.selection = a.id
+            m.embeddingIndex = [a.id: [1, 0, 0], b.id: [1, 0, 0], c.id: [1, 0, 0]]
+            m.lemmaIndex = [a.id: ["крипта"], b.id: ["крипта"], c.id: ["крипта"]]
+            EmbeddingStore.save([a.id: [1, 0, 0]])
+            m.relatedIDs = [b.id, c.id]
+            XCTAssertTrue(m.saveEdit("совсем другой текст про спорт", for: a.id))
+            XCTAssertNil(m.embeddingIndex[a.id])        // vector invalidated synchronously
+            XCTAssertNil(m.lemmaIndex[a.id])            // lemmas invalidated
+            XCTAssertNil(EmbeddingStore.load()[a.id])   // persisted vector removed
+            XCTAssertTrue(m.relatedIDs.isEmpty)         // stale "Related" footer cleared at once
+        }
+    }
+
     @MainActor func testEditInvalidatesSearchIndex() {
         withTemporaryHistoryStore {
             let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
@@ -954,6 +986,24 @@ final class ParlaLogicTests: XCTestCase {
             m.history = [it]
             await m.backfillEmbeddings()
             XCTAssertEqual(m.embeddingIndex[it.id], [0.5, 0.5])   // in-memory mirror populated for doc↔doc related
+        }
+    }
+
+    @MainActor func testBackfillEmbeddingsSkipsVectorForItemEditedMidEmbed() async {
+        await withTemporaryHistoryStoreAsync {
+            let embedder = HookEmbedder()
+            let m = AppModel(engine: FakeEngine(), embedder: embedder)
+            let it = self.makeItem(text: "старый текст про работу")
+            m.history = [it]
+            // Edit the item DURING its first embed → the stale "старый" vector must NOT be committed (the round-2
+            // TOCTOU gap: EmbeddingStore.remove is a no-op for a never-persisted item, so a text snapshot guards it).
+            embedder.hook = { _ = m.saveEdit("новый текст про крипту", for: it.id) }
+            await m.backfillEmbeddings()
+            XCTAssertNil(m.embeddingIndex[it.id])              // stale pre-edit vector skipped
+            XCTAssertNil(EmbeddingStore.load()[it.id])
+            embedder.hook = nil                               // next pass embeds the CURRENT (edited) text
+            await m.backfillEmbeddings()
+            XCTAssertEqual(m.embeddingIndex[it.id], [0, 1])   // "новый" → [0,1] (re-embedded from new text)
         }
     }
 
@@ -2766,6 +2816,10 @@ final class ParlaLogicTests: XCTestCase {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         HistoryStore.fileURL = dir.appendingPathComponent("history.json")
         defer {
+            // SAFETY: drain any detached `Task { @MainActor ... }` (e.g. a refresh kicked during the body) so it
+            // runs against the TEMP path BEFORE we restore the real one — otherwise it could clobber the user's
+            // real history.json/embeddings.json. (A fire-and-forget Task from a store mutation once did exactly that.)
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
             HistoryStore.fileURL = original
             try? FileManager.default.removeItem(at: dir)
         }
@@ -2781,11 +2835,12 @@ final class ParlaLogicTests: XCTestCase {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ParlaTest-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         HistoryStore.fileURL = dir.appendingPathComponent("history.json")
-        defer {
-            HistoryStore.fileURL = original
-            try? FileManager.default.removeItem(at: dir)
-        }
         await body()
+        // SAFETY: let any detached refresh Task settle on the TEMP path before restoring the real one (see the
+        // sync variant). 50 ms is ample with the fake embedder; prevents test writes from leaking to real data.
+        try? await Task.sleep(for: .milliseconds(50))
+        HistoryStore.fileURL = original
+        try? FileManager.default.removeItem(at: dir)
     }
 
     /// A real, directly-playable (.m4a) temp source so keepAudio's copy succeeds without ffmpeg.
@@ -2867,5 +2922,19 @@ private final class FakeEmbedder: TextEmbedder, @unchecked Sendable {
     func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? {
         guard let vector, !text.isEmpty else { return vector == nil ? nil : [] }
         return [(text.startIndex..<text.endIndex, vector)]   // one token spanning the whole string
+    }
+}
+
+/// Embedder that (a) returns a text-dependent vector so a test can tell which text was embedded, and
+/// (b) runs an injected hook DURING embed — to deterministically reproduce an edit landing mid-embed.
+private final class HookEmbedder: TextEmbedder, @unchecked Sendable {
+    var hook: (@MainActor @Sendable () -> Void)?
+    private func vec(_ text: String) -> Embedding { text.contains("новый") ? [0, 1] : [1, 0] }
+    func embed(_ text: String, language: String) async -> Embedding? {
+        if let hook { await MainActor.run { hook() } }   // main actor is free (caller is awaiting us)
+        return vec(text)
+    }
+    func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? {
+        text.isEmpty ? nil : [(text.startIndex..<text.endIndex, vec(text))]
     }
 }

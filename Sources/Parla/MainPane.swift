@@ -725,7 +725,11 @@ struct TranscriptCard: View {
         editorFocused = false
     }
     private func commitEdit() {
-        model.saveEdit(draft, for: item.id)
+        // saveEdit invalidates the item's vector/lemmas synchronously; kick the (async, best-effort) re-embed +
+        // re-lemmatize here in the UI layer so a store mutation never spawns a Task that could outlive a test.
+        if model.saveEdit(draft, for: item.id) {
+            Task { await model.refreshSemanticIndex() }
+        }
         isEditing = false
         editorFocused = false
     }

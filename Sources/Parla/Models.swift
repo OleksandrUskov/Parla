@@ -196,17 +196,9 @@ func filterHistory(_ items: [TranscriptItem], query: String,
     let raw = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let q = raw.lowercased()
     guard !q.isEmpty else { return items }
-    // Lemmatize the query in the language its SCRIPT implies — the index was built with the note's
-    // language, and NLTagger only normalizes a standalone inflected word when its language is set
-    // (без него «встрече» НЕ сводится к «встреча» → the lemma path would never match). RU/UK both map to
-    // Cyrillic → "ru" (a short query can't disambiguate them; same heuristic the embedder routing uses).
-    let queryLemmas: Set<String>
-    if lemmaIndex.isEmpty {
-        queryLemmas = []
-    } else {
-        let script = dominantScript(raw)
-        queryLemmas = lemmaSet(of: raw, language: script == "cyrillic" ? "ru" : (script == "latin" ? "en" : ""))
-    }
+    // Lemmatize the query with `searchLemmaSet` — the SAME script-routed transform the index uses, so the two
+    // sides can't disagree (NLTagger only normalizes a standalone inflected word when its language is set).
+    let queryLemmas = lemmaIndex.isEmpty ? [] : searchLemmaSet(of: raw)
     return items.filter { item in
         if item.text.lowercased().contains(q) || item.sourceName.lowercased().contains(q) { return true }
         guard !queryLemmas.isEmpty, let lemmas = lemmaIndex[item.id] else { return false }

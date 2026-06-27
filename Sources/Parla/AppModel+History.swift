@@ -40,7 +40,11 @@ extension AppModel {
         lemmaIndex[id] = nil
         HistoryStore.save(history)
         selection = id                        // keep the selection on the edited entry
-        Task { await refreshSemanticIndex() } // re-embed + re-lemmatize + refresh Related (off-main, best-effort)
+        refreshRelatedNotes()                 // clear the now-stale "Related" footer at once (selfVec is nil → [])
+        // NOTE: saveEdit stays fully SYNCHRONOUS. The re-embed/re-lemmatize pass (refreshSemanticIndex) is kicked
+        // by the CALLER (the editor's commit handler), NOT here — a fire-and-forget Task from a store mutation
+        // can outlive a test's temporary-store scope and clobber the real history.json. Indexes are invalidated
+        // synchronously above, so the model is already consistent; the async recompute is a UI concern.
         return true
     }
 

@@ -46,9 +46,14 @@ extension AppModel {
         let script = dominantScript(item.text)
         let pool = history.filter { $0.id != item.id && embeddingIndex[$0.id] != nil && dominantScript($0.text) == script }
         // Need ≥2 peers: mean-centering over a 2-element set {peer, self} puts them at EXACTLY opposite
-        // directions (cosine −1) regardless of content, so a single peer could never clear the floor. Below
-        // that the corpus is too small for the anisotropy estimate to mean anything — suppress deliberately.
+        // directions (cosine −1) regardless of content, so a single peer could never clear the floor.
         guard pool.count >= 2 else { relatedIDs = []; return }
+        // KNOWN LIMITATION (round-2 review): mean-centering removes the corpus's common direction, which needs
+        // topical DIVERSITY to leave a usable signal. If the whole same-script corpus is ONE topic, the centered
+        // vectors collapse toward mutually-negative (≈120° apart) and nothing clears the floor → empty "Related".
+        // We accept this: a raw-cosine fallback would re-admit the anisotropy hubness this centering exists to
+        // kill (an unrelated note scoring 0.9 to everything), and for a suggestion feature a false-empty is far
+        // better than a confident-wrong. Real query→note + robust similarity is the P3 download-tier job.
         let vectors = pool.map { embeddingIndex[$0.id]! }
         guard let mean = SemanticIndex.centroid(vectors + [selfVec]) else { relatedIDs = []; return }
         let q = SemanticIndex.centered(selfVec, by: mean)
@@ -91,7 +96,8 @@ extension AppModel {
         let live = Set(history.map(\.id))
         var index = lemmaIndex.filter { live.contains($0.key) }   // prune orphans (deleted items)
         for item in history where index[item.id] == nil {
-            index[item.id] = lemmaSet(of: item.text, language: item.language)
+            // Route by SCRIPT (not item.language) so the index matches the query side EXACTLY — see searchLemmaSet.
+            index[item.id] = searchLemmaSet(of: item.text)
         }
         if index != lemmaIndex { lemmaIndex = index }   // single observed write (no per-item re-render storm)
     }
@@ -126,21 +132,27 @@ extension AppModel {
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
     /// retried on a later pass. The compute lives in the embedder actor (off the main actor).
     func backfillEmbeddings() async {
-        // Embed missing items into a LOCAL map; don't mutate the persisted store across the awaits.
+        // Embed missing items into a LOCAL map; don't mutate the persisted store across the awaits. Snapshot
+        // the EXACT text each vector was computed from, so a mid-embed edit can be detected on resume.
         let initial = EmbeddingStore.load()
         var fresh: [UUID: Embedding] = [:]
+        var freshText: [UUID: String] = [:]
         for item in history where initial[item.id] == nil {
-            if let vector = await embedder.embed(embedText(for: item), language: item.language) {
-                fresh[item.id] = vector
-            }
+            let text = embedText(for: item)
+            if let vector = await embedder.embed(text, language: item.language) { fresh[item.id] = vector; freshText[item.id] = text }
         }
         // TOCTOU re-validate (mirror pruneAudioCache): a delete/edit may have run on the main actor during an
-        // await. Re-read the store + live set NOW so we don't resurrect a vector saveEdit/delete just removed,
-        // and add a freshly-computed vector only if its item is still live AND still missing on disk.
+        // await. Re-read store + live set NOW, and commit a fresh vector only if its item is still live, still
+        // missing on disk, AND its text is unchanged since we embedded it — otherwise a brand-new item edited
+        // mid-embed (whose `EmbeddingStore.remove` was a no-op, since it wasn't on disk yet) would persist the
+        // STALE pre-edit vector and never re-embed. Skipping it leaves it missing → the next pass re-embeds it.
         var store = EmbeddingStore.load()
         let live = Set(history.map(\.id))
         var changed = false
-        for (id, vector) in fresh where live.contains(id) && store[id] == nil { store[id] = vector; changed = true }
+        for (id, vector) in fresh where live.contains(id) && store[id] == nil {
+            guard let item = history.first(where: { $0.id == id }), embedText(for: item) == freshText[id] else { continue }
+            store[id] = vector; changed = true
+        }
         let pruned = store.filter { live.contains($0.key) }
         if pruned.count != store.count { store = pruned; changed = true }
         if changed { EmbeddingStore.save(store) }

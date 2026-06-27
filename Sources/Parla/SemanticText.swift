@@ -36,12 +36,25 @@ func sentences(in text: String) -> [String] {
     return out
 }
 
-/// Lemmatized content tokens of `text` as a lowercased set — for morphology-aware search, so a query
-/// lemma («деньги») matches any inflected form in the note («денег», «деньгами»). Uses NLTagger `.lemma`
-/// (reliable on casual RU; no asset download), falling back to the surface form when no lemma. Tokens of
-/// ≤2 chars are dropped as noise. Pure — `AppModel` caches the per-item result (lemmatizing the whole
-/// corpus on every keystroke would be wasteful). NOT a substitute for semantic search: this matches word
-/// FORMS that are literally present, not meaning (that's the download-tier; see LOCAL_AI_LAYER.md §5).
+/// Lemmas for morphology-aware SEARCH, routed by SCRIPT so the index and the query apply the IDENTICAL
+/// transform and can never disagree. This symmetry is the whole point: `lemmaSet` is run on BOTH sides
+/// (note text when indexing, query when searching) through THIS function, so whatever lemma a word gets,
+/// both sides get the same one — linguistic correctness matters less than agreement. (Routing the index by
+/// the note's stored language but the query by script silently breaks UK/DE/FR: e.g. a UK note indexed as
+/// "uk" vs a query forced to "ru" would never match — the round-2 review caught exactly this.) Cyrillic→ru,
+/// Latin→en, else unset. RU/UK can't be told apart from a short query, so both ride the "ru" lemmatizer.
+func searchLemmaSet(of text: String) -> Set<String> {
+    let script = dominantScript(text)
+    return lemmaSet(of: text, language: script == "cyrillic" ? "ru" : (script == "latin" ? "en" : ""))
+}
+
+/// Lemmatized content tokens of `text` as a lowercased set — the morphology primitive behind `searchLemmaSet`.
+/// «работа» reduces to the same lemma as «работе»/«работу», so a base-form query finds inflected notes. Uses
+/// NLTagger `.lemma` (no asset download), falling back to the surface form when no lemma; tokens ≤2 chars
+/// dropped as noise. Pure — `AppModel` caches the per-item result (lemmatizing the corpus on every keystroke
+/// would be wasteful). LIMITATION: NLTagger's RU lemmatizer isn't self-consistent for a few irregulars —
+/// «деньги» (nom.pl) stays «деньги» while «денег» → «деньга», so «деньги» does NOT find «денег». NOT semantic
+/// search: matches word FORMS literally present, not meaning (that's the download-tier; LOCAL_AI_LAYER.md §5).
 func lemmaSet(of text: String, language: String = "") -> Set<String> {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return [] }
