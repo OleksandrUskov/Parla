@@ -758,6 +758,61 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(scores.allSatisfy { $0 > 0 && $0.isFinite })
     }
 
+    // MARK: - Local-AI Layer P1c — EmbeddingStore + embedText + backfill
+
+    @MainActor func testEmbeddingStoreRoundtrip() {
+        withTemporaryHistoryStore {
+            let a = UUID(), b = UUID()
+            EmbeddingStore.save([a: [0.1, 0.2, 0.3], b: [1, 0]])
+            let back = EmbeddingStore.load()
+            XCTAssertEqual(back[a], [0.1, 0.2, 0.3])
+            XCTAssertEqual(back[b], [1, 0])
+            XCTAssertEqual(back.count, 2)
+        }
+    }
+
+    @MainActor func testEmbeddingStoreMissingFileIsEmpty() {
+        withTemporaryHistoryStore {
+            XCTAssertTrue(EmbeddingStore.load().isEmpty)   // no file → empty, no crash
+        }
+    }
+
+    func testEmbedTextHelper() {
+        // No real title (displayTitle == sourceName) → just the body, no filename noise.
+        let bare = makeItem(name: "msg.ogg", text: "купить хлеб и молоко")
+        XCTAssertEqual(embedText(for: bare), "купить хлеб и молоко")
+        // Real title → prepended.
+        var titled = makeItem(name: "msg.ogg", text: "тело заметки")
+        titled.title = "Покупки"
+        XCTAssertEqual(embedText(for: titled), "Покупки. тело заметки")
+        // Long body is capped.
+        let long = makeItem(text: String(repeating: "а", count: 5000))
+        XCTAssertEqual(embedText(for: long, maxChars: 100).count, 100)
+    }
+
+    @MainActor func testBackfillEmbeddingsPopulatesStoreOncePerItem() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEmbedder(vector: [0.1, 0.2, 0.3])
+            let m = AppModel(engine: FakeEngine(), embedder: fake)
+            m.history = [self.makeItem(text: "первый"), self.makeItem(text: "второй")]
+            await m.backfillEmbeddings()
+            XCTAssertEqual(EmbeddingStore.load().count, 2)
+            XCTAssertEqual(fake.calls, 2)
+            // Second pass: nothing missing → no re-embed (cheap + stable).
+            await m.backfillEmbeddings()
+            XCTAssertEqual(fake.calls, 2)
+        }
+    }
+
+    @MainActor func testBackfillSkipsUnembeddableItems() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: nil))
+            m.history = [self.makeItem(text: "x")]
+            await m.backfillEmbeddings()
+            XCTAssertTrue(EmbeddingStore.load().isEmpty)   // unembeddable → skipped, not stored empty; retried later
+        }
+    }
+
     @MainActor func testSaveEditPersistsAndStamps() {
         withTemporaryHistoryStore {
             let m = AppModel()
@@ -2488,4 +2543,13 @@ private struct FakeAIService: LocalLLMService {
     func availability(forLanguage language: String) -> AIAvailability { availabilityToReturn }
     func insights(forTranscript text: String, language: String) async throws -> AIInsights { canned }
     // A throwing/failure path is added in P2, when T5 (AI-failure-non-fatal) actually exercises it.
+}
+
+/// Fake `TextEmbedder`: returns a canned vector (or nil) and counts calls. Single-flight in tests
+/// (each embed is awaited in turn), so the unchecked Sendable is safe — same pattern as FakeEngine.
+private final class FakeEmbedder: TextEmbedder, @unchecked Sendable {
+    private let vector: Embedding?
+    private(set) var calls = 0
+    init(vector: Embedding? = [1, 0, 0]) { self.vector = vector }
+    func embed(_ text: String, language: String) async -> Embedding? { calls += 1; return vector }
 }

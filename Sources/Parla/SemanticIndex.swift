@@ -12,6 +12,36 @@ import Foundation
 /// An embedding vector. `Double` matches `NLContextualEmbedding`'s output; the math stays exact.
 typealias Embedding = [Double]
 
+/// Persisted per-item embedding vectors in ~/Library/Application Support/Parla/embeddings.json, keyed by
+/// item id. Derived from `HistoryStore.fileURL`'s directory (like `AudioStore`) → moves to a temp path in
+/// tests for free (no separate seam). Stored as `[uuidString: [Double]]` for a clean JSON object.
+enum EmbeddingStore {
+    static var fileURL: URL {
+        HistoryStore.fileURL.deletingLastPathComponent().appendingPathComponent("embeddings.json")
+    }
+
+    static func load() -> [UUID: Embedding] {
+        guard let data = try? Data(contentsOf: fileURL),
+              let raw = try? JSONDecoder().decode([String: Embedding].self, from: data) else { return [:] }
+        var out: [UUID: Embedding] = [:]
+        for (key, vector) in raw { if let id = UUID(uuidString: key) { out[id] = vector } }
+        return out
+    }
+
+    static func save(_ map: [UUID: Embedding]) {
+        let raw = Dictionary(uniqueKeysWithValues: map.map { ($0.key.uuidString, $0.value) })
+        guard let data = try? JSONEncoder().encode(raw) else { return }
+        try? data.write(to: fileURL, options: .atomic)
+    }
+}
+
+/// Text to embed for an item: the transcript body prefix (caps cost on long notes), prefixed with the
+/// title only when there's a real one (a raw filename like `msg123.ogg` would just be noise). Pure.
+func embedText(for item: TranscriptItem, maxChars: Int = 1000) -> String {
+    let body = String(item.text.prefix(maxChars))
+    return item.displayTitle == item.sourceName ? body : item.displayTitle + ". " + body
+}
+
 enum SemanticIndex {
     /// Cosine similarity in [-1, 1]. Returns 0 for a length mismatch, an empty vector, or a zero-norm
     /// vector (all degenerate → treated as "unrelated" rather than trapping).
