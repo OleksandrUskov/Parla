@@ -703,6 +703,53 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(got.actions.first?.text, "позвонить")
     }
 
+    // MARK: - Local-AI Layer P1a — semantic core (cosine / topK / TextRank)
+
+    func testCosineSimilarity() {
+        XCTAssertEqual(SemanticIndex.cosine([1, 0, 0], [1, 0, 0]), 1.0, accuracy: 1e-9)   // identical
+        XCTAssertEqual(SemanticIndex.cosine([1, 0], [0, 1]), 0.0, accuracy: 1e-9)         // orthogonal
+        XCTAssertEqual(SemanticIndex.cosine([1, 1], [-1, -1]), -1.0, accuracy: 1e-9)      // opposite
+        XCTAssertEqual(SemanticIndex.cosine([2, 0], [5, 0]), 1.0, accuracy: 1e-9)         // scale-invariant
+        XCTAssertEqual(SemanticIndex.cosine([1, 2, 3], [1, 2]), 0.0)   // length mismatch → 0, no trap
+        XCTAssertEqual(SemanticIndex.cosine([0, 0], [1, 1]), 0.0)      // zero-norm → 0
+        XCTAssertEqual(SemanticIndex.cosine([], []), 0.0)             // empty → 0
+    }
+
+    func testTopK() {
+        let vectors: [Embedding] = [[1, 0], [0.9, 0.1], [0, 1], [-1, 0]]
+        let ranked = SemanticIndex.topK([1, 0], in: vectors, k: 2)
+        XCTAssertEqual(ranked.map { $0.index }, [0, 1])               // most-similar first
+        XCTAssertGreaterThan(ranked[0].score, ranked[1].score)        // strictly ordered
+        // minScore filters out the orthogonal/opposite ones even if k asks for more.
+        let positives = SemanticIndex.topK([1, 0], in: vectors, k: 10, minScore: 0.5)
+        XCTAssertEqual(positives.map { $0.index }, [0, 1])
+        XCTAssertTrue(SemanticIndex.topK([1, 0], in: vectors, k: 0).isEmpty)        // k=0 → []
+        XCTAssertTrue(SemanticIndex.topK([1, 0], in: [], k: 3).isEmpty)             // empty index → []
+    }
+
+    func testTextRankEdgeCases() {
+        XCTAssertTrue(SemanticIndex.textRank(similarity: []).isEmpty)               // n=0 → []
+        XCTAssertEqual(SemanticIndex.textRank(similarity: [[1]]), [1.0])            // n=1 → [1.0]
+        // Uniform graph → equal centrality.
+        let uniform = SemanticIndex.textRank(similarity: [[0, 1, 1], [1, 0, 1], [1, 1, 0]])
+        XCTAssertEqual(uniform[0], uniform[1], accuracy: 1e-6)
+        XCTAssertEqual(uniform[1], uniform[2], accuracy: 1e-6)
+    }
+
+    func testTextRankRanksCentralSentenceHighest() {
+        // Sentence 0 is similar to everyone; 1–3 are similar only to 0 (a star graph) → 0 is most central.
+        let sim: [[Double]] = [
+            [0.0, 0.9, 0.9, 0.9],
+            [0.9, 0.0, 0.1, 0.1],
+            [0.9, 0.1, 0.0, 0.1],
+            [0.9, 0.1, 0.1, 0.0],
+        ]
+        let scores = SemanticIndex.textRank(similarity: sim)
+        let top = scores.enumerated().max { $0.element < $1.element }!.offset
+        XCTAssertEqual(top, 0, "the hub sentence should be the most central")
+        XCTAssertTrue(scores.allSatisfy { $0 > 0 && $0.isFinite })
+    }
+
     @MainActor func testSaveEditPersistsAndStamps() {
         withTemporaryHistoryStore {
             let m = AppModel()
