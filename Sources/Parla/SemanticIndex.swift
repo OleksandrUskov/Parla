@@ -39,6 +39,20 @@ enum SemanticIndex {
         return Array(scored.prefix(k))
     }
 
+    /// Mean-pool per-token vectors into one document vector (the standard way to turn `NLContextualEmbedding`'s
+    /// per-token output into a single sentence/item embedding). nil for no tokens or zero-dim. Pure.
+    static func meanPool(_ vectors: [[Double]]) -> Embedding? {
+        guard let dim = vectors.first?.count, dim > 0 else { return nil }
+        var sum = [Double](repeating: 0, count: dim)
+        var n = 0
+        for v in vectors where v.count == dim {
+            for i in 0..<dim { sum[i] += v[i] }
+            n += 1
+        }
+        guard n > 0 else { return nil }
+        return sum.map { $0 / Double(n) }
+    }
+
     /// TextRank centrality over a symmetric sentence-similarity matrix → a salience score per sentence
     /// (PageRank-style power iteration on the row-normalized graph with damping). Higher = more central
     /// to the document → the sentences an extractive title/summary should pick. Pure; converges fast.

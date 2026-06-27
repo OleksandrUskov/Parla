@@ -727,6 +727,14 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(SemanticIndex.topK([1, 0], in: [], k: 3).isEmpty)             // empty index → []
     }
 
+    func testMeanPool() {
+        XCTAssertEqual(SemanticIndex.meanPool([[1, 2], [3, 4]]), [2, 3])        // column-wise mean
+        XCTAssertEqual(SemanticIndex.meanPool([[5, -5, 0]]), [5, -5, 0])        // single token = itself
+        XCTAssertNil(SemanticIndex.meanPool([]))                               // no tokens → nil
+        XCTAssertNil(SemanticIndex.meanPool([[]]))                             // zero-dim → nil
+        XCTAssertEqual(SemanticIndex.meanPool([[1, 1], [9], [3, 3]]), [2, 2])  // ragged row skipped, not crashed
+    }
+
     func testTextRankEdgeCases() {
         XCTAssertTrue(SemanticIndex.textRank(similarity: []).isEmpty)               // n=0 → []
         XCTAssertEqual(SemanticIndex.textRank(similarity: [[1]]), [1.0])            // n=1 → [1.0]
