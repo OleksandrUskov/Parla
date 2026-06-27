@@ -673,14 +673,18 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNotEqual(ai.availability(forLanguage: "ru-RU"), .ready)
     }
 
-    /// On the macOS-14 floor (and any OS/SDK without FoundationModels) the backend is dormant.
-    func testFoundationModelsUnsupportedBelowMacOS26() {
+    /// Per-OS floor — asserts on EVERY OS (incl. a macOS-26 dev box, where an `else`-only test would be
+    /// a silent no-op): below the floor / no FoundationModels SDK → dormant `.unsupportedOS` (the ship-safe
+    /// no-op); on macOS 26 with the SDK → live, so English is NOT dormant (.ready or .modelUnavailable).
+    func testFoundationModelsFloorPerOS() {
+        #if canImport(FoundationModels)
         if #available(macOS 26, *) {
-            // macOS 26: English is device/AI-state dependent (.ready or .modelUnavailable) — not asserted here.
-        } else {
-            XCTAssertEqual(FoundationModelsService().availability(forLanguage: "en"), .unsupportedOS)
-            XCTAssertEqual(DefaultAIService().availability(forLanguage: "en"), .unsupportedOS)
+            XCTAssertNotEqual(FoundationModelsService().availability(forLanguage: "en"), .unsupportedOS)
+            return
         }
+        #endif
+        XCTAssertEqual(FoundationModelsService().availability(forLanguage: "en"), .unsupportedOS)
+        XCTAssertEqual(DefaultAIService().availability(forLanguage: "en"), .unsupportedOS)
     }
 
     /// The seam is injectable on AppModel, exactly like `engine` — a fake reports its canned availability.
@@ -2425,11 +2429,8 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
 private struct FakeAIService: LocalLLMService {
     var availabilityToReturn: AIAvailability = .ready
     var canned: AIInsights = AIInsights(title: "T", summary: "S", actions: [])
-    var shouldThrow: Bool = false
 
     func availability(forLanguage language: String) -> AIAvailability { availabilityToReturn }
-    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
-        if shouldThrow { throw AIError.unavailable }
-        return canned
-    }
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights { canned }
+    // A throwing/failure path is added in P2, when T5 (AI-failure-non-fatal) actually exercises it.
 }
