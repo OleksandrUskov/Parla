@@ -11,6 +11,15 @@ let package = Package(
         // Глобальный хоткей через Carbon (RegisterEventHotKey) — БЕЗ «Универсального доступа»,
         // переназначаемый, с готовым SwiftUI-рекордером. MIT. Замена ручному NSEvent-монитору.
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
+        // On-device генеративные инсайты для RU/UK (AI P3, Backend B). Apache/MIT. Тянет mlx-swift
+        // (Metal — поэтому сборка через xcodebuild, см. build_app.sh). Пин тега (v3.x чурнится API).
+        // НЕ юзаем удобный #huggingFaceLoadModelContainer-макрос: он требует swift-transformers ≥1.3 +
+        // swift-huggingface, что КОНФЛИКТУЕТ с пином WhisperKit (1.1.x). Вместо него — свои Downloader/
+        // TokenizerLoader поверх transformers WhisperKit'а + не-макро loadModelContainer (см. MLXLLMService).
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", exact: "3.31.3"),
+        // Уже в графе транзитивно через WhisperKit (Hub/Tokenizers). Объявляем прямо, чтобы импортировать
+        // их в MLXLLMService; диапазон совпадает с пином WhisperKit (1.1.6..<1.2.0) → конфликта нет.
+        .package(url: "https://github.com/huggingface/swift-transformers.git", "1.1.6" ..< "1.2.0"),
     ],
     targets: [
         .executableTarget(
@@ -18,6 +27,13 @@ let package = Package(
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
+                // MLX generative backend (AI P3). MLXLLM registers the Qwen3 architecture; MLXLMCommon
+                // has loadModelContainer/ChatSession + the Downloader/TokenizerLoader protocols we implement.
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                // swift-transformers (WhisperKit's 1.1.x) backs our Downloader (Hub.HubApi) + TokenizerLoader (AutoTokenizer).
+                .product(name: "Tokenizers", package: "swift-transformers"),
+                .product(name: "Hub", package: "swift-transformers"),
             ],
             path: "Sources/Parla",
             swiftSettings: [.swiftLanguageMode(.v6)]

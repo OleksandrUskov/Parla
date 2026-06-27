@@ -178,13 +178,26 @@ struct NoopAIService: LocalLLMService {
 /// search from `SemanticIndex` in P1, not via this service).
 struct DefaultAIService: LocalLLMService {
     private let foundationModels = FoundationModelsService()
+    private let mlx = MLXLLMService()   // Backend B: RU/UK generative, opt-in download (macOS-14 floor)
 
     func availability(forLanguage language: String) -> AIAvailability {
-        foundationModels.availability(forLanguage: language)
-        // P3: if the above isn't `.ready`, fall through to MLXLLMService (RU/UK, opt-in download).
+        let a = foundationModels.availability(forLanguage: language)
+        if case .ready = a { return a }                 // English & co. on macOS 26 with AI on
+        let b = mlx.availability(forLanguage: language)
+        if case .ready = b { return b }                 // RU/UK once the MLX model is downloaded
+        // Neither ready: prefer the actionable MLX reason (".needsModelDownload" → the UI can offer the download
+        // for ru/uk); otherwise keep FoundationModels' reason (.unsupportedOS / .languageUnsupported / …).
+        if case .needsModelDownload = b { return b }
+        return a
     }
 
     func insights(forTranscript text: String, language: String) async throws -> AIInsights {
-        try await foundationModels.insights(forTranscript: text, language: language)
+        if case .ready = foundationModels.availability(forLanguage: language) {
+            return try await foundationModels.insights(forTranscript: text, language: language)
+        }
+        if case .ready = mlx.availability(forLanguage: language) {
+            return try await mlx.insights(forTranscript: text, language: language)
+        }
+        throw AIError.unavailable
     }
 }

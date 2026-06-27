@@ -48,6 +48,19 @@ rm -rf "$APPDIR"
 mkdir -p "$APPDIR/Contents/MacOS" "$APPDIR/Contents/Resources"
 cp "$BIN" "$APPDIR/Contents/MacOS/$APP"
 
+# MLX Metal library: xcodebuild compiles MLX's .metal kernels into mlx-swift_Cmlx.bundle. MLX's loader
+# resolves current_binary_dir() via dladdr on its OWN (statically-linked) code → the executable's dir, so
+# place the metallib NEXT TO the binary as Contents/MacOS/mlx.metallib (the loader's colocated search path).
+# Without it the app crashes on first MLX use: "Failed to load the default metallib". Proven in the P3 spike
+# (blueprints/LOCAL_AI_LAYER_P3.md → SPIKE RESULTS). No sidecar bundles are needed.
+MLXLIB="$(find "$DERIVED/Build/Products/Release" -name default.metallib -path '*Cmlx*' 2>/dev/null | head -1)"
+if [ -n "$MLXLIB" ]; then
+  cp "$MLXLIB" "$APPDIR/Contents/MacOS/mlx.metallib"
+  echo "• Вшит MLX default.metallib → Contents/MacOS/mlx.metallib"
+else
+  echo "⚠️  MLX metallib не найден — генеративные RU/UK инсайты (P3) упадут в рантайме (ищи mlx-swift_Cmlx.bundle)"
+fi
+
 ICON_LINE=""
 if [ -f "Resources/AppIcon.icns" ]; then
   cp "Resources/AppIcon.icns" "$APPDIR/Contents/Resources/AppIcon.icns"

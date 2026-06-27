@@ -700,6 +700,65 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNotEqual(ai.availability(forLanguage: "ru-RU"), .ready)
     }
 
+    // MARK: - MLX backend (AI P3, Backend B)
+
+    /// Tolerant JSON extraction (MLX has no guided decoding): the model may fence the object or wrap it in
+    /// prose, and braces inside string values must not confuse the balance scan.
+    func testMLXFirstJSONObjectExtraction() {
+        XCTAssertEqual(MLXLLMService.firstJSONObject(in: #"{"a":1}"#), #"{"a":1}"#)
+        XCTAssertEqual(MLXLLMService.firstJSONObject(in: "```json\n{\"a\":1}\n```"), #"{"a":1}"#)
+        XCTAssertEqual(MLXLLMService.firstJSONObject(in: "Sure! {\"a\":1} done"), #"{"a":1}"#)
+        XCTAssertEqual(MLXLLMService.firstJSONObject(in: #"{"s":"a {b} c"}"#), #"{"s":"a {b} c"}"#)
+        XCTAssertEqual(MLXLLMService.firstJSONObject(in: #"x {"o":{"n":1}} y"#), #"{"o":{"n":1}}"#)
+        // escaped quote inside a string must not end the string early
+        XCTAssertEqual(MLXLLMService.firstJSONObject(in: #"{"s":"he said \"hi\" }"}"#), #"{"s":"he said \"hi\" }"}"#)
+        XCTAssertNil(MLXLLMService.firstJSONObject(in: "no json here"))
+        XCTAssertNil(MLXLLMService.firstJSONObject(in: #"{"a":1"#))   // unbalanced
+    }
+
+    /// parseInsights: valid → insights; fenced+prose → parsed; blank actions dropped; missing actions ok;
+    /// empty title AND summary → nil (so the caller keeps the extractive fallback).
+    func testMLXParseInsights() {
+        let raw = #"{"title":"Звонок маме","summary":"Обсудили планы.","actions":["позвонить маме",""]}"#
+        let got = MLXLLMService.parseInsights(from: raw)
+        XCTAssertEqual(got?.title, "Звонок маме")
+        XCTAssertEqual(got?.summary, "Обсудили планы.")
+        XCTAssertEqual(got?.actions.map(\.text), ["позвонить маме"])   // blank dropped
+
+        let fenced = "Here you go:\n```json\n{\"title\":\"T\",\"summary\":\"S\",\"actions\":[]}\n```"
+        XCTAssertEqual(MLXLLMService.parseInsights(from: fenced)?.title, "T")
+        XCTAssertEqual(MLXLLMService.parseInsights(from: fenced)?.actions.count, 0)
+
+        XCTAssertEqual(MLXLLMService.parseInsights(from: #"{"title":"T","summary":"S"}"#)?.summary, "S")
+        XCTAssertNil(MLXLLMService.parseInsights(from: "totally not json"))
+        XCTAssertNil(MLXLLMService.parseInsights(from: #"{"title":"","summary":"","actions":[]}"#))
+    }
+
+    /// MLX covers the languages FoundationModels can't (ru/uk), not English; until the model is downloaded it
+    /// is dormant (.needsModelDownload), never .ready. Apple-Silicon-gated.
+    func testMLXAvailabilityLanguageGating() {
+        let mlx = MLXLLMService()
+        #if arch(arm64)
+        XCTAssertEqual(mlx.availability(forLanguage: "ru"), .needsModelDownload)
+        XCTAssertEqual(mlx.availability(forLanguage: "uk"), .needsModelDownload)
+        XCTAssertEqual(mlx.availability(forLanguage: "ru-RU"), .needsModelDownload)
+        XCTAssertEqual(mlx.availability(forLanguage: "en"), .languageUnsupported)   // English = Backend A's job
+        XCTAssertEqual(mlx.availability(forLanguage: "fr"), .languageUnsupported)
+        #else
+        XCTAssertEqual(mlx.availability(forLanguage: "ru"), .noAppleSilicon)
+        #endif
+    }
+
+    /// DefaultAIService falls through to MLX for ru/uk: surfaces the actionable .needsModelDownload (the UI can
+    /// offer the opt-in download) rather than a dead .languageUnsupported — while still never .ready pre-download.
+    func testDefaultAIServiceFallsThroughToMLXForRUUK() {
+        #if arch(arm64)
+        let ai = DefaultAIService()
+        XCTAssertEqual(ai.availability(forLanguage: "ru"), .needsModelDownload)
+        XCTAssertEqual(ai.availability(forLanguage: "uk"), .needsModelDownload)
+        #endif
+    }
+
     /// Per-OS floor — asserts on EVERY OS (incl. a macOS-26 dev box, where an `else`-only test would be
     /// a silent no-op): below the floor / no FoundationModels SDK → dormant `.unsupportedOS` (the ship-safe
     /// no-op); on macOS 26 with the SDK → live, so English is NOT dormant (.ready or .modelUnavailable).
