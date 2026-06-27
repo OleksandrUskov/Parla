@@ -25,9 +25,22 @@ if [ ! -f Resources/AppIcon.icns ] && [ -f make_icon.swift ]; then
   rm -rf "$TMP"
 fi
 
-echo "▶ Сборка $APP (release)…"
-swift build -c release --product "$APP"
-BIN=".build/release/$APP"
+echo "▶ Сборка $APP (release, via xcodebuild)…"
+# Почему xcodebuild, а не `swift build`: MLX (mlx-swift, нужен для on-device LLM-инсайтов) поставляет
+# Metal-шейдеры, которые в `default.metallib` компилит ТОЛЬКО Xcode-build-rule. Голый SwiftPM CLI
+# линкует нормально, но .app падает в рантайме («Failed to load the default metallib»). xcodebuild
+# собирает ТОТ ЖЕ Package.swift (без .xcodeproj) через авто-схему «Parla». Юнит-тесты остаются на
+# `swift test` (MLX выключен под XCTest → ни одной Metal-операции). DerivedData кладём под .build/ (gitignored).
+DERIVED="$PWD/.build/xcode"
+xcodebuild build \
+  -scheme "$APP" \
+  -configuration Release \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$DERIVED" \
+  -skipMacroValidation \
+  CODE_SIGNING_ALLOWED=NO
+# -derivedDataPath + -configuration Release (macOS, без суффикса платформы) → путь детерминирован.
+BIN="$DERIVED/Build/Products/Release/$APP"
 [ -x "$BIN" ] || { echo "❌ нет бинаря $BIN"; exit 1; }
 
 APPDIR="$APP.app"
