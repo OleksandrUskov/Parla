@@ -273,9 +273,9 @@ extension AppModel {
                     invalidateDerivedData(for: item.id)   // text fully changed → recompute search/Related/insights
                     HistoryStore.save(history)
                     if autoCopy, !r.text.isEmpty { copy(updated.text) }
-                    await refreshSemanticIndex()   // re-embed + re-lemmatize + re-insight from the new text (inline → test-safe)
                 }
-                phase = .idle
+                phase = .idle   // transcript is ready → clear "busy" BEFORE the background semantic recompute
+                await refreshSemanticIndex()   // re-embed + re-lemmatize + re-insight from the new text (inline → test-safe)
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 phase = .failed(Lf("error.retranscribe.failed", msg))

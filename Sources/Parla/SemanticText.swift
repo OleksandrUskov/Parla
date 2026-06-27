@@ -54,18 +54,20 @@ func searchLemmaSet(of text: String) -> Set<String> {
 }
 
 /// NLTagger lemma corrections for irregular words whose output isn't self-consistent across cases — so the
-/// nominative and oblique forms collapse to ONE lemma and actually match. «деньги» (pluralia tantum): oblique
-/// forms lemmatize to «деньга» but the nominative stays «деньги». A small CLOSED exceptions table (standard NLP
-/// practice — unlike the open-class stopword list); extend only as real, verified misses surface.
-let lemmaOverrides: [String: String] = ["деньги": "деньга"]
+/// nominative and oblique forms collapse to ONE lemma and actually match. Verified misses: «деньги» (pluralia
+/// tantum) → obliques «деньга» but nom stays «деньги»; «мать»/«дочь» → obliques «матерь»/«дочерь» but nom stays
+/// «мать»/«дочь». A small CLOSED exceptions table (standard NLP practice — unlike the open-class stopword list);
+/// extend only as real, verified misses surface. (время/имя/путь/люди/дети are self-consistent — no entry needed.)
+let lemmaOverrides: [String: String] = ["деньги": "деньга", "матерь": "мать", "дочерь": "дочь"]
 
 /// Lemmatized content tokens of `text` as a lowercased set — the morphology primitive behind `searchLemmaSet`.
 /// «работа» reduces to the same lemma as «работе»/«работу», so a base-form query finds inflected notes. Uses
 /// NLTagger `.lemma` (no asset download), falling back to the surface form when no lemma; tokens ≤2 chars
 /// dropped as noise. Pure — `AppModel` caches the per-item result (lemmatizing the corpus on every keystroke
-/// would be wasteful). LIMITATION: NLTagger's RU lemmatizer isn't self-consistent for a few irregulars —
-/// «деньги» (nom.pl) stays «деньги» while «денег» → «деньга», so «деньги» does NOT find «денег». NOT semantic
-/// search: matches word FORMS literally present, not meaning (that's the download-tier; LOCAL_AI_LAYER.md §5).
+/// would be wasteful). NLTagger's RU lemmatizer isn't self-consistent for a few irregulars (nom ≠ oblique lemma);
+/// those are corrected via the closed `lemmaOverrides` table applied below (e.g. «деньги»→«деньга»,
+/// «матерь»→«мать») so all forms collapse and match. NOT semantic search: matches word FORMS literally present,
+/// not meaning (that's the download-tier; LOCAL_AI_LAYER.md §5).
 func lemmaSet(of text: String, language: String = "") -> Set<String> {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return [] }

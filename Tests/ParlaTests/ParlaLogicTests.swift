@@ -39,6 +39,10 @@ final class ParlaLogicTests: XCTestCase {
             .appendingPathComponent("ParlaTests-Store-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
         HistoryStore.fileURL = storeDir.appendingPathComponent("history.json")
+        // ProcessedStore is a SEPARATE global path (not derived from HistoryStore.fileURL) — redirect it too,
+        // or folder-watch tests would write the user's real processed.json. (EmbeddingStore/AudioStore DO derive
+        // from HistoryStore.fileURL's dir, so they're already covered.)
+        ProcessedStore.fileURL = storeDir.appendingPathComponent("processed.json")
     }
 
     // MARK: Model names
@@ -897,11 +901,16 @@ final class ParlaLogicTests: XCTestCase {
             m.history = [a]; m.selection = a.id
             m.embeddingIndex = [a.id: [1, 0]]; m.lemmaIndex = [a.id: ["текст"]]
             EmbeddingStore.save([a.id: [1, 0]])
-            if let i = m.history.firstIndex(where: { $0.id == a.id }) { m.history[i].aiModel = "extractive-v5"; m.history[i].title = "Авто" }
+            if let i = m.history.firstIndex(where: { $0.id == a.id }) {
+                m.history[i].aiModel = "extractive-v5"; m.history[i].title = "Авто"
+                m.history[i].summary = "старое саммари"; m.history[i].keywords = ["старое"]
+            }
             m.invalidateDerivedData(for: a.id)
             XCTAssertNil(m.embeddingIndex[a.id]); XCTAssertNil(m.lemmaIndex[a.id]); XCTAssertNil(EmbeddingStore.load()[a.id])
-            XCTAssertNil(m.history.first?.aiModel)   // insights re-eligible
-            XCTAssertNil(m.history.first?.title)     // auto-title cleared so it regenerates from new text
+            XCTAssertNil(m.history.first?.aiModel)    // insights re-eligible
+            XCTAssertNil(m.history.first?.title)      // auto-title cleared so it regenerates from new text
+            XCTAssertNil(m.history.first?.summary)    // stale summary dropped (won't be overwritten if new text is short)
+            XCTAssertNil(m.history.first?.keywords)   // stale keywords dropped
             // A hand-edited title is preserved.
             if let i = m.history.firstIndex(where: { $0.id == a.id }) { m.history[i].titleEdited = true; m.history[i].title = "Моё" }
             m.invalidateDerivedData(for: a.id)
@@ -1004,6 +1013,8 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(searchLemmaSet(of: "работе").contains("работа"))       // Cyrillic still lemmatized
         XCTAssertTrue(searchLemmaSet(of: "деньги").contains("деньга"))       // irregular override applied
         XCTAssertEqual(searchLemmaSet(of: "денег"), searchLemmaSet(of: "деньги"))   // both collapse to one lemma
+        XCTAssertEqual(searchLemmaSet(of: "матери"), searchLemmaSet(of: "мать"))    // мать/матерь irregular unified
+        XCTAssertEqual(searchLemmaSet(of: "дочери"), searchLemmaSet(of: "дочь"))    // дочь/дочерь irregular unified
     }
 
     @MainActor func testMorphologyMatchesDengiIrregular() {

@@ -86,6 +86,10 @@ extension AppModel {
         lemmaIndex[id] = nil
         if let idx = history.firstIndex(where: { $0.id == id }) {
             history[idx].aiModel = nil                                       // re-derive insights from the new text
+            // Clear summary + keywords: backfillInsights only OVERWRITES them when the new text yields one, so a
+            // now-short (or now-empty-keyword) edit would otherwise leave the OLD summary/keywords stranded.
+            history[idx].summary = nil
+            history[idx].keywords = nil
             if history[idx].titleEdited != true { history[idx].title = nil } // auto-title regenerates; hand titles kept
         }
         refreshRelatedNotes()                                               // clear the now-stale "Related" footer
