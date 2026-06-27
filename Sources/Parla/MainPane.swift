@@ -570,6 +570,10 @@ struct TranscriptCard: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    // Convey the done state to VoiceOver (not just the checkmark glyph): the row reads as a
+                    // toggle and announces "selected" when done; the action text is the label.
+                    .accessibilityLabel(Text(action.text))
+                    .accessibilityAddTraits(action.done ? [.isToggle, .isSelected] : [.isToggle])
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

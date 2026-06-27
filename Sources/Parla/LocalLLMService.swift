@@ -74,10 +74,17 @@ struct FoundationModelsService: LocalLLMService {
     func availability(forLanguage language: String) -> AIAvailability {
         #if canImport(FoundationModels)
         if #available(macOS 26, *) {
+            let subtag = languagePrimarySubtag(language)
             guard Self.maySupport(language: language) else { return .languageUnsupported }
             switch SystemLanguageModel.default.availability {
-            case .available: return .ready
-            default:         return .modelUnavailable   // device not eligible / AI off / model not ready
+            case .available:
+                // Refine the static pre-gate against the model's LIVE supported set (the source of truth): a
+                // language in `knownSupportedLanguages` but not actually installed/supported must NOT reach the
+                // session (avoids a guaranteed `unsupportedLanguageOrLocale` generation).
+                guard SystemLanguageModel.default.supportedLanguages
+                    .contains(where: { $0.languageCode?.identifier == subtag }) else { return .languageUnsupported }
+                return .ready
+            default: return .modelUnavailable   // device not eligible / AI off / model not ready
             }
         }
         #endif
@@ -88,6 +95,8 @@ struct FoundationModelsService: LocalLLMService {
     /// voice note. A transcript longer than this is truncated (and retried tighter on a context-window error);
     /// full per-chapter map-reduce for long recordings is a later refinement (P2d/P4).
     static let maxInputChars = 8000
+    /// Output cap so a title/summary can't run away (the @Guide prose steers length, this bounds it hard).
+    static let maxResponseTokens = 500
 
     static let instructions = """
     You extract a title, a short summary, and any action items from a voice-message transcript.
@@ -100,12 +109,16 @@ struct FoundationModelsService: LocalLLMService {
         #if canImport(FoundationModels)
         if #available(macOS 26, *) {
             guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { throw AIError.unavailable }   // nothing to summarize → don't fabricate
             do {
-                return try await Self.generate(String(text.prefix(Self.maxInputChars)))
-            } catch is LanguageModelSession.GenerationError {
-                // Usually the context window was exceeded → one tighter retry. (Running-summary map-reduce for
-                // long/chunked transcripts is a planned refinement; this keeps it best-effort meanwhile.)
-                return try await Self.generate(String(text.prefix(Self.maxInputChars / 2)))
+                return try await Self.generate(String(trimmed.prefix(Self.maxInputChars)))
+            } catch let error as LanguageModelSession.GenerationError {
+                // Only a context-window overflow is fixable by truncating; every other GenerationError (refusal,
+                // guardrail, decoding, rate-limit, …) would just waste a second full generation → rethrow it
+                // (best-effort: the caller swallows it and keeps the extractive fallback).
+                guard case .exceededContextWindowSize = error else { throw error }
+                return try await Self.generate(String(trimmed.prefix(Self.maxInputChars / 2)))
             }
         }
         #endif
@@ -116,7 +129,7 @@ struct FoundationModelsService: LocalLLMService {
     @available(macOS 26, *)
     private static func generate(_ text: String) async throws -> AIInsights {
         let response = try await LanguageModelSession(instructions: instructions)
-            .respond(to: text, generating: GeneratedInsights.self)
+            .respond(to: text, generating: GeneratedInsights.self, options: GenerationOptions(maximumResponseTokens: maxResponseTokens))
         return response.content.asInsights
     }
     #endif

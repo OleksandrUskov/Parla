@@ -30,6 +30,7 @@ final class AppModel {
     var searchQuery: String = ""
     var relatedIDs: [UUID] = []                         // "Related notes" to the OPEN item (doc↔doc semantic, P1) — recomputed on selection
     @ObservationIgnored var embeddingIndex: [UUID: Embedding] = [:]   // in-memory mirror of embeddings.json (doc↔doc related reads it; effect flows through observable relatedIDs)
+    @ObservationIgnored var enrichFailedIDs: Set<UUID> = []           // items whose generative enrich hard-failed this session — don't re-submit to the slow model every refresh (cleared on edit / next launch)
     var lemmaIndex: [UUID: Set<String>] = [:]                         // per-item lemma set for morphology search; OBSERVED — filteredHistory depends on it, so it must re-evaluate when the index builds
     var downloadedSet: Set<String> = []        // which models are on disk (reactive)
     var modelSizes: [String: Int64] = [:]      // size of each downloaded model

@@ -904,6 +904,7 @@ final class ParlaLogicTests: XCTestCase {
             if let i = m.history.firstIndex(where: { $0.id == a.id }) {
                 m.history[i].aiModel = "extractive-v5"; m.history[i].title = "Авто"
                 m.history[i].summary = "старое саммари"; m.history[i].keywords = ["старое"]
+                m.history[i].actions = [ActionItem(text: "старая задача")]
             }
             m.invalidateDerivedData(for: a.id)
             XCTAssertNil(m.embeddingIndex[a.id]); XCTAssertNil(m.lemmaIndex[a.id]); XCTAssertNil(EmbeddingStore.load()[a.id])
@@ -911,6 +912,7 @@ final class ParlaLogicTests: XCTestCase {
             XCTAssertNil(m.history.first?.title)      // auto-title cleared so it regenerates from new text
             XCTAssertNil(m.history.first?.summary)    // stale summary dropped (won't be overwritten if new text is short)
             XCTAssertNil(m.history.first?.keywords)   // stale keywords dropped
+            XCTAssertNil(m.history.first?.actions)    // stale action items dropped
             // A hand-edited title is preserved.
             if let i = m.history.firstIndex(where: { $0.id == a.id }) { m.history[i].titleEdited = true; m.history[i].title = "Моё" }
             m.invalidateDerivedData(for: a.id)
@@ -1039,6 +1041,49 @@ final class ParlaLogicTests: XCTestCase {
             XCTAssertEqual(m.history.first?.actions?.map(\.text), ["Email Bob"])
             XCTAssertEqual(m.history.first?.aiModel, AppModel.foundationModelTag)
         }
+    }
+
+    @MainActor func testEnrichAIFailureKeepsExtractiveFallback() async {
+        await withTemporaryHistoryStoreAsync {
+            // ai.insights throws for every item → best-effort: extractive fallback stays, nothing tagged generative.
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(error: .unavailable), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "english note one", lang: "en"), self.makeItem(text: "english note two", lang: "en")]
+            for i in m.history.indices { m.history[i].title = "Extractive\(i)"; m.history[i].aiModel = AppModel.extractiveModelTag }
+            await m.enrichInsights()
+            for it in m.history {
+                XCTAssertNotEqual(it.aiModel, AppModel.foundationModelTag)        // not upgraded
+                XCTAssertNil(it.actions)                                          // no actions on failure
+                XCTAssertTrue(it.title?.hasPrefix("Extractive") ?? false)         // extractive fallback intact
+                XCTAssertTrue(m.enrichFailedIDs.contains(it.id))                  // recorded → not re-submitted this session
+            }
+            // BOTH items were attempted (one failure didn't abort the batch).
+            XCTAssertEqual(m.enrichFailedIDs.count, 2)
+        }
+    }
+
+    @MainActor func testProvenanceReGenerationAfterEditingGenerativeItem() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "Regenerated", summary: "New summary", actions: [ActionItem(text: "X")])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(canned: canned), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "english note", lang: "en")]
+            if let i = m.history.indices.first { m.history[i].aiModel = AppModel.foundationModelTag; m.history[i].actions = [ActionItem(text: "old")] }
+            let id = m.history[0].id
+            m.invalidateDerivedData(for: id)                 // simulate an edit's invalidation
+            XCTAssertNil(m.history.first?.aiModel); XCTAssertNil(m.history.first?.actions)
+            await m.enrichInsights()                          // generative re-runs + re-tags
+            XCTAssertEqual(m.history.first?.title, "Regenerated")
+            XCTAssertEqual(m.history.first?.actions?.map(\.text), ["X"])
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.foundationModelTag)
+        }
+    }
+
+    @MainActor func testDefaultBackendsAreNoopUnderTests() {
+        // Locks the load-bearing headless gate: a test that doesn't inject fakes never hits the real model/embedder.
+        XCTAssertTrue(AppModel.defaultAI() is NoopAIService)
+        XCTAssertTrue(AppModel.defaultEmbedder() is NoopEmbedder)
+        let m = AppModel(engine: FakeEngine())
+        XCTAssertTrue(m.ai is NoopAIService)
+        XCTAssertTrue(m.embedder is NoopEmbedder)
     }
 
     @MainActor func testToggleActionFlipsDone() {
@@ -3065,10 +3110,13 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
 private struct FakeAIService: LocalLLMService {
     var availabilityToReturn: AIAvailability = .ready
     var canned: AIInsights = AIInsights(title: "T", summary: "S", actions: [])
+    var error: AIError? = nil   // when set, insights throws it — exercises the AI-failure-non-fatal invariant
 
     func availability(forLanguage language: String) -> AIAvailability { availabilityToReturn }
-    func insights(forTranscript text: String, language: String) async throws -> AIInsights { canned }
-    // A throwing/failure path is added in P2, when T5 (AI-failure-non-fatal) actually exercises it.
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
+        if let error { throw error }
+        return canned
+    }
 }
 
 /// Fake `TextEmbedder`: returns a canned vector (or nil) and counts calls. Single-flight in tests

@@ -93,6 +93,7 @@ extension AppModel {
         embeddingIndex[id] = nil
         EmbeddingStore.remove([id])
         lemmaIndex[id] = nil
+        enrichFailedIDs.remove(id)   // text changed → the generative attempt is worth retrying again
         if let idx = history.firstIndex(where: { $0.id == id }) {
             history[idx].aiModel = nil                                       // re-derive insights from the new text
             // Clear summary + keywords + actions: the backfill/enrich passes only OVERWRITE them when the new
@@ -146,7 +147,11 @@ extension AppModel {
         // Skip items already at the extractive tag AND items the generative pass owns (foundationModelTag) — so
         // extractive never clobbers a model-generated insight on a later pass.
         let targets = history.filter { $0.aiModel != Self.extractiveModelTag && $0.aiModel != Self.foundationModelTag }
-        guard !targets.isEmpty else { return }
+        // Generative items whose extractive keywords never landed (e.g. the embedder's assets were still
+        // downloading when they were first processed) — top up keywords ONLY, without disturbing the
+        // generative title/summary, so they're not stranded keyword-less forever behind the foundation tag.
+        let keywordTopUp = history.filter { $0.aiModel == Self.foundationModelTag && ($0.keywords?.isEmpty ?? true) }
+        guard !targets.isEmpty || !keywordTopUp.isEmpty else { return }
         var changed = false
         for item in targets {
             guard let result = await extractiveInsights(for: item),
@@ -155,6 +160,13 @@ extension AppModel {
             if let summary = result.summary { history[idx].summary = summary }
             if !result.keywords.isEmpty { history[idx].keywords = result.keywords }
             history[idx].aiModel = Self.extractiveModelTag
+            changed = true
+        }
+        for item in keywordTopUp {
+            let kws = await rankedKeywords(for: item)
+            guard !kws.isEmpty, let idx = history.firstIndex(where: { $0.id == item.id }),
+                  history[idx].aiModel == Self.foundationModelTag else { continue }   // re-validate after the await
+            history[idx].keywords = kws
             changed = true
         }
         if changed { HistoryStore.save(history) }
@@ -176,21 +188,37 @@ extension AppModel {
     /// `foundationModelTag`. TOCTOU-safe: re-finds the item after the await and skips it if the text changed.
     func enrichInsights() async {
         let targets = history.filter {
-            $0.aiModel != Self.foundationModelTag && ai.availability(forLanguage: $0.language) == .ready
+            $0.aiModel != Self.foundationModelTag
+            && !enrichFailedIDs.contains($0.id)            // a hard failure this session → don't hammer the slow model
+            && Self.isEnrichable($0.text)                  // skip empty / silence placeholder → no fabricated insights
+            && ai.availability(forLanguage: $0.language) == .ready
         }
         guard !targets.isEmpty else { return }
         var changed = false
         for item in targets {
-            guard let result = try? await ai.insights(forTranscript: item.text, language: item.language),
-                  let idx = history.firstIndex(where: { $0.id == item.id }),
-                  history[idx].text == item.text else { continue }   // edited mid-generate → skip; a later pass redoes it
-            if history[idx].titleEdited != true, !result.title.isEmpty { history[idx].title = result.title }
-            if !result.summary.isEmpty { history[idx].summary = result.summary }
-            history[idx].actions = result.actions.isEmpty ? nil : result.actions
-            history[idx].aiModel = Self.foundationModelTag
-            changed = true
+            do {
+                let result = try await ai.insights(forTranscript: item.text, language: item.language)
+                guard let idx = history.firstIndex(where: { $0.id == item.id }),
+                      history[idx].text == item.text else { continue }   // edited mid-generate → skip; a later pass redoes it
+                if history[idx].titleEdited != true, !result.title.isEmpty { history[idx].title = result.title }
+                if !result.summary.isEmpty { history[idx].summary = result.summary }
+                history[idx].actions = result.actions.isEmpty ? nil : result.actions
+                history[idx].aiModel = Self.foundationModelTag
+                changed = true
+            } catch {
+                // Hard failure (refusal/guardrail/unavailable/…) → keep the extractive fallback AND record it so the
+                // slow on-device model isn't re-invoked for this item on every refresh (retried next launch / on edit).
+                enrichFailedIDs.insert(item.id)
+            }
         }
         if changed { HistoryStore.save(history) }
+    }
+
+    /// Worth sending to the generative model? Skip empty/whitespace and the silence placeholder so the model
+    /// can't fabricate a title/summary for "nothing recognized".
+    private static func isEnrichable(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !t.isEmpty && t != L("transcript.silence")
     }
 
     /// Backfill search embeddings for items missing a vector, then persist. Best-effort: an item the
