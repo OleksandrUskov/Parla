@@ -49,6 +49,7 @@ struct SidebarView: View {
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
+                    .onChange(of: model.searchQuery) { _, _ in model.scheduleRelatedSearch() }
             }
 
             if model.history.isEmpty {
@@ -59,21 +60,18 @@ struct SidebarView: View {
                 }
                 .frame(maxWidth: .infinity)
                 Spacer()
-            } else if model.filteredHistory.isEmpty {
-                Spacer()
-                Text(L("history.notfound")).foregroundStyle(.secondary).font(.callout)
-                    .frame(maxWidth: .infinity)
-                Spacer()
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
-                        ForEach(model.filteredHistory) { item in
-                            SidebarRow(item: item, title: model.sidebarTitle(for: item), selected: model.selection == item.id)
-                                .onTapGesture { model.selection = item.id }
-                                .contextMenu {
-                                    Button(L("common.copy")) { model.copyItem(item) }
-                                    Button(L("common.delete"), role: .destructive) { model.delete(item) }
-                                }
+                        ForEach(model.filteredHistory) { item in row(item) }
+                        let related = model.relatedHistory
+                        if !related.isEmpty {
+                            relatedDivider
+                            ForEach(related) { item in row(item) }
+                        }
+                        if model.filteredHistory.isEmpty, related.isEmpty {
+                            Text(L("history.notfound")).foregroundStyle(.secondary).font(.callout)
+                                .frame(maxWidth: .infinity).padding(.top, 24)
                         }
                     }
                     .padding(.horizontal, 10)
@@ -86,6 +84,26 @@ struct SidebarView: View {
         .overlay(alignment: .trailing) {
             Rectangle().fill(.white.opacity(0.08)).frame(width: 1)
         }
+    }
+
+    @ViewBuilder private func row(_ item: TranscriptItem) -> some View {
+        SidebarRow(item: item, title: model.sidebarTitle(for: item), selected: model.selection == item.id)
+            .onTapGesture { model.selection = item.id }
+            .contextMenu {
+                Button(L("common.copy")) { model.copyItem(item) }
+                Button(L("common.delete"), role: .destructive) { model.delete(item) }
+            }
+    }
+
+    /// Divider introducing the semantic "Related" matches under the literal substring results.
+    private var relatedDivider: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles").font(.caption2)
+            Text(L("history.related")).font(.caption.weight(.semibold))
+            Rectangle().fill(.white.opacity(0.12)).frame(height: 1)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 4).padding(.top, 10).padding(.bottom, 2)
     }
 }
 

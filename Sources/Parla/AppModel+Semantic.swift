@@ -24,6 +24,40 @@ extension AppModel {
         return true
     }
 
+    /// History items that match the search query by MEANING (not substring), in relevance order — for the
+    /// "Related" section under the literal results.
+    var relatedHistory: [TranscriptItem] {
+        relatedIDs.compactMap { id in history.first { $0.id == id } }
+    }
+
+    /// Debounced trigger for semantic search: re-runs ~300 ms after the query settles (embedding every
+    /// keystroke would be wasteful). Cancels the previous in-flight query. Call on `searchQuery` change.
+    func scheduleRelatedSearch() {
+        relatedSearchTask?.cancel()
+        relatedSearchTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            if Task.isCancelled { return }
+            await self?.refreshRelated()
+        }
+    }
+
+    /// Semantic search: embed the query and rank history items by cosine similarity to it, EXCLUDING items
+    /// already shown by the literal substring filter (so "Related" only adds new, meaning-based matches).
+    /// Best-effort: short query / no embeddings / no assets → clears the results. The query is embedded with
+    /// its detected language so it's comparable to same-script item vectors (cross-script matches stay low).
+    func refreshRelated() async {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count > 2 else { relatedIDs = []; return }
+        let literal = Set(filterHistory(history, query: searchQuery).map(\.id))
+        let store = EmbeddingStore.load()
+        let pool = history.filter { !literal.contains($0.id) && store[$0.id] != nil }
+        guard !pool.isEmpty, let queryVector = await embedder.embed(query, language: detectLanguage(query))
+        else { relatedIDs = []; return }
+        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }   // query moved on
+        let ranked = SemanticIndex.topK(queryVector, in: pool.map { store[$0.id]! }, k: 5, minScore: 0.40)
+        relatedIDs = ranked.map { pool[$0.index].id }
+    }
+
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight
     /// — a change that arrives mid-run schedules exactly one more pass after (so the new item is picked up
     /// without overlapping writes to history.json / embeddings.json). Safe to call from launch and after

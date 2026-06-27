@@ -807,6 +807,23 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testRefreshRelatedRanksBySemanticSimilarity() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [1, 0, 0]))
+            let near = self.makeItem(text: "что-то про криптобиржи и портфель")
+            let far = self.makeItem(text: "рецепт домашнего борща")
+            m.history = [near, far]
+            EmbeddingStore.save([near.id: [1, 0, 0], far.id: [0, 1, 0]])   // near ∥ query vector, far ⟂
+            m.searchQuery = "крпблмнвопрос"        // no substring hit → both enter the semantic pool
+            await m.refreshRelated()
+            XCTAssertEqual(m.relatedIDs, [near.id])  // only the semantically-close one clears the threshold
+            // Too-short query → cleared, no semantic search.
+            m.searchQuery = "ab"
+            await m.refreshRelated()
+            XCTAssertTrue(m.relatedIDs.isEmpty)
+        }
+    }
+
     @MainActor func testBackfillSkipsUnembeddableItems() async {
         await withTemporaryHistoryStoreAsync {
             let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: nil))

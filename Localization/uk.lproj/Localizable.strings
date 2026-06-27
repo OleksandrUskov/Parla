@@ -20,6 +20,7 @@
 "history.search"      = "Пошук…";
 "history.empty"       = "Поки порожньо";
 "history.notfound"    = "Нічого не знайдено";
+"history.related"     = "Схожі за змістом";
 
 /* Drop zone */
 "drop.working" = "Працюю…";

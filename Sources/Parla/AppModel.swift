@@ -28,6 +28,8 @@ final class AppModel {
     var downloadingModel: String?
     var downloadProgress: Double = 0
     var searchQuery: String = ""
+    var relatedIDs: [UUID] = []                         // semantic-search matches (P1) — items related by meaning, not substring
+    @ObservationIgnored var relatedSearchTask: Task<Void, Never>?   // debounce handle for the semantic query
     var downloadedSet: Set<String> = []        // which models are on disk (reactive)
     var modelSizes: [String: Int64] = [:]      // size of each downloaded model
 

@@ -7,6 +7,14 @@ import NaturalLanguage
 // contextual-embedding model). The output QUALITY varies by language (best for RU/EN; UK is thinner),
 // so the keyword-phrase title is user-evaluated live against the central-sentence style.
 
+/// Best-guess BCP-47 language of a short string (NLLanguageRecognizer), e.g. a search query → "ru"/"en".
+/// "" if undetermined. Used to embed a query with a model comparable to the items it searches.
+func detectLanguage(_ text: String) -> String {
+    let recognizer = NLLanguageRecognizer()
+    recognizer.processString(text)
+    return recognizer.dominantLanguage?.rawValue ?? ""
+}
+
 /// Split text into sentences (NLTokenizer). Empty/blank → []. Each sentence trimmed; blanks dropped.
 func sentences(in text: String) -> [String] {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -20,6 +20,7 @@
 "history.search"      = "Search…";
 "history.empty"       = "Nothing yet";
 "history.notfound"    = "Nothing found";
+"history.related"     = "Related by meaning";
 
 /* Drop zone */
 "drop.working" = "Working…";
