@@ -130,7 +130,7 @@ final class AppModel {
     init(engine: any TranscribingEngine = TranscriptionEngine()) {
         self.engine = engine
         let d = UserDefaults.standard
-        selectedModel = d.string(forKey: Keys.model) ?? "openai_whisper-large-v3-v20240930"
+        selectedModel = d.string(forKey: Keys.model) ?? "openai_whisper-large-v3-v20240930_626MB"   // quantized turbo: best quality/size on RU (see bestDefault)
         language = d.string(forKey: Keys.language) ?? ""
         autoCopy = (d.object(forKey: Keys.autoCopy) as? Bool) ?? true
         showTimestamps = (d.object(forKey: Keys.timestamps) as? Bool) ?? true   // default ON: reveal the click-to-seek SegmentList
@@ -150,9 +150,12 @@ final class AppModel {
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()
         processedSet = Set(processedKeys)
+        // Seed so the turbo tier + onboarding resolve to _626MB BEFORE the async refreshModels() returns
+        // (the onboarding pick reads this list at first launch; refreshModels lands later).
         availableModels = [
             "openai_whisper-tiny", "openai_whisper-base", "openai_whisper-small",
-            "openai_whisper-large-v3", "openai_whisper-large-v3-v20240930",
+            "openai_whisper-large-v3",
+            "openai_whisper-large-v3-v20240930_626MB", "openai_whisper-large-v3-v20240930",
             "openai_whisper-large-v3-v20240930_turbo_632MB",
         ]
         if !availableModels.contains(selectedModel) { availableModels.insert(selectedModel, at: 0) }
