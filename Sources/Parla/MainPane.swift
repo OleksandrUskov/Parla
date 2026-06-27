@@ -430,6 +430,9 @@ struct TranscriptCard: View {
     @State private var draft = ""
     @FocusState private var editorFocused: Bool
     @State private var player = PlaybackController()
+    @State private var isEditingTitle = false
+    @State private var titleDraft = ""
+    @FocusState private var titleFocused: Bool
 
     private var text: String { item.display(timestamps: model.showTimestamps) }
     private var justCopied: Bool { model.lastCopiedID == item.id }
@@ -438,17 +441,19 @@ struct TranscriptCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+            insights
             content
         }
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Selection change (or a new transcript): discard the in-progress edit (so we don't
+        // Selection change (or a new transcript): discard any in-progress edit (so we don't
         // write it into someone else's record) and reload the player with the new record's audio.
         // initial:true — also load on first appearance.
         .onChange(of: item.id, initial: true) { _, _ in
             if isEditing { cancelEdit() }
+            if isEditingTitle { cancelTitleEdit() }
             player.load(audioURL)
         }
         .onDisappear { player.stop() }
@@ -459,7 +464,7 @@ struct TranscriptCard: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.sourceName).font(.system(.headline, design: .rounded)).lineLimit(1)
+                titleView
                 HStack(spacing: 6) {
                     Text(meta).font(.caption).foregroundStyle(.secondary)
                     if item.isEdited { editedChip }
@@ -468,6 +473,67 @@ struct TranscriptCard: View {
             }
             Spacer()
             if isEditing { editActions } else { readActions }
+        }
+    }
+
+    /// The card's primary label. With titles on it's the AI/extractive (or hand-edited) title, editable
+    /// inline (click → TextField; ⏎ or click-away saves, Esc cancels); with titles off it's the file name.
+    @ViewBuilder private var titleView: some View {
+        if model.showTitles {
+            if isEditingTitle {
+                TextField(L("transcript.title.placeholder"), text: $titleDraft)
+                    .textFieldStyle(.plain)
+                    .font(.system(.headline, design: .rounded))
+                    .focused($titleFocused)
+                    .onSubmit { commitTitle() }
+                    .onExitCommand { cancelTitleEdit() }
+                    .onChange(of: titleFocused) { _, focused in
+                        if !focused, isEditingTitle { commitTitle() }   // click-away saves
+                    }
+            } else {
+                Text(item.displayTitle)
+                    .font(.system(.headline, design: .rounded))
+                    .lineLimit(2)
+                    .contentShape(Rectangle())
+                    .onTapGesture { beginTitleEdit() }
+                    .help(Text(L("transcript.title.edit.help")))
+            }
+        } else {
+            Text(item.sourceName).font(.system(.headline, design: .rounded)).lineLimit(1)
+        }
+    }
+
+    /// AI insight fields under the header: keyword tags + a summary block, each shown only when its
+    /// toggle is on AND there's something to show (so the card stays clean for short notes / disabled fields).
+    @ViewBuilder private var insights: some View {
+        if model.showKeywords {
+            let keywords = keywordList(from: item.text)
+            if !keywords.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "tag").font(.caption2).foregroundStyle(.secondary)
+                    ForEach(keywords, id: \.self) { keyword in
+                        Text(keyword)
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Brand.accent.opacity(0.15), in: Capsule())
+                            .foregroundStyle(Brand.accent)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .accessibilityLabel(Text(L("transcript.keywords")))
+            }
+        }
+        if model.showSummaries, let summary = item.summary, !summary.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("transcript.summary").uppercased())
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                Text(summary)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -615,9 +681,26 @@ struct TranscriptCard: View {
         editorFocused = false
     }
 
+    private func beginTitleEdit() {
+        titleDraft = item.title ?? ""   // start from the real title (empty if none) — not the sourceName fallback
+        isEditingTitle = true
+        titleFocused = true
+    }
+    private func cancelTitleEdit() {
+        isEditingTitle = false
+        titleFocused = false
+    }
+    private func commitTitle() {
+        model.setTitle(titleDraft, for: item.id)
+        isEditingTitle = false
+        titleFocused = false
+    }
+
     private var meta: String {
         let lang = item.language.isEmpty ? "?" : item.language.uppercased()
-        return "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(friendlyModel(item.model)) · \(Int(item.durationSec))s · \(Lf("transcript.meta.words", item.wordCount))"
+        let facts = "\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(lang) · \(friendlyModel(item.model)) · \(Int(item.durationSec))s · \(Lf("transcript.meta.words", item.wordCount))"
+        // With titles on, the headline is the title → keep the file name visible here; otherwise it's the headline.
+        return model.showTitles ? "\(item.sourceName) · \(facts)" : facts
     }
 }
 
