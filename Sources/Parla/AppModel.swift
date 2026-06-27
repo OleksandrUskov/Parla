@@ -90,6 +90,7 @@ final class AppModel {
     var processedSet: Set<String> = []                 // = Set(processedKeys), for O(1) lookups
 
     let engine: any TranscribingEngine                 // +Models (delete) / +Transcription (load+run) — injectable (test seam)
+    let ai: any LocalLLMService                         // Local-AI Layer seam (P0) — injectable; unused until P2 wires enrich
 
     /// WAV conversion (test seam): real ffmpeg by default; tests inject a stub to skip ffmpeg.
     var wavConverter: @Sendable (URL) throws -> URL = { try AudioConverter.toWav16k($0) }
@@ -127,8 +128,9 @@ final class AppModel {
         static let uiLanguage = "uiLanguage"
     }
 
-    init(engine: any TranscribingEngine = TranscriptionEngine()) {
+    init(engine: any TranscribingEngine = TranscriptionEngine(), ai: any LocalLLMService = DefaultAIService()) {
         self.engine = engine
+        self.ai = ai
         let d = UserDefaults.standard
         selectedModel = d.string(forKey: Keys.model) ?? "openai_whisper-large-v3-v20240930_626MB"   // quantized turbo: best quality/size on RU (see bestDefault)
         language = d.string(forKey: Keys.language) ?? ""

@@ -590,6 +590,101 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(back.first?.editedAt, Date(timeIntervalSince1970: 1_700_000_000))
     }
 
+    // MARK: - Local-AI Layer P0 — Optional fields, displayTitle, seam gating
+
+    /// T1 (mandatory): a history.json written before the AI layer (no title/summary/actions/aiModel
+    /// keys) still decodes; all four are nil; displayTitle falls back to sourceName.
+    func testLegacyJSONDecodesWithoutAIKeys() throws {
+        let legacy = #"[{"id":"\#(UUID().uuidString)","date":740000000,"sourceName":"msg123.ogg","language":"ru","durationSec":1,"model":"openai_whisper-tiny","text":"привет","segments":[]}]"#
+        let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8))
+        XCTAssertEqual(items.count, 1)
+        let it = try XCTUnwrap(items.first)
+        XCTAssertNil(it.title); XCTAssertNil(it.summary); XCTAssertNil(it.actions); XCTAssertNil(it.aiModel)
+        XCTAssertEqual(it.displayTitle, "msg123.ogg")   // nil title → sourceName
+    }
+
+    /// T2: a record carrying insights round-trips, including a toggled ActionItem.done.
+    func testCodableRoundtripWithInsights() throws {
+        var item = makeItem(name: "note.m4a", text: "длинный текст")
+        item.title = "Звонок с командой"
+        item.summary = "Обсудили релиз и сроки."
+        item.actions = [ActionItem(text: "написать Олегу", done: true),
+                        ActionItem(text: "запушить ветку", done: false)]
+        item.aiModel = "foundationmodels"
+        let back = try JSONDecoder().decode([TranscriptItem].self, from: JSONEncoder().encode([item]))
+        let r = try XCTUnwrap(back.first)
+        XCTAssertEqual(r.title, "Звонок с командой")
+        XCTAssertEqual(r.summary, "Обсудили релиз и сроки.")
+        XCTAssertEqual(r.actions?.count, 2)
+        XCTAssertEqual(r.actions?.first, ActionItem(text: "написать Олегу", done: true))
+        XCTAssertEqual(r.actions?.last?.done, false)
+        XCTAssertEqual(r.aiModel, "foundationmodels")
+        XCTAssertEqual(r.displayTitle, "Звонок с командой")
+    }
+
+    /// T3: displayTitle — non-empty title wins; nil OR empty → sourceName (legacy/disabled stay identical).
+    func testDisplayTitleFallback() {
+        var item = makeItem(name: "msg.ogg", text: "t")
+        XCTAssertEqual(item.displayTitle, "msg.ogg")     // nil
+        item.title = ""
+        XCTAssertEqual(item.displayTitle, "msg.ogg")     // empty → fallback, not a blank title
+        item.title = "Покупки"
+        XCTAssertEqual(item.displayTitle, "Покупки")     // present → wins
+    }
+
+    /// Pure: BCP-47 primary subtag, lowercased + normalized (drives the language-aware gate).
+    func testLanguagePrimarySubtag() {
+        XCTAssertEqual(languagePrimarySubtag("en-US"), "en")
+        XCTAssertEqual(languagePrimarySubtag("RU_ru"), "ru")
+        XCTAssertEqual(languagePrimarySubtag("uk"), "uk")
+        XCTAssertEqual(languagePrimarySubtag(""), "")
+    }
+
+    /// Load-bearing language gate: FoundationModels covers English, NOT Russian/Ukrainian — the whole
+    /// reason Parla needs the embedding (P1) + MLX (P3) paths. Case/subtag-insensitive.
+    func testFoundationModelsLanguageGate() {
+        XCTAssertTrue(FoundationModelsService.maySupport(language: "en"))
+        XCTAssertTrue(FoundationModelsService.maySupport(language: "EN-US"))
+        XCTAssertFalse(FoundationModelsService.maySupport(language: "ru"))
+        XCTAssertFalse(FoundationModelsService.maySupport(language: "uk"))
+        XCTAssertFalse(FoundationModelsService.maySupport(language: "ru-RU"))
+    }
+
+    /// T7 (P0 slice): the generative LLM service NEVER serves ru/uk in P0 — true on every OS
+    /// (FoundationModels can't; the MLX RU/UK backend lands in P3). RU/UK get value via SemanticIndex (P1).
+    func testDefaultAIServiceNeverReadyForRussianUkrainian() {
+        let ai = DefaultAIService()
+        XCTAssertNotEqual(ai.availability(forLanguage: "ru"), .ready)
+        XCTAssertNotEqual(ai.availability(forLanguage: "uk"), .ready)
+        XCTAssertNotEqual(ai.availability(forLanguage: "ru-RU"), .ready)
+    }
+
+    /// On the macOS-14 floor (and any OS/SDK without FoundationModels) the backend is dormant.
+    func testFoundationModelsUnsupportedBelowMacOS26() {
+        if #available(macOS 26, *) {
+            // macOS 26: English is device/AI-state dependent (.ready or .modelUnavailable) — not asserted here.
+        } else {
+            XCTAssertEqual(FoundationModelsService().availability(forLanguage: "en"), .unsupportedOS)
+            XCTAssertEqual(DefaultAIService().availability(forLanguage: "en"), .unsupportedOS)
+        }
+    }
+
+    /// The seam is injectable on AppModel, exactly like `engine` — a fake reports its canned availability.
+    @MainActor func testAppModelAcceptsInjectedAIService() {
+        let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .languageUnsupported))
+        XCTAssertEqual(m.ai.availability(forLanguage: "ru"), .languageUnsupported)
+    }
+
+    /// The async `insights` path flows through the injected backend (proves the contract end-to-end).
+    @MainActor func testInjectedAIServiceProducesInsights() async throws {
+        let canned = AIInsights(title: "Заголовок", summary: "Итог",
+                                actions: [ActionItem(text: "позвонить", done: false)])
+        let m = AppModel(engine: FakeEngine(), ai: FakeAIService(canned: canned))
+        let got = try await m.ai.insights(forTranscript: "длинный текст", language: "ru")
+        XCTAssertEqual(got.title, "Заголовок")
+        XCTAssertEqual(got.actions.first?.text, "позвонить")
+    }
+
     @MainActor func testSaveEditPersistsAndStamps() {
         withTemporaryHistoryStore {
             let m = AppModel()
@@ -2307,4 +2402,20 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     }
 
     func deleteModel(_ name: String) async throws { deletedModels.append(name) }
+}
+
+// MARK: - Test double for the Local-AI seam (P0)
+
+/// Fake `LocalLLMService`: reports a fixed availability and returns canned insights (or throws).
+/// Value type → trivially Sendable, like the seam it stands in for.
+private struct FakeAIService: LocalLLMService {
+    var availabilityToReturn: AIAvailability = .ready
+    var canned: AIInsights = AIInsights(title: "T", summary: "S", actions: [])
+    var shouldThrow: Bool = false
+
+    func availability(forLanguage language: String) -> AIAvailability { availabilityToReturn }
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
+        if shouldThrow { throw AIError.unavailable }
+        return canned
+    }
 }

@@ -23,6 +23,14 @@ func stripWhisperTokens(_ s: String) -> String {
         .trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
+/// A single AI-extracted action item (Local-AI Layer). `done` is user-toggleable and persisted.
+/// Lives here (not in `LocalLLMService.swift`) because it's part of the persisted data model —
+/// `TranscriptItem.actions` stores `[ActionItem]?` and `AIInsights` carries it transiently.
+struct ActionItem: Codable, Hashable, Sendable {
+    var text: String
+    var done: Bool = false
+}
+
 /// A single transcript in the history.
 struct TranscriptItem: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
@@ -39,9 +47,18 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var sourceBookmark: Data? = nil   // fallback locator bookmark; nil is fine (Optional → legacy-compatible)
     var audioFile: String? = nil      // name of the source copy in .../Parla/audio/ (for the player); nil on old records
     var audioPlayable: String? = nil  // name of the m4a rendition for playback (Opus/video); nil if not needed/not produced
+    // Local-AI Layer (all Optional → legacy history.json decodes unchanged; pinned by a legacy-decode test).
+    var title: String?         = nil  // AI/extractive auto-title; nil = legacy/disabled → fall back to sourceName
+    var summary: String?       = nil  // AI/extractive TL;DR; nil = none yet
+    var actions: [ActionItem]? = nil  // [ActionItem]?, NOT [ActionItem] — absent key → nil, not a masking []
+    var aiModel: String?       = nil  // which backend/model produced the insights (provenance / regeneration)
 
     /// Convenience accessor: nil/false → not edited.
     var isEdited: Bool { edited == true }
+
+    /// Sidebar/title text: the AI/extractive title when present, else the raw source name (e.g. `msg123.ogg`).
+    /// nil OR empty title → fall back to `sourceName`, so legacy/disabled records stay identical.
+    var displayTitle: String { (title?.isEmpty == false) ? title! : sourceName }
 
     /// Text with or without timecodes — for display/copying.
     /// For edited records timecodes are suppressed: the edited text no longer matches
