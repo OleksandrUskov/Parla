@@ -29,6 +29,15 @@ extension AppModel {
         return true
     }
 
+    /// Toggle a generated action item's done state (the card checklist). Persists. Out-of-range → no-op.
+    func toggleAction(_ index: Int, for id: TranscriptItem.ID) {
+        guard let idx = history.firstIndex(where: { $0.id == id }),
+              var actions = history[idx].actions, actions.indices.contains(index) else { return }
+        actions[index].done.toggle()
+        history[idx].actions = actions
+        HistoryStore.save(history)
+    }
+
     /// "Related notes" to the currently open item, in relevance order — shown in its card. These are whole
     /// notes close BY MEANING to the open one (doc↔doc), NOT search results.
     var relatedHistory: [TranscriptItem] {

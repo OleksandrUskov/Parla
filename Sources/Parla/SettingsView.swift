@@ -53,6 +53,7 @@ struct SettingsView: View {
                 Toggle(L("settings.insights.titles"), isOn: $model.showTitles)
                 Toggle(L("settings.insights.keywords"), isOn: $model.showKeywords)
                 Toggle(L("settings.insights.summary"), isOn: $model.showSummaries)
+                Toggle(L("settings.insights.actions"), isOn: $model.showActions)
                 Text(L("settings.insights.hint"))
                     .font(.caption).foregroundStyle(.secondary)
             }

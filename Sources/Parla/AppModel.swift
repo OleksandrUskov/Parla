@@ -59,6 +59,7 @@ final class AppModel {
     var showTitles: Bool { didSet { UserDefaults.standard.set(showTitles, forKey: Keys.showTitles) } }
     var showKeywords: Bool { didSet { UserDefaults.standard.set(showKeywords, forKey: Keys.showKeywords) } }
     var showSummaries: Bool { didSet { UserDefaults.standard.set(showSummaries, forKey: Keys.showSummaries) } }
+    var showActions: Bool { didSet { UserDefaults.standard.set(showActions, forKey: Keys.showActions) } }
     /// Auto-stop a dictation after a short run of silence (opt-in, off by default).
     var dictationVADEnabled: Bool { didSet { UserDefaults.standard.set(dictationVADEnabled, forKey: Keys.dictationVAD) } }
     /// Live segment-level streaming preview while dictating (opt-in, off by default). PREVIEW ONLY — the
@@ -136,6 +137,7 @@ final class AppModel {
         static let showTitles = "aiShowTitles"
         static let showKeywords = "aiShowKeywords"
         static let showSummaries = "aiShowSummaries"
+        static let showActions = "aiShowActions"
         static let dictationVAD = "dictationVADEnabled"
         static let dictationLiveStreaming = "dictationLiveStreaming"
         static let lastBookmark = "lastSourceBookmark"
@@ -179,6 +181,7 @@ final class AppModel {
         showTitles = (d.object(forKey: Keys.showTitles) as? Bool) ?? true        // AI insight fields ON by default…
         showKeywords = (d.object(forKey: Keys.showKeywords) as? Bool) ?? true    // …each independently disableable
         showSummaries = (d.object(forKey: Keys.showSummaries) as? Bool) ?? true
+        showActions = (d.object(forKey: Keys.showActions) as? Bool) ?? true
         dictationVADEnabled = d.bool(forKey: Keys.dictationVAD)   // opt-in, off by default
         dictationLiveStreaming = (d.object(forKey: Keys.dictationLiveStreaming) as? Bool) ?? true   // ON by default (safe + measured; preview-only)
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)

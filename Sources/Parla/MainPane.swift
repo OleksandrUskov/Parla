@@ -547,6 +547,35 @@ struct TranscriptCard: View {
             .padding(10)
             .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
         }
+        // Action items (generative tier only — FoundationModels). A tappable checklist; tap toggles done.
+        if model.showActions, let actions = item.actions, !actions.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Image(systemName: "checklist").font(.caption2)
+                    Text(L("transcript.actions").uppercased()).font(.caption2.weight(.semibold))
+                }
+                .foregroundStyle(.secondary)
+                ForEach(Array(actions.enumerated()), id: \.offset) { i, action in
+                    Button { model.toggleAction(i, for: item.id) } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Image(systemName: action.done ? "checkmark.circle.fill" : "circle")
+                                .font(.callout)
+                                .foregroundStyle(action.done ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.secondary))
+                            Text(action.text)
+                                .font(.callout)
+                                .strikethrough(action.done)
+                                .foregroundStyle(action.done ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
+        }
     }
 
     /// "Related notes" — whole history notes close BY MEANING to the open one (doc↔doc semantic, computed in

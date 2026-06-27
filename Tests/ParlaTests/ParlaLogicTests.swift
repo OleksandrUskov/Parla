@@ -1041,6 +1041,21 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testToggleActionFlipsDone() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let it = self.makeItem(text: "note")
+            m.history = [it]
+            if let i = m.history.indices.first { m.history[i].actions = [ActionItem(text: "A"), ActionItem(text: "B")] }
+            m.toggleAction(1, for: it.id)
+            XCTAssertEqual(m.history.first?.actions?[1].done, true)
+            XCTAssertEqual(m.history.first?.actions?[0].done, false)
+            m.toggleAction(1, for: it.id)
+            XCTAssertEqual(m.history.first?.actions?[1].done, false)
+            m.toggleAction(5, for: it.id)   // out of range → no-op, no crash
+        }
+    }
+
     @MainActor func testEnrichSkipsUnsupportedLanguage() async {
         await withTemporaryHistoryStoreAsync {
             let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .languageUnsupported), embedder: FakeEmbedder())

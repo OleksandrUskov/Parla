@@ -112,9 +112,11 @@
 "settings.insights.titles"      = "Show titles";
 "settings.insights.keywords"    = "Show keywords";
 "settings.insights.summary"     = "Show summaries";
+"settings.insights.actions"     = "Show action items";
 "settings.insights.hint"        = "Generated on-device from the transcript — no cloud. Turn any off; titles are editable in the card.";
 "transcript.summary"            = "Summary";
 "transcript.keywords"           = "Keywords";
+"transcript.actions"            = "Action items";
 "transcript.title.placeholder"  = "Add a title";
 "transcript.title.edit.help"    = "Click to edit the title";
 "settings.section.folderwatch"  = "Folder watch";

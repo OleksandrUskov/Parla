@@ -112,9 +112,11 @@
 "settings.insights.titles"      = "Показывать заголовки";
 "settings.insights.keywords"    = "Показывать ключевые слова";
 "settings.insights.summary"     = "Показывать краткое содержание";
+"settings.insights.actions"     = "Показывать задачи";
 "settings.insights.hint"        = "Генерируется на устройстве из транскрипта — без облака. Любое можно отключить; заголовок правится прямо в карточке.";
 "transcript.summary"            = "Краткое содержание";
 "transcript.keywords"           = "Ключевые слова";
+"transcript.actions"            = "Задачи";
 "transcript.title.placeholder"  = "Добавить заголовок";
 "transcript.title.edit.help"    = "Нажми, чтобы изменить заголовок";
 "settings.section.folderwatch"  = "Слежение за папкой";
