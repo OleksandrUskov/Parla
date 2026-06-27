@@ -813,6 +813,74 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: - Local-AI Layer P1d — extractive title/summary
+
+    func testConciseTitle() {
+        XCTAssertEqual(conciseTitle(from: "  Короткий   заголовок  "), "Короткий заголовок")   // trim + collapse
+        let cut = conciseTitle(from: "Это очень длинное предложение которое точно превышает лимит символов заголовка", maxChars: 30)
+        XCTAssertLessThanOrEqual(cut.count, 31)            // ~maxChars + ellipsis
+        XCTAssertTrue(cut.hasSuffix("…"))
+        XCTAssertFalse(cut.dropLast().hasSuffix(" "))      // cut on a word boundary, no dangling space before …
+    }
+
+    func testTopTerms() {
+        XCTAssertEqual(topTerms(["релиз", "Олег", "релиз", "оплата", "релиз", "Олег"], max: 2), ["релиз", "Олег"])
+        XCTAssertEqual(topTerms(["a", "B", "c"], max: 5), ["a", "B", "c"])   // fewer than max, casing kept
+        XCTAssertTrue(topTerms([], max: 3).isEmpty)
+    }
+
+    func testExtractiveSelection() {
+        XCTAssertNil(SemanticIndex.extractiveSelection([], summaryCount: 3))
+        let one = SemanticIndex.extractiveSelection([[1, 0]], summaryCount: 3)
+        XCTAssertEqual(one?.title, 0)
+        XCTAssertEqual(one?.summary, [0])
+        // Star graph: sentence 0 (the hub) is central → title; summary returned in document order.
+        let sel = SemanticIndex.extractiveSelection([[1, 1, 1], [1, 0, 0], [0, 1, 0], [0, 0, 1]], summaryCount: 2)
+        XCTAssertEqual(sel?.title, 0)
+        XCTAssertEqual(sel?.summary, sel?.summary.sorted())
+        XCTAssertEqual(sel?.summary.count, 2)
+    }
+
+    func testSentencesSplit() {
+        XCTAssertTrue(sentences(in: "   ").isEmpty)
+        let s = sentences(in: "Привет мир. Как дела? Хорошо!")
+        XCTAssertEqual(s.count, 3)
+        XCTAssertEqual(s.first, "Привет мир.")
+    }
+
+    func testKeywordPhrase() {
+        XCTAssertEqual(keywordPhrase(from: "   "), "")
+        let kw = keywordPhrase(from: "Купить молоко и хлеб в магазине у дома", max: 2)
+        XCTAssertFalse(kw.isEmpty)                                          // pulls some nouns out
+        XCTAssertLessThanOrEqual(kw.components(separatedBy: " · ").count, 2)   // respects max
+    }
+
+    @MainActor func testBackfillInsightsSetsTitleAndSummary() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [0.1, 0.2, 0.3]))
+            let long = self.makeItem(text: "Первое предложение тут. Второе предложение тут. Третье тут. Четвёртое тут. Пятое предложение тут.")
+            let short = self.makeItem(text: "Купить хлеб.")
+            m.history = [long, short]
+            await m.backfillInsights()
+            let lt = m.history.first { $0.id == long.id }
+            XCTAssertEqual(lt?.title, "Первое предложение тут.")   // central sentence (constant vectors → first)
+            XCTAssertEqual(lt?.aiModel, "extractive")
+            XCTAssertNotNil(lt?.summary)                           // 5 sentences > 4 → summary present
+            let st = m.history.first { $0.id == short.id }
+            XCTAssertNotNil(st?.title)                             // single sentence still gets a title
+            XCTAssertNil(st?.summary)                              // too short to summarize
+        }
+    }
+
+    @MainActor func testBackfillInsightsSkipsUnembeddable() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: nil))
+            m.history = [self.makeItem(text: "Раз. Два. Три.")]
+            await m.backfillInsights()
+            XCTAssertNil(m.history.first?.title)   // embedder unavailable → title stays nil, retried later
+        }
+    }
+
     @MainActor func testSaveEditPersistsAndStamps() {
         withTemporaryHistoryStore {
             let m = AppModel()

@@ -38,6 +38,7 @@ struct ParlaApp: App {
                     model.prewarmDictationModel()        // load the model into memory now if the user dictates → instant first dictation
                     await model.pruneAudioCache()        // remove orphans + old audio beyond the limit
                     await model.refreshModels()
+                    Task { await model.refreshSemanticIndex() }   // extractive titles/summaries + search embeddings (P1)
                 }
                 .onChange(of: model.globalHotkeyEnabled) { _, _ in syncHotkey() }
                 .onChange(of: model.dictationHotkeyEnabled) { _, _ in syncHotkey() }

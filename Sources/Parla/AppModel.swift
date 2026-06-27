@@ -88,6 +88,8 @@ final class AppModel {
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys
     var processedSet: Set<String> = []                 // = Set(processedKeys), for O(1) lookups
+    var semanticRefreshInFlight = false                // single-flight guard for the semantic backfill (P1)
+    var semanticRefreshPending = false                 // a change arrived mid-refresh → run once more after
 
     let engine: any TranscribingEngine                 // +Models (delete) / +Transcription (load+run) — injectable (test seam)
     let ai: any LocalLLMService                         // Local-AI Layer seam (P0) — injectable; unused until P2 wires enrich

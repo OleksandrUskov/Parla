@@ -42,6 +42,37 @@ func embedText(for item: TranscriptItem, maxChars: Int = 1000) -> String {
     return item.displayTitle == item.sourceName ? body : item.displayTitle + ". " + body
 }
 
+/// Cap a sentence into a short, clean title: trim, collapse runs of whitespace, cut at a word boundary
+/// near `maxChars` with an ellipsis. Pure. (The "central sentence" title style.)
+func conciseTitle(from sentence: String, maxChars: Int = 60) -> String {
+    let clean = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    guard clean.count > maxChars else { return clean }
+    let cut = clean.prefix(maxChars)
+    if let lastSpace = cut.lastIndex(of: " ") {
+        return cut[..<lastSpace].trimmingCharacters(in: .whitespaces) + "…"
+    }
+    return cut + "…"
+}
+
+/// Rank candidate terms by frequency (case-insensitive), keeping the first-seen casing, top `max`.
+/// Stable on ties (first-seen order). Pure — the lexical extractor (NLTagger) feeds this for the
+/// keyword-phrase title style.
+func topTerms(_ terms: [String], max k: Int) -> [String] {
+    var count: [String: Int] = [:]
+    var firstSeen: [String: String] = [:]
+    var order: [String] = []
+    for term in terms {
+        let key = term.lowercased()
+        if count[key] == nil { firstSeen[key] = term; order.append(key) }
+        count[key, default: 0] += 1
+    }
+    let ranked = order.enumerated().sorted { a, b in
+        count[a.element]! != count[b.element]! ? count[a.element]! > count[b.element]! : a.offset < b.offset
+    }
+    return ranked.prefix(k).compactMap { firstSeen[$0.element] }
+}
+
 enum SemanticIndex {
     /// Cosine similarity in [-1, 1]. Returns 0 for a length mismatch, an empty vector, or a zero-norm
     /// vector (all degenerate → treated as "unrelated" rather than trapping).
@@ -67,6 +98,27 @@ enum SemanticIndex {
             .filter { $0.score >= minScore }
             .sorted { $0.score > $1.score }
         return Array(scored.prefix(k))
+    }
+
+    /// From per-sentence vectors, pick the most-central sentence (the title) and the top-`summaryCount`
+    /// central sentences (the summary, returned in original document order for readability). Builds the
+    /// cosine-similarity matrix and ranks by TextRank centrality. nil for empty; n==1 → (0, [0]). Pure.
+    static func extractiveSelection(_ vectors: [Embedding], summaryCount: Int) -> (title: Int, summary: [Int])? {
+        let n = vectors.count
+        guard n > 0 else { return nil }
+        guard n > 1 else { return (0, [0]) }
+        var sim = [[Double]](repeating: [Double](repeating: 0, count: n), count: n)
+        for i in 0..<n {
+            for j in (i + 1)..<n {
+                let c = cosine(vectors[i], vectors[j])
+                sim[i][j] = c; sim[j][i] = c
+            }
+        }
+        let byScore = textRank(similarity: sim).enumerated()
+            .sorted { $0.element > $1.element }.map { $0.offset }
+        let title = byScore[0]
+        let summary = Array(byScore.prefix(max(1, summaryCount))).sorted()   // document order, not score order
+        return (title, summary)
     }
 
     /// Mean-pool per-token vectors into one document vector (the standard way to turn `NLContextualEmbedding`'s

@@ -62,6 +62,7 @@ extension AppModel {
                 history.insert(item, at: 0)
                 selection = item.id
                 HistoryStore.save(history)
+                Task { await refreshSemanticIndex() }   // extractive title/summary + search embedding (P1)
                 if autoCopy, !r.text.isEmpty { copy(item.text) }
                 succeeded += 1
                 rememberSource(url)            // for «repeat last file»

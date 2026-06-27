@@ -186,6 +186,7 @@ extension AppModel {
         } catch {
             // Refine failed → keep the instant streamed text (already saved, copied, pasted). Nothing to undo.
         }
+        Task { await refreshSemanticIndex() }   // title/summary from the FINAL dictation text, not the rough stream (P1)
         // Keep the audio if requested — regardless of whether the decode refined the text (the record exists).
         if keepDictationAudio { await keepDictationAudioFor(id, wav: wav) }
         await pruneAudioCache()
@@ -233,6 +234,7 @@ extension AppModel {
             history.insert(item, at: 0)
             selection = item.id
             HistoryStore.save(history)
+            Task { await refreshSemanticIndex() }   // extractive title/summary + search embedding (P1)
             // Paste-into-frontmost (opt-in) needs the text on the clipboard for the synthetic ⌘V.
             if autoCopy || dictationPasteIntoFrontmost { copy(item.text) }
             if keepDictationAudio { await keepDictationAudioFor(item.id, wav: wav) }
