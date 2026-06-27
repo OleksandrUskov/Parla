@@ -187,11 +187,31 @@ struct ModelTier: Identifiable {
 
 // MARK: - History: filter, export, size formatting
 
-/// Search over the history (case-insensitive, by text and file name).
-func filterHistory(_ items: [TranscriptItem], query: String) -> [TranscriptItem] {
-    let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+/// Search over the history (case-insensitive). Matches a literal substring of the text or file name
+/// (fast path), OR — when a `lemmaIndex` is supplied — every query word's lemma against the note's lemma
+/// set, so «деньги» also finds «денег»/«деньгами» (morphology-aware). The lemma path is skipped when the
+/// index is empty (not yet built) or the query has no content lemmas, degrading to plain substring.
+func filterHistory(_ items: [TranscriptItem], query: String,
+                   lemmaIndex: [UUID: Set<String>] = [:]) -> [TranscriptItem] {
+    let raw = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    let q = raw.lowercased()
     guard !q.isEmpty else { return items }
-    return items.filter { $0.text.lowercased().contains(q) || $0.sourceName.lowercased().contains(q) }
+    // Lemmatize the query in the language its SCRIPT implies — the index was built with the note's
+    // language, and NLTagger only normalizes a standalone inflected word when its language is set
+    // (без него «встрече» НЕ сводится к «встреча» → the lemma path would never match). RU/UK both map to
+    // Cyrillic → "ru" (a short query can't disambiguate them; same heuristic the embedder routing uses).
+    let queryLemmas: Set<String>
+    if lemmaIndex.isEmpty {
+        queryLemmas = []
+    } else {
+        let script = dominantScript(raw)
+        queryLemmas = lemmaSet(of: raw, language: script == "cyrillic" ? "ru" : (script == "latin" ? "en" : ""))
+    }
+    return items.filter { item in
+        if item.text.lowercased().contains(q) || item.sourceName.lowercased().contains(q) { return true }
+        guard !queryLemmas.isEmpty, let lemmas = lemmaIndex[item.id] else { return false }
+        return queryLemmas.isSubset(of: lemmas)   // all query lemmas present (in any inflected form)
+    }
 }
 
 /// The entire history as a single markdown text (for export/backup).

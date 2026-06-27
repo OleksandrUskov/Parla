@@ -444,6 +444,7 @@ struct TranscriptCard: View {
             header
             insights
             content
+            relatedNotes
         }
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
@@ -457,6 +458,7 @@ struct TranscriptCard: View {
             if isEditingTitle { cancelTitleEdit() }
             summaryExpanded = false          // each record opens with the transcript primary; expand the summary on demand
             player.load(audioURL)
+            model.refreshRelatedNotes()      // the open note changed → recompute its doc↔doc "Related"
         }
         .onDisappear { player.stop() }
     }
@@ -539,6 +541,42 @@ struct TranscriptCard: View {
                 .buttonStyle(.plain)
                 if summaryExpanded {
                     Text(summary).font(.callout).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    /// "Related notes" — whole history notes close BY MEANING to the open one (doc↔doc semantic, computed in
+    /// `AppModel.refreshRelatedNotes`). A footer suggestion: shown only when something is genuinely related;
+    /// each row selects that note. This is where the on-device semantic layer actually helps — note↔note —
+    /// since word→note search isn't viable on the free model (that's the download tier; LOCAL_AI_LAYER.md §5).
+    @ViewBuilder private var relatedNotes: some View {
+        let related = model.relatedHistory
+        if !related.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles").font(.caption2)
+                    Text(L("transcript.related").uppercased()).font(.caption2.weight(.semibold))
+                }
+                .foregroundStyle(.secondary)
+                ForEach(related) { note in
+                    // Clear any active search first: a related note is a topic match, not a query match, so it
+                    // may be absent from filteredHistory — selectedItem (scoped to filteredHistory) couldn't
+                    // resolve it and the tap would be a no-op. Clearing search makes navigation always land.
+                    Button { model.searchQuery = ""; model.selection = note.id } label: {
+                        HStack(spacing: 8) {
+                            Text(model.showTitles ? note.displayTitle : note.sourceName)
+                                .font(.callout).lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text(note.date.formatted(date: .abbreviated, time: .omitted))
+                                .font(.caption2).foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

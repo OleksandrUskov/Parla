@@ -290,6 +290,18 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(filterHistory(items, query: "ПРИВЕТ").count, 1) // case-insensitive
         XCTAssertEqual(filterHistory(items, query: "secret").count, 1) // by file name
         XCTAssertEqual(filterHistory(items, query: "неттакого").count, 0)
+        // Morphology path: with a lemma index, a query lemma matches even with no substring hit anywhere.
+        let lemmas = [items[2].id: Set(["тайна"])]                       // secret.ogg ("ничего") tagged with «тайна»
+        XCTAssertEqual(filterHistory(items, query: "тайна", lemmaIndex: lemmas).map(\.id), [items[2].id])
+        XCTAssertTrue(filterHistory(items, query: "тайна").isEmpty)      // no index → substring only → nothing
+    }
+
+    func testLemmaSet() {
+        let s = lemmaSet(of: "Обсудили проекты и работу команды", language: "ru")
+        XCTAssertTrue(s.contains("проект"))   // проекты → проект
+        XCTAssertTrue(s.contains("работа"))   // работу → работа
+        XCTAssertFalse(s.contains("и"))       // ≤2 chars dropped as noise
+        XCTAssertTrue(lemmaSet(of: "   ").isEmpty)
     }
 
     // MARK: History — export
@@ -833,20 +845,115 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
-    @MainActor func testRefreshRelatedRanksBySemanticSimilarity() async {
-        await withTemporaryHistoryStoreAsync {
+    @MainActor func testRefreshRelatedNotesRanksByDocSimilarity() {
+        withTemporaryHistoryStore {
             let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [1, 0, 0]))
-            let near = self.makeItem(text: "что-то про криптобиржи и портфель")
-            let far = self.makeItem(text: "рецепт домашнего борща")
-            m.history = [near, far]
-            EmbeddingStore.save([near.id: [1, 0, 0], far.id: [0, 1, 0]])   // near ∥ query vector, far ⟂
-            m.searchQuery = "крпблмнвопрос"        // no substring hit → both enter the semantic pool
-            await m.refreshRelated()
-            XCTAssertEqual(m.relatedIDs, [near.id])  // only the semantically-close one clears the threshold
-            // Too-short query → cleared, no semantic search.
-            m.searchQuery = "ab"
-            await m.refreshRelated()
+            let open = self.makeItem(text: "заметка про криптобиржи и портфель")
+            let near = self.makeItem(text: "ещё одна про крипту и стартап")
+            let far  = self.makeItem(text: "рецепт домашнего борща")
+            m.history = [open, near, far]
+            m.selection = open.id
+            // In-memory mirror (what refreshRelatedNotes reads). near ∥ open, far ⟂ → after mean-centering
+            // near stays positive (> floor) and far goes negative.
+            m.embeddingIndex = [open.id: [1, 0, 0], near.id: [1, 0, 0], far.id: [0, 1, 0]]
+            m.refreshRelatedNotes()
+            XCTAssertEqual(m.relatedIDs, [near.id])   // only the genuinely-close note clears the floor
+            // The open note has no vector → no "Related", best-effort.
+            m.embeddingIndex[open.id] = nil
+            m.refreshRelatedNotes()
             XCTAssertTrue(m.relatedIDs.isEmpty)
+        }
+    }
+
+    @MainActor func testRelatedNotesEmptyBelowFloor() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [1, 0, 0]))
+            let open = self.makeItem(text: "первая заметка про работу"), p1 = self.makeItem(text: "вторая про код")
+            let p2 = self.makeItem(text: "третья про спорт")
+            m.history = [open, p1, p2]                       // 2 peers → centering is well-posed
+            m.selection = open.id
+            m.embeddingIndex = [open.id: [1, 0, 0], p1.id: [0, 1, 0], p2.id: [0, 0, 1]]   // mutually orthogonal
+            m.refreshRelatedNotes()
+            XCTAssertTrue(m.relatedIDs.isEmpty)             // all centered cosines < floor → never padded
+        }
+    }
+
+    @MainActor func testRelatedNotesNeedTwoPeers() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [1, 0, 0]))
+            let open = self.makeItem(text: "первая заметка о работе"), other = self.makeItem(text: "вторая про работу")
+            m.history = [open, other]                        // only 1 peer
+            m.selection = open.id
+            // Even with identical (clearly related) vectors, a single-peer centroid forces antipodal directions,
+            // so "Related" is deliberately suppressed until there are ≥2 peers (≥3 same-script notes).
+            m.embeddingIndex = [open.id: [1, 0, 0], other.id: [1, 0, 0]]
+            m.refreshRelatedNotes()
+            XCTAssertTrue(m.relatedIDs.isEmpty)
+        }
+    }
+
+    @MainActor func testMorphologySearchMatchesInflections() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let it = self.makeItem(text: "вчера долго думал о работе и проектах")
+            m.history = [it]
+            m.backfillLemmas()
+            m.searchQuery = "работа"   // not a substring of «работе» — only the lemma matches
+            XCTAssertEqual(m.filteredHistory.map(\.id), [it.id])
+            // Without the lemma index, plain substring finds nothing (the feature is doing the work).
+            XCTAssertTrue(filterHistory(m.history, query: "работа").isEmpty)
+        }
+    }
+
+    @MainActor func testMorphologySearchInflectedQuery() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let it = self.makeItem(text: "вчера был на работе целый день")
+            m.history = [it]
+            m.backfillLemmas()
+            // INFLECTED query (not the dictionary form, not a substring of «работе»). Only matches because the
+            // query is lemmatized in the script's language too — the regression the review caught.
+            m.searchQuery = "работу"
+            XCTAssertEqual(m.filteredHistory.map(\.id), [it.id])
+        }
+    }
+
+    @MainActor func testEditInvalidatesSearchIndex() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let it = self.makeItem(text: "старый текст про работу команды")
+            m.history = [it]
+            m.backfillLemmas()
+            XCTAssertTrue(m.lemmaIndex[it.id]?.contains("работа") ?? false)
+            _ = m.saveEdit("совсем другое содержание про криптовалюту", for: it.id)
+            m.backfillLemmas()   // stand in for the async refresh saveEdit kicks off
+            XCTAssertTrue(m.lemmaIndex[it.id]?.contains("криптовалюта") ?? false)   // new text indexed
+            XCTAssertFalse(m.lemmaIndex[it.id]?.contains("работа") ?? true)         // stale lemma gone
+        }
+    }
+
+    @MainActor func testBackfillLemmasBuildsAndPrunes() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let a = self.makeItem(text: "проект про крипту"), b = self.makeItem(text: "рецепт супа")
+            m.history = [a, b]
+            m.backfillLemmas()
+            XCTAssertEqual(Set(m.lemmaIndex.keys), [a.id, b.id])
+            XCTAssertTrue(m.lemmaIndex[a.id]?.contains("проект") ?? false)
+            // Remove an item → its lemmas are pruned on the next pass.
+            m.history = [a]
+            m.backfillLemmas()
+            XCTAssertEqual(Set(m.lemmaIndex.keys), [a.id])
+        }
+    }
+
+    @MainActor func testBackfillEmbeddingsMirrorsIntoMemoryIndex() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [0.5, 0.5]))
+            let it = self.makeItem(text: "заметка")
+            m.history = [it]
+            await m.backfillEmbeddings()
+            XCTAssertEqual(m.embeddingIndex[it.id], [0.5, 0.5])   // in-memory mirror populated for doc↔doc related
         }
     }
 

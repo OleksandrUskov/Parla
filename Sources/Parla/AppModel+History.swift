@@ -31,24 +31,38 @@ extension AppModel {
         history[idx].text = newText
         history[idx].edited = true
         history[idx].editedAt = Date()
+        // The text changed → the derived search/related data is stale. Drop the vector + lemma set so the
+        // backfill recomputes them from the edited text (otherwise search would still match the old words and
+        // "Related" would rank on the old meaning). Insights (title/summary/keywords) are left for P4's manual
+        // regenerate; a hand-edited title is protected regardless.
+        embeddingIndex[id] = nil
+        EmbeddingStore.remove([id])
+        lemmaIndex[id] = nil
         HistoryStore.save(history)
         selection = id                        // keep the selection on the edited entry
+        Task { await refreshSemanticIndex() } // re-embed + re-lemmatize + refresh Related (off-main, best-effort)
         return true
     }
 
     func delete(_ item: TranscriptItem) {
         AudioStore.remove(item)                 // drop the audio copy along with the entry
         EmbeddingStore.remove([item.id])        // …and its semantic vector (no orphan in embeddings.json)
+        embeddingIndex[item.id] = nil           // keep the in-memory mirrors in sync (doc↔doc related + search)
+        lemmaIndex[item.id] = nil
         history.removeAll { $0.id == item.id }
         if selection == item.id { selection = nil }
         HistoryStore.save(history)
+        refreshRelatedNotes()                   // the open note's "Related" may have referenced the deleted item
     }
 
     func clearHistory() {
         history.forEach(AudioStore.remove)
         EmbeddingStore.pruneOrphans(keeping: [])   // wipe all vectors along with the history
+        embeddingIndex.removeAll()
+        lemmaIndex.removeAll()
         history.removeAll()
         selection = nil
+        relatedIDs = []
         HistoryStore.save(history)
     }
 

@@ -20,7 +20,7 @@
 "history.search"      = "Search…";
 "history.empty"       = "Nothing yet";
 "history.notfound"    = "Nothing found";
-"history.related"     = "Related by meaning";
+"transcript.related"  = "Related notes";
 
 /* Drop zone */
 "drop.working" = "Working…";

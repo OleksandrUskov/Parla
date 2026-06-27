@@ -28,8 +28,9 @@ final class AppModel {
     var downloadingModel: String?
     var downloadProgress: Double = 0
     var searchQuery: String = ""
-    var relatedIDs: [UUID] = []                         // semantic-search matches (P1) — items related by meaning, not substring
-    @ObservationIgnored var relatedSearchTask: Task<Void, Never>?   // debounce handle for the semantic query
+    var relatedIDs: [UUID] = []                         // "Related notes" to the OPEN item (doc↔doc semantic, P1) — recomputed on selection
+    @ObservationIgnored var embeddingIndex: [UUID: Embedding] = [:]   // in-memory mirror of embeddings.json (doc↔doc related reads it; effect flows through observable relatedIDs)
+    var lemmaIndex: [UUID: Set<String>] = [:]                         // per-item lemma set for morphology search; OBSERVED — filteredHistory depends on it, so it must re-evaluate when the index builds
     var downloadedSet: Set<String> = []        // which models are on disk (reactive)
     var modelSizes: [String: Int64] = [:]      // size of each downloaded model
 
@@ -208,7 +209,7 @@ final class AppModel {
         return filteredHistory.first
     }
 
-    var filteredHistory: [TranscriptItem] { filterHistory(history, query: searchQuery) }
+    var filteredHistory: [TranscriptItem] { filterHistory(history, query: searchQuery, lemmaIndex: lemmaIndex) }
 
     /// Most recent transcript's text, or "" — the read value behind GetLastTranscriptIntent (Shortcuts).
     var lastTranscriptText: String { history.first?.text ?? "" }

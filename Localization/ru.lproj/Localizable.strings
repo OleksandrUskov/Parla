@@ -20,7 +20,7 @@
 "history.search"      = "Поиск…";
 "history.empty"       = "Пока пусто";
 "history.notfound"    = "Ничего не найдено";
-"history.related"     = "Похожие по смыслу";
+"transcript.related"  = "Похожие заметки";
 
 /* Drop zone */
 "drop.working" = "Работаю…";

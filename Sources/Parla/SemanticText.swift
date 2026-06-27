@@ -36,6 +36,32 @@ func sentences(in text: String) -> [String] {
     return out
 }
 
+/// Lemmatized content tokens of `text` as a lowercased set — for morphology-aware search, so a query
+/// lemma («деньги») matches any inflected form in the note («денег», «деньгами»). Uses NLTagger `.lemma`
+/// (reliable on casual RU; no asset download), falling back to the surface form when no lemma. Tokens of
+/// ≤2 chars are dropped as noise. Pure — `AppModel` caches the per-item result (lemmatizing the whole
+/// corpus on every keystroke would be wasteful). NOT a substitute for semantic search: this matches word
+/// FORMS that are literally present, not meaning (that's the download-tier; see LOCAL_AI_LAYER.md §5).
+func lemmaSet(of text: String, language: String = "") -> Set<String> {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return [] }
+    let range = trimmed.startIndex..<trimmed.endIndex
+    let tagger = NLTagger(tagSchemes: [.lemma])
+    tagger.string = trimmed
+    let subtag = languagePrimarySubtag(language)
+    if !subtag.isEmpty { tagger.setLanguage(NLLanguage(subtag), range: range) }
+    var out: Set<String> = []
+    let options: NLTagger.Options = [.omitWhitespace, .omitPunctuation, .omitOther]
+    tagger.enumerateTags(in: range, unit: .word, scheme: .lemma, options: options) { tag, tokenRange in
+        let lemma = tag?.rawValue
+        let word = (lemma?.isEmpty == false) ? lemma! : String(trimmed[tokenRange])
+        let key = word.lowercased()
+        if key.count > 2 { out.insert(key) }
+        return true
+    }
+    return out
+}
+
 // `keywordStopwords` (the curated RU/UK/EN function-word set) lives in `Stopwords.swift`.
 
 /// RU + UK vowels — for the verb-infinitive discriminator below.

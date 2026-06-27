@@ -25,52 +25,46 @@ extension AppModel {
         return true
     }
 
-    /// History items that match the search query by MEANING (not substring), in relevance order — for the
-    /// "Related" section under the literal results.
+    /// "Related notes" to the currently open item, in relevance order — shown in its card. These are whole
+    /// notes close BY MEANING to the open one (doc↔doc), NOT search results.
     var relatedHistory: [TranscriptItem] {
         relatedIDs.compactMap { id in history.first { $0.id == id } }
     }
 
-    /// Debounced trigger for semantic search: re-runs ~300 ms after the query settles (embedding every
-    /// keystroke would be wasteful). Clears stale results immediately + cancels the previous in-flight query.
-    func scheduleRelatedSearch() {
-        relatedSearchTask?.cancel()
-        relatedIDs = []   // drop stale Related at once so old rows don't linger for the debounce window
-        relatedSearchTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
-            if Task.isCancelled { return }
-            await self?.refreshRelated()
-        }
-    }
-
-    /// Semantic search: rank history items by meaning-similarity to the query, EXCLUDING literal substring
-    /// hits (so "Related" only adds new matches). Best-effort: short query / no embeddings / no assets → none.
-    /// Robust to NLContextualEmbedding's anisotropy: only compares within the query's SCRIPT (Cyrillic vs
-    /// Latin = different vector spaces), MEAN-CENTERS the vectors to open the cosine range, and keeps only the
-    /// cluster genuinely near the top (relative gate) — instead of an absolute threshold that never discriminated.
-    func refreshRelated() async {
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count > 2 else { relatedIDs = []; return }
-        let literal = Set(filterHistory(history, query: searchQuery).map(\.id))
-        let store = EmbeddingStore.load()
-        let script = dominantScript(query)
-        // Same-script items only — cross-script vectors live in a different space, so cosine is meaningless.
-        let pool = history.filter { !literal.contains($0.id) && store[$0.id] != nil && dominantScript($0.text) == script }
-        let embedLanguage = script == "cyrillic" ? "ru" : "en"
-        guard !pool.isEmpty else { relatedIDs = []; return }                 // pre-await, query still current
-        let rawQuery = await embedder.embed(query, language: embedLanguage)
-        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }   // stale → no write AT ALL
-        guard let rawQuery else { relatedIDs = []; return }                  // current query, embed unavailable
-        let rawVectors = pool.map { store[$0.id]! }
-        guard let mean = SemanticIndex.centroid(rawVectors + [rawQuery]) else { relatedIDs = []; return }
-        let q = SemanticIndex.centered(rawQuery, by: mean)
-        let scored = rawVectors.enumerated()
+    /// Recompute "Related notes" for the OPEN item: rank other notes by doc↔doc meaning-similarity.
+    ///
+    /// IMPORTANT — why doc↔doc and not query→doc: `NLContextualEmbedding` is a *contextual* model; a short
+    /// search string embeds to a near-degenerate vector dominated by a constant background direction, so ALL
+    /// short queries collapse together and query→note ranking is no better than noise (empirically verified —
+    /// see LOCAL_AI_LAYER.md §5). Whole-note↔whole-note comparison DOES separate topics, so "Related" attaches
+    /// to the open note rather than the search box. Real query→note semantic search is a download-tier job (P3).
+    ///
+    /// Robust to the embedding's anisotropy by mean-centering on the same-script corpus (cross-script vectors
+    /// live in a different space). Pure in-memory (`embeddingIndex`); best-effort — no vector / no peers → none.
+    func refreshRelatedNotes() {
+        guard let item = selectedItem, let selfVec = embeddingIndex[item.id] else { relatedIDs = []; return }
+        let script = dominantScript(item.text)
+        let pool = history.filter { $0.id != item.id && embeddingIndex[$0.id] != nil && dominantScript($0.text) == script }
+        // Need ≥2 peers: mean-centering over a 2-element set {peer, self} puts them at EXACTLY opposite
+        // directions (cosine −1) regardless of content, so a single peer could never clear the floor. Below
+        // that the corpus is too small for the anisotropy estimate to mean anything — suppress deliberately.
+        guard pool.count >= 2 else { relatedIDs = []; return }
+        let vectors = pool.map { embeddingIndex[$0.id]! }
+        guard let mean = SemanticIndex.centroid(vectors + [selfVec]) else { relatedIDs = []; return }
+        let q = SemanticIndex.centered(selfVec, by: mean)
+        let scored = vectors.enumerated()
             .map { (index: $0.offset, score: SemanticIndex.cosine(q, SemanticIndex.centered($0.element, by: mean))) }
             .sorted { $0.score > $1.score }
-        guard let top = scored.first?.score, top > 0 else { relatedIDs = []; return }
-        // Keep the cluster near the top (relative gate) — empty when nothing is genuinely close, never pads to 5.
-        relatedIDs = scored.filter { $0.score >= Swift.max(0.05, 0.55 * top) }.prefix(5).map { pool[$0.index].id }
+        guard let top = scored.first?.score, top > Self.relatedFloor else { relatedIDs = []; return }
+        // Absolute floor (genuinely related, not "least unrelated") + relative gate (drop a weak tail when one
+        // note is clearly closer). Empty when nothing is close — never pads. Capped small; this is a suggestion.
+        relatedIDs = scored.filter { $0.score >= Swift.max(Self.relatedFloor, 0.6 * top) }
+            .prefix(3).map { pool[$0.index].id }
     }
+
+    /// Min centered doc↔doc cosine to count as "related". Calibrated on real data (LOCAL_AI_LAYER.md §5):
+    /// true topic pairs land ≈0.4–0.7, unrelated/noise notes go negative; 0.30 keeps the former, drops the latter.
+    static var relatedFloor: Double { 0.30 }
 
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight
     /// — a change that arrives mid-run schedules exactly one more pass after (so the new item is picked up
@@ -85,7 +79,21 @@ extension AppModel {
             semanticRefreshPending = false
             await backfillInsights()
             await backfillEmbeddings()
+            backfillLemmas()
         } while semanticRefreshPending
+        refreshRelatedNotes()   // the index just grew/shrank → refresh the open note's "Related"
+    }
+
+    /// Build/refresh the per-item lemma index used by morphology-aware search — for items missing from it,
+    /// and pruning orphans (mirrors `backfillEmbeddings`). NLTagger lemmas need no asset download and are
+    /// cheap, so this is synchronous. Kept in memory only (rebuilt on launch; trivial for a real history).
+    func backfillLemmas() {
+        let live = Set(history.map(\.id))
+        var index = lemmaIndex.filter { live.contains($0.key) }   // prune orphans (deleted items)
+        for item in history where index[item.id] == nil {
+            index[item.id] = lemmaSet(of: item.text, language: item.language)
+        }
+        if index != lemmaIndex { lemmaIndex = index }   // single observed write (no per-item re-render storm)
     }
 
     /// Compute + persist extractive insights (title, summary, embedding-ranked keywords) for items not yet
@@ -118,18 +126,25 @@ extension AppModel {
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
     /// retried on a later pass. The compute lives in the embedder actor (off the main actor).
     func backfillEmbeddings() async {
+        // Embed missing items into a LOCAL map; don't mutate the persisted store across the awaits.
+        let initial = EmbeddingStore.load()
+        var fresh: [UUID: Embedding] = [:]
+        for item in history where initial[item.id] == nil {
+            if let vector = await embedder.embed(embedText(for: item), language: item.language) {
+                fresh[item.id] = vector
+            }
+        }
+        // TOCTOU re-validate (mirror pruneAudioCache): a delete/edit may have run on the main actor during an
+        // await. Re-read the store + live set NOW so we don't resurrect a vector saveEdit/delete just removed,
+        // and add a freshly-computed vector only if its item is still live AND still missing on disk.
         var store = EmbeddingStore.load()
         let live = Set(history.map(\.id))
         var changed = false
-        // Reclaim orphan vectors (deleted items, or ones re-created for an item deleted mid-embed).
+        for (id, vector) in fresh where live.contains(id) && store[id] == nil { store[id] = vector; changed = true }
         let pruned = store.filter { live.contains($0.key) }
         if pruned.count != store.count { store = pruned; changed = true }
-        for item in history where store[item.id] == nil {
-            if let vector = await embedder.embed(embedText(for: item), language: item.language) {
-                store[item.id] = vector; changed = true   // only persist when a vector was actually added/removed
-            }
-        }
         if changed { EmbeddingStore.save(store) }
+        embeddingIndex = store   // in-memory mirror == the just-persisted, re-validated store (no orphan, honors edits)
     }
 
     /// Extractive (title, summary?, keywords) for an item via per-sentence embeddings, or nil if it can't
