@@ -881,6 +881,22 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testSidebarTitleStyle() {
+        let m = AppModel(engine: FakeEngine())
+        var item = self.makeItem(name: "msg.ogg", text: "Купить молоко и хлеб в магазине у дома")
+        item.title = "Ключевое предложение тут"
+        m.sidebarTitleStyle = .sentence
+        XCTAssertEqual(m.sidebarTitle(for: item), "Ключевое предложение тут")   // persisted extractive title
+        m.sidebarTitleStyle = .filename
+        XCTAssertEqual(m.sidebarTitle(for: item), "msg.ogg")                    // raw name
+        m.sidebarTitleStyle = .keywords
+        let kw = m.sidebarTitle(for: item)
+        XCTAssertFalse(kw.isEmpty)
+        XCTAssertNotEqual(kw, "msg.ogg")                                        // a keyword phrase, not the name
+        // Keyword fallback: nothing extractable → fall back to displayTitle (here sourceName).
+        XCTAssertEqual(m.sidebarTitle(for: self.makeItem(name: "x.ogg", text: "...")), "x.ogg")
+    }
+
     @MainActor func testSaveEditPersistsAndStamps() {
         withTemporaryHistoryStore {
             let m = AppModel()

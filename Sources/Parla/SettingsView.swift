@@ -49,6 +49,16 @@ struct SettingsView: View {
                 Toggle(L("settings.behavior.sound"), isOn: $model.soundOnComplete)
             }
 
+            Section(L("settings.section.insights")) {
+                Picker(L("settings.insights.titlestyle"), selection: $model.sidebarTitleStyle) {
+                    ForEach(SidebarTitleStyle.allCases) { style in
+                        Text(L(style.labelKey)).tag(style)
+                    }
+                }
+                Text(L("settings.insights.hint"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section(L("settings.section.folderwatch")) {
                 Toggle(L("settings.folderwatch.toggle"), isOn: $model.watchEnabled)
                 LabeledContent(L("settings.folderwatch.folder")) {

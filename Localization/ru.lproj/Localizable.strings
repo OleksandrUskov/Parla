@@ -107,6 +107,13 @@
 "settings.section.behavior"     = "Поведение";
 "settings.behavior.autocopy"    = "Копировать результат в буфер автоматически";
 "settings.behavior.timestamps"  = "Показывать таймкоды";
+"settings.section.insights"     = "Заголовки";
+"settings.insights.titlestyle"  = "Заголовок в списке";
+"settings.insights.titlestyle.sentence" = "Ключевое предложение";
+"settings.insights.titlestyle.keywords" = "Ключевые слова";
+"settings.insights.titlestyle.filename" = "Имя файла";
+"settings.insights.hint"        = "Как транскрипты подписаны в списке — генерируется на устройстве из текста, без облака.";
+"transcript.summary"            = "Краткое содержание";
 "settings.section.folderwatch"  = "Слежение за папкой";
 "settings.folderwatch.toggle"   = "Следить за папкой";
 "settings.folderwatch.folder"   = "Папка";

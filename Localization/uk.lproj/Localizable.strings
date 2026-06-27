@@ -107,6 +107,13 @@
 "settings.section.behavior"     = "Поведінка";
 "settings.behavior.autocopy"    = "Копіювати результат у буфер автоматично";
 "settings.behavior.timestamps"  = "Показувати таймкоди";
+"settings.section.insights"     = "Заголовки";
+"settings.insights.titlestyle"  = "Заголовок у списку";
+"settings.insights.titlestyle.sentence" = "Ключове речення";
+"settings.insights.titlestyle.keywords" = "Ключові слова";
+"settings.insights.titlestyle.filename" = "Ім'я файлу";
+"settings.insights.hint"        = "Як транскрипти підписані у списку — генерується на пристрої з тексту, без хмари.";
+"transcript.summary"            = "Короткий зміст";
 "settings.section.folderwatch"  = "Стеження за папкою";
 "settings.folderwatch.toggle"   = "Стежити за папкою";
 "settings.folderwatch.folder"   = "Папка";

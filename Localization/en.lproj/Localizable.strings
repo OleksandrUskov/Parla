@@ -107,6 +107,13 @@
 "settings.section.behavior"     = "Behavior";
 "settings.behavior.autocopy"    = "Copy the result to the clipboard automatically";
 "settings.behavior.timestamps"  = "Show timestamps";
+"settings.section.insights"     = "Titles";
+"settings.insights.titlestyle"  = "Sidebar title";
+"settings.insights.titlestyle.sentence" = "Key sentence";
+"settings.insights.titlestyle.keywords" = "Keywords";
+"settings.insights.titlestyle.filename" = "File name";
+"settings.insights.hint"        = "How transcripts are labelled in the list — generated on-device from the text, no cloud.";
+"transcript.summary"            = "Summary";
 "settings.section.folderwatch"  = "Folder watch";
 "settings.folderwatch.toggle"   = "Watch a folder";
 "settings.folderwatch.folder"   = "Folder";

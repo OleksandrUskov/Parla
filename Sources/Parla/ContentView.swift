@@ -68,7 +68,7 @@ struct SidebarView: View {
                 ScrollView {
                     LazyVStack(spacing: 6) {
                         ForEach(model.filteredHistory) { item in
-                            SidebarRow(item: item, selected: model.selection == item.id)
+                            SidebarRow(item: item, title: model.sidebarTitle(for: item), selected: model.selection == item.id)
                                 .onTapGesture { model.selection = item.id }
                                 .contextMenu {
                                     Button(L("common.copy")) { model.copyItem(item) }
@@ -91,11 +91,12 @@ struct SidebarView: View {
 
 struct SidebarRow: View {
     let item: TranscriptItem
+    let title: String
     let selected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(item.sourceName).font(.callout.weight(.medium)).lineLimit(1)
+            Text(title).font(.callout.weight(.medium)).lineLimit(1)
             Text(item.text).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             Text(item.date.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption2).foregroundStyle(.tertiary)

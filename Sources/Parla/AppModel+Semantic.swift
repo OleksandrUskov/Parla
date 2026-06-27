@@ -3,6 +3,19 @@ import Foundation
 // MARK: - Semantic index orchestration (Local-AI Layer P1c/P1d)
 
 extension AppModel {
+    /// The sidebar label for an item, per the chosen style: the extractive key sentence (persisted
+    /// `title`, falling back to sourceName), a live keyword phrase (falling back to the sentence/name),
+    /// or the raw file name. Keyword extraction is cheap and lazy (computed per visible row).
+    func sidebarTitle(for item: TranscriptItem) -> String {
+        switch sidebarTitleStyle {
+        case .filename: return item.sourceName
+        case .sentence: return item.displayTitle
+        case .keywords:
+            let phrase = keywordPhrase(from: item.text)
+            return phrase.isEmpty ? item.displayTitle : phrase
+        }
+    }
+
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight
     /// — a change that arrives mid-run schedules exactly one more pass after (so the new item is picked up
     /// without overlapping writes to history.json / embeddings.json). Safe to call from launch and after
