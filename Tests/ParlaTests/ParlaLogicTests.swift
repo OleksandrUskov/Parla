@@ -1102,6 +1102,33 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// RU/UK enrich (MLX backend) tags with the MLX provenance, NOT foundation — so a prompt/model bump
+    /// reprocesses only MLX records and the two backends never collide. (Language determines the backend:
+    /// FoundationModels + MLX cover disjoint sets.)
+    @MainActor func testEnrichTagsRussianWithMLXProvenance() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "Планы", summary: "Обсудили дорожную карту.", actions: [ActionItem(text: "позвонить Бобу")])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "обсудили дорожную карту, надо позвонить Бобу", lang: "ru")]
+            await m.enrichInsights()
+            XCTAssertEqual(m.history.first?.title, "Планы")
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.mlxModelTag)
+            XCTAssertNotEqual(m.history.first?.aiModel, AppModel.foundationModelTag)
+        }
+    }
+
+    /// The extractive pass must not clobber MLX-generated insights (mirror of the foundation skip test).
+    @MainActor func testBackfillInsightsSkipsMLXGenerativeItems() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(), embedder: FakeEmbedder())
+            m.history = [self.makeItem(text: "обсудили план", lang: "ru")]
+            if let i = m.history.indices.first { m.history[i].title = "Ген"; m.history[i].aiModel = AppModel.mlxModelTag }
+            await m.backfillInsights()
+            XCTAssertEqual(m.history.first?.title, "Ген")                    // extractive must NOT clobber MLX output
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.mlxModelTag)
+        }
+    }
+
     @MainActor func testEnrichAIFailureKeepsExtractiveFallback() async {
         await withTemporaryHistoryStoreAsync {
             // ai.insights throws for every item → best-effort: extractive fallback stays, nothing tagged generative.

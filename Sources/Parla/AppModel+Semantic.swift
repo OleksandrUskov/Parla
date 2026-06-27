@@ -144,13 +144,13 @@ extension AppModel {
     /// across the awaits). A user-edited title is never overwritten; assets-missing items are left unmarked
     /// so they retry on a later pass.
     func backfillInsights() async {
-        // Skip items already at the extractive tag AND items the generative pass owns (foundationModelTag) — so
+        // Skip items already at the extractive tag AND items a generative pass owns (foundation OR mlx) — so
         // extractive never clobbers a model-generated insight on a later pass.
-        let targets = history.filter { $0.aiModel != Self.extractiveModelTag && $0.aiModel != Self.foundationModelTag }
+        let targets = history.filter { $0.aiModel != Self.extractiveModelTag && !Self.isGenerativeTag($0.aiModel) }
         // Generative items whose extractive keywords never landed (e.g. the embedder's assets were still
         // downloading when they were first processed) — top up keywords ONLY, without disturbing the
-        // generative title/summary, so they're not stranded keyword-less forever behind the foundation tag.
-        let keywordTopUp = history.filter { $0.aiModel == Self.foundationModelTag && ($0.keywords?.isEmpty ?? true) }
+        // generative title/summary, so they're not stranded keyword-less forever behind a generative tag.
+        let keywordTopUp = history.filter { Self.isGenerativeTag($0.aiModel) && ($0.keywords?.isEmpty ?? true) }
         guard !targets.isEmpty || !keywordTopUp.isEmpty else { return }
         var changed = false
         for item in targets {
@@ -165,7 +165,7 @@ extension AppModel {
         for item in keywordTopUp {
             let kws = await rankedKeywords(for: item)
             guard !kws.isEmpty, let idx = history.firstIndex(where: { $0.id == item.id }),
-                  history[idx].aiModel == Self.foundationModelTag else { continue }   // re-validate after the await
+                  Self.isGenerativeTag(history[idx].aiModel) else { continue }   // re-validate after the await
             history[idx].keywords = kws
             changed = true
         }
@@ -181,14 +181,29 @@ extension AppModel {
     /// extractive pass never clobbers them and the generative pass doesn't reprocess. Bump on prompt/schema change.
     static var foundationModelTag: String { "foundation-v1" }
 
-    /// Generative UPGRADE for transcripts whose LANGUAGE has an on-device generative backend (FoundationModels:
-    /// English + a few, macOS 26): replace the extractive title/summary with model output and add real action
-    /// items. Language-gated by `ai.availability` (RU/UK aren't `.ready` here → keep extractive until P3).
-    /// Best-effort: any failure leaves the extractive fallback. A hand-edited title is preserved. Tagged
-    /// `foundationModelTag`. TOCTOU-safe: re-finds the item after the await and skips it if the text changed.
+    /// Provenance tag for MLX (Qwen3) generative insights — the RU/UK backend (P3). Distinct from foundation so a
+    /// prompt/model change reprocesses only MLX records, and extractive never clobbers them. Bump on prompt/model change.
+    static var mlxModelTag: String { "mlx-qwen3-v1" }
+
+    /// True for any GENERATIVE provenance (FoundationModels or MLX): these own title/summary/actions, so the
+    /// extractive pass must not clobber them and enrich must not reprocess them.
+    static func isGenerativeTag(_ tag: String?) -> Bool { tag == foundationModelTag || tag == mlxModelTag }
+
+    /// Which generative backend owns a language. FoundationModels (English & co.) and MLX (RU/UK) cover DISJOINT
+    /// language sets, so the language alone determines the correct provenance tag for enrich output.
+    func generativeTag(forLanguage language: String) -> String {
+        FoundationModelsService.maySupport(language: language) ? Self.foundationModelTag : Self.mlxModelTag
+    }
+
+    /// Generative UPGRADE for transcripts whose LANGUAGE has an on-device generative backend: FoundationModels
+    /// (English & co., macOS 26) OR MLX/Qwen3 (RU/UK, opt-in download — P3). Replaces the extractive title/summary
+    /// with model output and adds real action items. Language-gated by `ai.availability` (RU/UK only reach `.ready`
+    /// once the MLX model is downloaded). Best-effort: any failure leaves the extractive fallback. A hand-edited
+    /// title is preserved. Tagged per backend (`generativeTag(forLanguage:)`). TOCTOU-safe: re-finds the item after
+    /// the await and skips it if the text changed.
     func enrichInsights() async {
         let targets = history.filter {
-            $0.aiModel != Self.foundationModelTag
+            !Self.isGenerativeTag($0.aiModel)              // already generative (foundation OR mlx) → don't reprocess
             && !enrichFailedIDs.contains($0.id)            // a hard failure this session → don't hammer the slow model
             && Self.isEnrichable($0.text)                  // skip empty / silence placeholder → no fabricated insights
             && ai.availability(forLanguage: $0.language) == .ready
@@ -203,7 +218,7 @@ extension AppModel {
                 if history[idx].titleEdited != true, !result.title.isEmpty { history[idx].title = result.title }
                 if !result.summary.isEmpty { history[idx].summary = result.summary }
                 history[idx].actions = result.actions.isEmpty ? nil : result.actions
-                history[idx].aiModel = Self.foundationModelTag
+                history[idx].aiModel = generativeTag(forLanguage: item.language)   // en→foundation, ru/uk→mlx
                 changed = true
             } catch {
                 // Hard failure (refusal/guardrail/unavailable/…) → keep the extractive fallback AND record it so the
