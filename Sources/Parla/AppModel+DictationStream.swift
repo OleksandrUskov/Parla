@@ -68,12 +68,18 @@ extension AppModel {
             // Once a window comes back with a language, pin it for all later windows. (If the user set a
             // language explicitly, it's already pinned.)
             var lockedLang = lang
+            var lastExplicit = lang   // the user's explicit pick; re-pin if the language pill changes mid-dictation
             while !Task.isCancelled {
                 try? await Task.sleep(for: AppModel.streamingInterval)
                 // Re-validate after every suspension: the recording may have stopped, or a NEW dictation may
                 // have replaced this recorder (then this loop is stale and must exit).
                 guard !Task.isCancelled, let self, let recorder,
                       recorder.isRecording, self.recorder === recorder else { break }
+
+                // If the user changed the language pill mid-dictation, re-pin to the new explicit choice
+                // (or back to auto-detect) so the live preview matches the language the saved decode will use.
+                let explicit = self.language.isEmpty ? nil : self.language
+                if explicit != lastExplicit { lockedLang = explicit; lastExplicit = explicit }
 
                 let cursorSample = Int(reconciler.confirmedSeconds * AppModel.streamSampleRate)
                 let from = AppModel.streamWindowStartSample(cursorSample: cursorSample,
