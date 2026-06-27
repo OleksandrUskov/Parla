@@ -20,6 +20,7 @@ extension AppModel {
         guard newTitle != history[idx].title else { return false }
         history[idx].title = newTitle
         history[idx].titleEdited = newTitle == nil ? nil : true   // empty → back to auto; else pinned
+        if newTitle == nil { history[idx].aiModel = nil }         // cleared → re-eligible for regeneration next pass
         HistoryStore.save(history)
         return true
     }
@@ -31,9 +32,10 @@ extension AppModel {
     }
 
     /// Debounced trigger for semantic search: re-runs ~300 ms after the query settles (embedding every
-    /// keystroke would be wasteful). Cancels the previous in-flight query. Call on `searchQuery` change.
+    /// keystroke would be wasteful). Clears stale results immediately + cancels the previous in-flight query.
     func scheduleRelatedSearch() {
         relatedSearchTask?.cancel()
+        relatedIDs = []   // drop stale Related at once so old rows don't linger for the debounce window
         relatedSearchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
             if Task.isCancelled { return }
@@ -41,21 +43,31 @@ extension AppModel {
         }
     }
 
-    /// Semantic search: embed the query and rank history items by cosine similarity to it, EXCLUDING items
-    /// already shown by the literal substring filter (so "Related" only adds new, meaning-based matches).
-    /// Best-effort: short query / no embeddings / no assets → clears the results. The query is embedded with
-    /// its detected language so it's comparable to same-script item vectors (cross-script matches stay low).
+    /// Semantic search: rank history items by meaning-similarity to the query, EXCLUDING literal substring
+    /// hits (so "Related" only adds new matches). Best-effort: short query / no embeddings / no assets → none.
+    /// Robust to NLContextualEmbedding's anisotropy: only compares within the query's SCRIPT (Cyrillic vs
+    /// Latin = different vector spaces), MEAN-CENTERS the vectors to open the cosine range, and keeps only the
+    /// cluster genuinely near the top (relative gate) — instead of an absolute threshold that never discriminated.
     func refreshRelated() async {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count > 2 else { relatedIDs = []; return }
         let literal = Set(filterHistory(history, query: searchQuery).map(\.id))
         let store = EmbeddingStore.load()
-        let pool = history.filter { !literal.contains($0.id) && store[$0.id] != nil }
-        guard !pool.isEmpty, let queryVector = await embedder.embed(query, language: detectLanguage(query))
-        else { relatedIDs = []; return }
-        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }   // query moved on
-        let ranked = SemanticIndex.topK(queryVector, in: pool.map { store[$0.id]! }, k: 5, minScore: 0.40)
-        relatedIDs = ranked.map { pool[$0.index].id }
+        let script = dominantScript(query)
+        // Same-script items only — cross-script vectors live in a different space, so cosine is meaningless.
+        let pool = history.filter { !literal.contains($0.id) && store[$0.id] != nil && dominantScript($0.text) == script }
+        let embedLanguage = script == "cyrillic" ? "ru" : "en"
+        guard !pool.isEmpty, let rawQuery = await embedder.embed(query, language: embedLanguage) else { relatedIDs = []; return }
+        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }   // query moved on → never write
+        let rawVectors = pool.map { store[$0.id]! }
+        guard let mean = SemanticIndex.centroid(rawVectors + [rawQuery]) else { relatedIDs = []; return }
+        let q = SemanticIndex.centered(rawQuery, by: mean)
+        let scored = rawVectors.enumerated()
+            .map { (index: $0.offset, score: SemanticIndex.cosine(q, SemanticIndex.centered($0.element, by: mean))) }
+            .sorted { $0.score > $1.score }
+        guard let top = scored.first?.score, top > 0 else { relatedIDs = []; return }
+        // Keep the cluster near the top (relative gate) — empty when nothing is genuinely close, never pads to 5.
+        relatedIDs = scored.filter { $0.score >= Swift.max(0.05, 0.55 * top) }.prefix(5).map { pool[$0.index].id }
     }
 
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight
@@ -105,21 +117,26 @@ extension AppModel {
     /// retried on a later pass. The compute lives in the embedder actor (off the main actor).
     func backfillEmbeddings() async {
         var store = EmbeddingStore.load()
-        let missing = history.filter { store[$0.id] == nil }
-        guard !missing.isEmpty else { return }
-        for item in missing {
+        let live = Set(history.map(\.id))
+        var changed = false
+        // Reclaim orphan vectors (deleted items, or ones re-created for an item deleted mid-embed).
+        let pruned = store.filter { live.contains($0.key) }
+        if pruned.count != store.count { store = pruned; changed = true }
+        for item in history where store[item.id] == nil {
             if let vector = await embedder.embed(embedText(for: item), language: item.language) {
-                store[item.id] = vector
+                store[item.id] = vector; changed = true   // only persist when a vector was actually added/removed
             }
         }
-        EmbeddingStore.save(store)
+        if changed { EmbeddingStore.save(store) }
     }
 
     /// Extractive (title, summary?, keywords) for an item via per-sentence embeddings, or nil if it can't
     /// be embedded (assets missing → bail early). Summary only when the note is long enough to be worth
     /// condensing; a one/two-sentence voice message gets a title but no summary.
     func extractiveInsights(for item: TranscriptItem) async -> (title: String, summary: String?, keywords: [String])? {
-        let sents = sentences(in: item.text)
+        // Cap the extractive pass: the similarity matrix is O(n²) and the per-sentence embeds add up, so a
+        // very long / chunked transcript would otherwise stall. The lead ~120 sentences carry the gist.
+        let sents = Array(sentences(in: item.text).prefix(120))
         guard !sents.isEmpty else { return nil }
         var vectors: [Embedding] = []
         vectors.reserveCapacity(sents.count)

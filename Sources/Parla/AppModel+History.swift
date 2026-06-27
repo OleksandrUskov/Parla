@@ -38,6 +38,7 @@ extension AppModel {
 
     func delete(_ item: TranscriptItem) {
         AudioStore.remove(item)                 // drop the audio copy along with the entry
+        EmbeddingStore.remove([item.id])        // …and its semantic vector (no orphan in embeddings.json)
         history.removeAll { $0.id == item.id }
         if selection == item.id { selection = nil }
         HistoryStore.save(history)
@@ -45,6 +46,7 @@ extension AppModel {
 
     func clearHistory() {
         history.forEach(AudioStore.remove)
+        EmbeddingStore.pruneOrphans(keeping: [])   // wipe all vectors along with the history
         history.removeAll()
         selection = nil
         HistoryStore.save(history)

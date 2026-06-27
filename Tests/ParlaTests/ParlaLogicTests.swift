@@ -807,6 +807,32 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    func testCentroidAndCentered() {
+        XCTAssertEqual(SemanticIndex.centroid([[2, 0], [0, 4]]), [1, 2])
+        XCTAssertNil(SemanticIndex.centroid([]))
+        XCTAssertEqual(SemanticIndex.centered([3, 5], by: [1, 2]), [2, 3])
+        XCTAssertEqual(SemanticIndex.centered([1, 2], by: [9]), [1, 2])   // dim mismatch → unchanged
+    }
+
+    func testDominantScript() {
+        XCTAssertEqual(dominantScript("криптобиржа"), "cyrillic")
+        XCTAssertEqual(dominantScript("deadline review"), "latin")
+        XCTAssertEqual(dominantScript("проект"), "cyrillic")            // recognizer mislabels this; the script doesn't
+        XCTAssertEqual(dominantScript("123 ?!"), "other")
+    }
+
+    @MainActor func testEmbeddingStoreRemoveAndPrune() {
+        withTemporaryHistoryStore {
+            let a = UUID(), b = UUID(), c = UUID()
+            EmbeddingStore.save([a: [1], b: [2], c: [3]])
+            EmbeddingStore.remove([b])
+            XCTAssertNil(EmbeddingStore.load()[b])
+            XCTAssertEqual(EmbeddingStore.load().count, 2)
+            EmbeddingStore.pruneOrphans(keeping: [a])   // drop everything not in {a}
+            XCTAssertEqual(Set(EmbeddingStore.load().keys), [a])
+        }
+    }
+
     @MainActor func testRefreshRelatedRanksBySemanticSimilarity() async {
         await withTemporaryHistoryStoreAsync {
             let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [1, 0, 0]))

@@ -33,6 +33,22 @@ enum EmbeddingStore {
         guard let data = try? JSONEncoder().encode(raw) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
+
+    /// Drop vectors for the given ids (on delete/clear), mirroring `AudioStore.remove`. No-op if none present.
+    static func remove(_ ids: Set<UUID>) {
+        var map = load()
+        let before = map.count
+        for id in ids { map[id] = nil }
+        if map.count != before { save(map) }
+    }
+
+    /// Drop vectors not referenced by any live item (mirrors `AudioStore.pruneOrphans`) — reclaims orphans
+    /// from deletes and neutralizes a vector re-created for an item deleted mid-embed. Saves only on change.
+    static func pruneOrphans(keeping live: Set<UUID>) {
+        let map = load()
+        let kept = map.filter { live.contains($0.key) }
+        if kept.count != map.count { save(kept) }
+    }
 }
 
 /// Text to embed for an item: the transcript body prefix (caps cost on long notes), prefixed with the
@@ -158,6 +174,24 @@ enum SemanticIndex {
             remaining.removeAll { $0 == best }
         }
         return selected
+    }
+
+    /// The centroid (mean) of a set of vectors, or nil if empty / dim-0. Used to mean-center embeddings
+    /// before cosine — the standard fix for NLContextualEmbedding's anisotropy (raw same-script cosines all
+    /// cluster ~0.6–0.96, so an absolute threshold can't discriminate; centering opens the dynamic range).
+    static func centroid(_ vectors: [Embedding]) -> Embedding? {
+        guard let dim = vectors.first?.count, dim > 0 else { return nil }
+        var sum = [Double](repeating: 0, count: dim)
+        var n = 0
+        for v in vectors where v.count == dim { for i in 0..<dim { sum[i] += v[i] }; n += 1 }
+        guard n > 0 else { return nil }
+        return sum.map { $0 / Double(n) }
+    }
+
+    /// Element-wise `a − b` (mean-centering). Returns `a` unchanged on a dim mismatch.
+    static func centered(_ a: Embedding, by mean: Embedding) -> Embedding {
+        guard a.count == mean.count else { return a }
+        return zip(a, mean).map(-)
     }
 
     /// Mean-pool per-token vectors into one document vector (the standard way to turn `NLContextualEmbedding`'s

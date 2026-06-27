@@ -7,12 +7,18 @@ import NaturalLanguage
 // contextual-embedding model). The output QUALITY varies by language (best for RU/EN; UK is thinner),
 // so the keyword-phrase title is user-evaluated live against the central-sentence style.
 
-/// Best-guess BCP-47 language of a short string (NLLanguageRecognizer), e.g. a search query → "ru"/"en".
-/// "" if undetermined. Used to embed a query with a model comparable to the items it searches.
-func detectLanguage(_ text: String) -> String {
-    let recognizer = NLLanguageRecognizer()
-    recognizer.processString(text)
-    return recognizer.dominantLanguage?.rawValue ?? ""
+/// Dominant writing script of a string: "cyrillic" (RU/UK/…) vs "latin" (EN/…) vs "other". Counts letters
+/// directly — far more reliable on SHORT search queries than NLLanguageRecognizer (which mislabels e.g.
+/// "проект"→Bulgarian). NLContextualEmbedding is script-based, so this is what actually decides which model
+/// (and thus which vector space) a query is embedded in — RU and UK both map to the Cyrillic space.
+func dominantScript(_ text: String) -> String {
+    var cyrillic = 0, latin = 0
+    for scalar in text.unicodeScalars {
+        if (0x0400...0x04FF).contains(scalar.value) { cyrillic += 1 }
+        else if (0x41...0x5A).contains(scalar.value) || (0x61...0x7A).contains(scalar.value) { latin += 1 }
+    }
+    if cyrillic == 0 && latin == 0 { return "other" }
+    return cyrillic >= latin ? "cyrillic" : "latin"
 }
 
 /// Split text into sentences (NLTokenizer). Empty/blank → []. Each sentence trimmed; blanks dropped.
