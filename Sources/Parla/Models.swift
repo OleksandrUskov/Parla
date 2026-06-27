@@ -68,6 +68,7 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var actions: [ActionItem]? = nil  // [ActionItem]?, NOT [ActionItem] — absent key → nil, not a masking []
     var aiModel: String?       = nil  // which backend/model produced the insights (provenance / regeneration)
     var titleEdited: Bool?     = nil  // user renamed the title by hand → never overwrite it on regeneration
+    var keywords: [String]?    = nil  // embedding-ranked topic tags (KeyBERT-style); nil = none/legacy
 
     /// Convenience accessor: nil/false → not edited.
     var isEdited: Bool { edited == true }

@@ -40,23 +40,30 @@ extension AppModel {
         } while semanticRefreshPending
     }
 
-    /// Compute + persist an extractive title (most-central sentence) + summary for history items that
-    /// don't have a title yet (all embeddable languages). Best-effort + patches by id (history may shift
-    /// across the awaits). The keyword-phrase title style is derived live at display, not stored here.
+    /// Compute + persist extractive insights (title, summary, embedding-ranked keywords) for items not yet
+    /// processed by the current pipeline (`aiModel != extractiveModelTag`) — covers new items and upgrades
+    /// pre-keyword records once. All embeddable languages, best-effort, patched by id (history may shift
+    /// across the awaits). A user-edited title is never overwritten; assets-missing items are left unmarked
+    /// so they retry on a later pass.
     func backfillInsights() async {
-        let targets = history.filter { $0.title == nil }
+        let targets = history.filter { $0.aiModel != Self.extractiveModelTag }
         guard !targets.isEmpty else { return }
         var changed = false
         for item in targets {
             guard let result = await extractiveInsights(for: item),
                   let idx = history.firstIndex(where: { $0.id == item.id }) else { continue }
-            history[idx].title = result.title
-            history[idx].summary = result.summary
-            history[idx].aiModel = "extractive"
+            if history[idx].title == nil, history[idx].titleEdited != true { history[idx].title = result.title }
+            if let summary = result.summary { history[idx].summary = summary }
+            if !result.keywords.isEmpty { history[idx].keywords = result.keywords }
+            history[idx].aiModel = Self.extractiveModelTag
             changed = true
         }
         if changed { HistoryStore.save(history) }
     }
+
+    /// Provenance tag for the current extractive pipeline; bumped when the pipeline gains a capability so
+    /// older records reprocess once (v2 = adds embedding-ranked keywords).
+    static var extractiveModelTag: String { "extractive-v2" }
 
     /// Backfill search embeddings for items missing a vector, then persist. Best-effort: an item the
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
@@ -73,10 +80,10 @@ extension AppModel {
         EmbeddingStore.save(store)
     }
 
-    /// Extractive (title, summary?) for an item via per-sentence embeddings, or nil if it can't be
-    /// embedded (assets missing → bail early). Summary only when the note is long enough to be worth
+    /// Extractive (title, summary?, keywords) for an item via per-sentence embeddings, or nil if it can't
+    /// be embedded (assets missing → bail early). Summary only when the note is long enough to be worth
     /// condensing; a one/two-sentence voice message gets a title but no summary.
-    func extractiveInsights(for item: TranscriptItem) async -> (title: String, summary: String?)? {
+    func extractiveInsights(for item: TranscriptItem) async -> (title: String, summary: String?, keywords: [String])? {
         let sents = sentences(in: item.text)
         guard !sents.isEmpty else { return nil }
         var vectors: [Embedding] = []
@@ -88,6 +95,22 @@ extension AppModel {
         guard let selection = SemanticIndex.extractiveSelection(vectors, summaryCount: 3) else { return nil }
         let title = conciseTitle(from: sents[selection.title])
         let summary = sents.count > 4 ? selection.summary.map { sents[$0] }.joined(separator: " ") : nil
-        return (title, summary)
+        let keywords = await rankedKeywords(for: item, documentVector: SemanticIndex.meanPool(vectors))
+        return (title, summary, keywords)
+    }
+
+    /// KeyBERT-style keyword ranking: score candidate nouns by cosine similarity to the document vector
+    /// → on-topic terms win regardless of position (so intro filler stops dominating). Top 4. Best-effort:
+    /// a candidate that can't be embedded is skipped; nil doc vector → no keywords.
+    private func rankedKeywords(for item: TranscriptItem, documentVector: Embedding?) async -> [String] {
+        guard let document = documentVector else { return [] }
+        let candidates = keywordCandidates(from: item.text, language: item.language, max: 16)
+        guard !candidates.isEmpty else { return [] }
+        var scored: [(term: String, score: Double)] = []
+        for candidate in candidates {
+            guard let vector = await embedder.embed(candidate, language: item.language) else { continue }
+            scored.append((candidate, SemanticIndex.cosine(vector, document)))
+        }
+        return scored.sorted { $0.score > $1.score }.prefix(4).map(\.term)
     }
 }

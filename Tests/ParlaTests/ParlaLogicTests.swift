@@ -600,7 +600,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(items.count, 1)
         let it = try XCTUnwrap(items.first)
         XCTAssertNil(it.title); XCTAssertNil(it.summary); XCTAssertNil(it.actions)
-        XCTAssertNil(it.aiModel); XCTAssertNil(it.titleEdited)
+        XCTAssertNil(it.aiModel); XCTAssertNil(it.titleEdited); XCTAssertNil(it.keywords)
         XCTAssertEqual(it.displayTitle, "msg123.ogg")   // nil title → sourceName
     }
 
@@ -612,6 +612,7 @@ final class ParlaLogicTests: XCTestCase {
         item.actions = [ActionItem(text: "написать Олегу", done: true),
                         ActionItem(text: "запушить ветку", done: false)]
         item.aiModel = "foundationmodels"
+        item.keywords = ["релиз", "сроки"]
         let back = try JSONDecoder().decode([TranscriptItem].self, from: JSONEncoder().encode([item]))
         let r = try XCTUnwrap(back.first)
         XCTAssertEqual(r.title, "Звонок с командой")
@@ -620,6 +621,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(r.actions?.first, ActionItem(text: "написать Олегу", done: true))
         XCTAssertEqual(r.actions?.last?.done, false)
         XCTAssertEqual(r.aiModel, "foundationmodels")
+        XCTAssertEqual(r.keywords, ["релиз", "сроки"])
         XCTAssertEqual(r.displayTitle, "Звонок с командой")
     }
 
@@ -849,13 +851,13 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(s.first, "Привет мир.")
     }
 
-    func testKeywordList() {
-        XCTAssertTrue(keywordList(from: "   ", language: "ru").isEmpty)
-        let kw = keywordList(from: "Купить молоко и хлеб в магазине у дома", language: "ru", max: 2)
+    func testKeywordCandidates() {
+        XCTAssertTrue(keywordCandidates(from: "   ", language: "ru").isEmpty)
+        let kw = keywordCandidates(from: "Купить молоко и хлеб в магазине у дома", language: "ru", max: 2)
         XCTAssertFalse(kw.isEmpty)                  // pulls some nouns out
         XCTAssertLessThanOrEqual(kw.count, 2)       // respects max
-        // Stopwords are never keywords, even if the tagger mislabels them (the casual-speech failure mode).
-        let kw2 = keywordList(from: "Если честно это вообще ерунда какая-то", language: "ru", max: 4)
+        // Stopwords are never candidates, even if the tagger mislabels them (the casual-speech failure mode).
+        let kw2 = keywordCandidates(from: "Если честно это вообще ерунда какая-то", language: "ru", max: 8)
         XCTAssertFalse(kw2.contains { ["если", "это", "вообще"].contains($0.lowercased()) })
     }
 
@@ -868,8 +870,9 @@ final class ParlaLogicTests: XCTestCase {
             await m.backfillInsights()
             let lt = m.history.first { $0.id == long.id }
             XCTAssertEqual(lt?.title, "Первое предложение тут.")   // central sentence (constant vectors → first)
-            XCTAssertEqual(lt?.aiModel, "extractive")
+            XCTAssertEqual(lt?.aiModel, "extractive-v2")
             XCTAssertNotNil(lt?.summary)                           // 5 sentences > 4 → summary present
+            XCTAssertNotNil(lt?.keywords)                          // embedding-ranked tags populated
             let st = m.history.first { $0.id == short.id }
             XCTAssertNotNil(st?.title)                             // single sentence still gets a title
             XCTAssertNil(st?.summary)                              // too short to summarize

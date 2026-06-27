@@ -34,11 +34,11 @@ private let keywordStopwords: Set<String> = [
     "this", "that", "these", "those", "thing", "stuff", "kind", "lot", "way", "okay", "yeah", "bit",
 ]
 
-/// Keyword tags: the most frequent content nouns, lemmatized, top `max`, best first. Lexical only
-/// (NLTagger) — no embeddings, no assets. Passing `language` fixes POS tagging on casual speech (so
-/// adverbs/verbs/conjunctions aren't mistaken for nouns), and the lemma merges inflections
-/// («биржу»/«бирж» → «биржа») so a repeated topic actually wins on frequency. [] when nothing salient.
-func keywordList(from text: String, language: String = "", max: Int = 4) -> [String] {
+/// Candidate keyword nouns for embedding-ranking: lemmatized, deduped, frequency-ordered, up to `max`.
+/// Lexical only (NLTagger, no assets) — this is just the CANDIDATE pool; the on-topic winners are then
+/// picked by cosine to the document vector (KeyBERT-style) in `AppModel.extractiveInsights`. Passing
+/// `language` fixes POS tagging on casual speech; the lemma merges inflections («биржу»/«бирж» → «биржа»).
+func keywordCandidates(from text: String, language: String = "", max: Int = 16) -> [String] {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return [] }
     let range = trimmed.startIndex..<trimmed.endIndex

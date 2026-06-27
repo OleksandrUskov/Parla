@@ -508,22 +508,19 @@ struct TranscriptCard: View {
     /// AI insight fields under the header: keyword tags + a summary block, each shown only when its
     /// toggle is on AND there's something to show (so the card stays clean for short notes / disabled fields).
     @ViewBuilder private var insights: some View {
-        if model.showKeywords {
-            let keywords = keywordList(from: item.text, language: item.language)
-            if !keywords.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "tag").font(.caption2).foregroundStyle(.secondary)
-                    ForEach(keywords, id: \.self) { keyword in
-                        Text(keyword)
-                            .font(.caption.weight(.medium))
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(Brand.accent.opacity(0.15), in: Capsule())
-                            .foregroundStyle(Brand.accent)
-                    }
-                    Spacer(minLength: 0)
+        if model.showKeywords, let keywords = item.keywords, !keywords.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "tag").font(.caption2).foregroundStyle(.secondary)
+                ForEach(keywords, id: \.self) { keyword in
+                    Text(keyword)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Brand.accent.opacity(0.15), in: Capsule())
+                        .foregroundStyle(Brand.accent)
                 }
-                .accessibilityLabel(Text(L("transcript.keywords")))
+                Spacer(minLength: 0)
             }
+            .accessibilityLabel(Text(L("transcript.keywords")))
         }
         // Collapsible so it never crowds out the timestamped transcript (which stays the primary content);
         // collapsed by default → click the header to reveal the TL;DR.
