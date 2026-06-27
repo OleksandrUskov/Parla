@@ -62,8 +62,9 @@ extension AppModel {
     }
 
     /// Provenance tag for the current extractive pipeline; bumped when the pipeline gains a capability so
-    /// older records reprocess once (v2 = embedding-ranked keywords; v3 = morphology filter + dynamic count + MMR).
-    static var extractiveModelTag: String { "extractive-v3" }
+    /// older records reprocess once (v2 = embedding-ranked keywords; v3 = morphology filter + dynamic count
+    /// + MMR; v4 = in-context candidate vectors).
+    static var extractiveModelTag: String { "extractive-v4" }
 
     /// Backfill search embeddings for items missing a vector, then persist. Best-effort: an item the
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
@@ -95,22 +96,27 @@ extension AppModel {
         guard let selection = SemanticIndex.extractiveSelection(vectors, summaryCount: 3) else { return nil }
         let title = conciseTitle(from: sents[selection.title])
         let summary = sents.count > 4 ? selection.summary.map { sents[$0] }.joined(separator: " ") : nil
-        let keywords = await rankedKeywords(for: item, documentVector: SemanticIndex.meanPool(vectors))
+        let keywords = await rankedKeywords(for: item)
         return (title, summary, keywords)
     }
 
-    /// KeyBERT-style keyword ranking: score morphology-filtered candidates by cosine similarity to the
-    /// document vector (on-topic terms win regardless of position), choose HOW MANY dynamically (relevance
-    /// floor + relative-to-top band + elbow + length cap — so a low-signal note returns few or zero), then
-    /// MMR-select for diversity. Best-effort: an un-embeddable candidate is skipped; nil doc vector → none.
-    private func rankedKeywords(for item: TranscriptItem, documentVector: Embedding?) async -> [String] {
-        guard let document = documentVector else { return [] }
-        let candidates = keywordCandidates(from: item.text, language: item.language, max: 16)
+    /// KeyBERT-style keyword ranking, IN CONTEXT: embed the note ONCE (per-token vectors), pool each
+    /// candidate's vector from the token vectors at its actual occurrences (so a word's meaning reflects how
+    /// it was used, not a generic out-of-context embedding), score by cosine to the document vector, choose
+    /// HOW MANY dynamically (relevance floor + relative-to-top band + elbow + length cap → few or zero when
+    /// weak), then MMR-select for diversity. Best-effort: nil/empty at any step → no keywords.
+    private func rankedKeywords(for item: TranscriptItem) async -> [String] {
+        let source = String(item.text.prefix(1200)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty,
+              let tokens = await embedder.tokenVectors(source, language: item.language), !tokens.isEmpty,
+              let document = SemanticIndex.meanPool(tokens.map(\.vector)) else { return [] }
+        let candidates = keywordCandidatesWithRanges(from: source, language: item.language, max: 16)
         guard !candidates.isEmpty else { return [] }
         var terms: [String] = [], vectors: [Embedding] = [], scores: [Double] = []
         for candidate in candidates {
-            guard let vector = await embedder.embed(candidate, language: item.language) else { continue }
-            terms.append(candidate); vectors.append(vector); scores.append(SemanticIndex.cosine(vector, document))
+            let pooled = tokens.filter { token in candidate.ranges.contains { token.range.overlaps($0) } }.map(\.vector)
+            guard let vector = SemanticIndex.meanPool(pooled) else { continue }   // ranges didn't line up → skip
+            terms.append(candidate.term); vectors.append(vector); scores.append(SemanticIndex.cosine(vector, document))
         }
         guard !scores.isEmpty else { return [] }
         let order = scores.indices.sorted { scores[$0] > scores[$1] }   // by relevance, descending

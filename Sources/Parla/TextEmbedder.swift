@@ -11,6 +11,12 @@ import NaturalLanguage
 protocol TextEmbedder: Sendable {
     /// One pooled vector for `text` in `language`, or nil if embedding isn't available. Never throws.
     func embed(_ text: String, language: String) async -> Embedding?
+
+    /// Per-token contextual vectors with their ranges, in ONE model pass — the raw material `embed`
+    /// mean-pools. Lets callers pool IN-CONTEXT vectors for sub-spans (e.g. keyword candidates) instead of
+    /// embedding bare words out of context. Ranges index `text` exactly (caller must pass clean text). nil
+    /// if embedding isn't available.
+    func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]?
 }
 
 /// Real `NLContextualEmbedding` backend (macOS 14+). The Cyrillic script-model covers RU + UK and English
@@ -22,19 +28,26 @@ actor NLEmbedder: TextEmbedder {
 
     func embed(_ text: String, language: String) async -> Embedding? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        guard let tokens = await tokenVectors(trimmed, language: language) else { return nil }
+        return SemanticIndex.meanPool(tokens.map(\.vector))
+    }
+
+    /// Per-token vectors over `text` AS GIVEN (no trimming → returned ranges index the caller's exact
+    /// string, so they can be intersected with NLTagger word ranges over the same string).
+    func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? {
+        guard !text.isEmpty else { return nil }
         let subtag = languagePrimarySubtag(language)
         let nlLanguage = NLLanguage(subtag.isEmpty ? "und" : subtag)
         guard let model = await loadedModel(subtag: subtag, language: nlLanguage),
-              let result = try? model.embeddingResult(for: trimmed, language: nlLanguage)
+              let result = try? model.embeddingResult(for: text, language: nlLanguage)
         else { return nil }
 
-        var vectors: [[Double]] = []
-        result.enumerateTokenVectors(in: trimmed.startIndex..<trimmed.endIndex) { vector, _ in
-            vectors.append(vector)
+        var out: [(range: Range<String.Index>, vector: Embedding)] = []
+        result.enumerateTokenVectors(in: text.startIndex..<text.endIndex) { vector, range in
+            out.append((range, vector))
             return true
         }
-        return SemanticIndex.meanPool(vectors)
+        return out
     }
 
     /// Get-or-load the model for a language: create → ensure assets (request on demand) → load into memory.

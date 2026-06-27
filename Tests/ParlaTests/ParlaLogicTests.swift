@@ -912,7 +912,7 @@ final class ParlaLogicTests: XCTestCase {
             await m.backfillInsights()
             let lt = m.history.first { $0.id == long.id }
             XCTAssertEqual(lt?.title, "Первое предложение тут.")   // central sentence (constant vectors → first)
-            XCTAssertEqual(lt?.aiModel, "extractive-v3")
+            XCTAssertEqual(lt?.aiModel, "extractive-v4")
             XCTAssertNotNil(lt?.summary)                           // 5 sentences > 4 → summary present
             XCTAssertNotNil(lt?.keywords)                          // embedding-ranked tags populated
             let st = m.history.first { $0.id == short.id }
@@ -2701,4 +2701,8 @@ private final class FakeEmbedder: TextEmbedder, @unchecked Sendable {
     private(set) var calls = 0
     init(vector: Embedding? = [1, 0, 0]) { self.vector = vector }
     func embed(_ text: String, language: String) async -> Embedding? { calls += 1; return vector }
+    func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? {
+        guard let vector, !text.isEmpty else { return vector == nil ? nil : [] }
+        return [(text.startIndex..<text.endIndex, vector)]   // one token spanning the whole string
+    }
 }

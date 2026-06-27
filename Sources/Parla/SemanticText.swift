@@ -69,30 +69,45 @@ func looksLikeAdjectiveLemma(_ lemma: String) -> Bool {
 /// filter (above) does the precise verb/adjective removal instead.
 private let rejectedClasses: Set<NLTag> = [.verb, .particle, .conjunction, .preposition, .interjection, .determiner]
 
-/// Candidate keyword terms for embedding-ranking: lemmatized, morphology-filtered, deduped,
-/// frequency-ordered, up to `max`. Lexical only (NLTagger, no assets) — just the CANDIDATE pool; the
-/// on-topic winners are then picked by cosine to the document vector (KeyBERT-style) in
-/// `AppModel.rankedKeywords`. Passing `language` improves tagging; the lemma merges inflections
-/// («биржу»/«бирж» → «биржа»). Verbs/adjectives are dropped by morphology, not by the unreliable POS tag.
-func keywordCandidates(from text: String, language: String = "", max: Int = 16) -> [String] {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return [] }
-    let range = trimmed.startIndex..<trimmed.endIndex
+/// Candidate keyword terms with the document ranges where each occurs — lemmatized, morphology-filtered,
+/// deduped, frequency-ordered, up to `max`. Lexical only (NLTagger, no assets) — just the CANDIDATE pool;
+/// the on-topic winners are picked by cosine to the document vector (KeyBERT-style) in
+/// `AppModel.rankedKeywords`, which pools each candidate's IN-CONTEXT token vectors using these ranges.
+/// **Ranges index `text` as given** (caller passes the same clean string it embeds). Verbs/adjectives are
+/// dropped by morphology, not the unreliable POS tag; the lemma merges inflections («биржу»/«бирж» → «биржа»).
+func keywordCandidatesWithRanges(from text: String, language: String = "", max: Int = 16)
+    -> [(term: String, ranges: [Range<String.Index>])] {
+    guard !text.isEmpty else { return [] }
+    let range = text.startIndex..<text.endIndex
     let tagger = NLTagger(tagSchemes: [.lexicalClass, .lemma])
-    tagger.string = trimmed
+    tagger.string = text
     let subtag = languagePrimarySubtag(language)
     if !subtag.isEmpty { tagger.setLanguage(NLLanguage(subtag), range: range) }
-    var terms: [String] = []
+    var display: [String: String] = [:]              // key → first-seen display form
+    var ranges: [String: [Range<String.Index>]] = [:]
+    var freq: [String: Int] = [:]
+    var order: [String] = []
     let options: NLTagger.Options = [.omitWhitespace, .omitPunctuation, .omitOther]
     tagger.enumerateTags(in: range, unit: .word, scheme: .lexicalClass, options: options) { tag, tokenRange in
         if let tag, rejectedClasses.contains(tag) { return true }   // clear non-noun → skip
         let lemma = tagger.tag(at: tokenRange.lowerBound, unit: .word, scheme: .lemma).0?.rawValue
-        let word = (lemma?.isEmpty == false) ? lemma! : String(trimmed[tokenRange])
+        let word = (lemma?.isEmpty == false) ? lemma! : String(text[tokenRange])
         let key = word.lowercased()
         guard key.count > 2, !keywordStopwords.contains(key),
               !looksLikeVerbLemma(word), !looksLikeAdjectiveLemma(word) else { return true }
-        terms.append(word)
+        if freq[key] == nil { display[key] = word; order.append(key) }
+        freq[key, default: 0] += 1
+        ranges[key, default: []].append(tokenRange)
         return true
     }
-    return topTerms(terms, max: max)
+    let ranked = order.enumerated().sorted { a, b in
+        freq[a.element]! != freq[b.element]! ? freq[a.element]! > freq[b.element]! : a.offset < b.offset
+    }
+    return ranked.prefix(max).map { (term: display[$0.element]!, ranges: ranges[$0.element]!) }
+}
+
+/// Convenience: candidate terms only (no ranges). Used where context-pooling isn't needed.
+func keywordCandidates(from text: String, language: String = "", max: Int = 16) -> [String] {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return keywordCandidatesWithRanges(from: trimmed, language: language, max: max).map(\.term)
 }
