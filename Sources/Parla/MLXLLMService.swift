@@ -209,9 +209,11 @@ actor MLXEngine {
 // MARK: Service — the LocalLLMService seam (Backend B)
 
 struct MLXLLMService: LocalLLMService {
-    /// MLX covers the languages Backend A (FoundationModels) can't: Russian + Ukrainian. English stays Backend A's
-    /// job (keeps the per-OS floor semantics intact). Qwen3 is multilingual — this set can widen later if needed.
-    static let supportedLanguages: Set<String> = ["ru", "uk"]
+    /// MLX covers the languages Backend A (FoundationModels) can't: Russian + Ukrainian — PLUS English as a FALLBACK.
+    /// Qwen3 handles English fine, so when FoundationModels isn't usable for EN (Apple Intelligence off — notably when
+    /// the Mac's system language is Russian), MLX serves it. `DefaultAIService` always tries FoundationModels FIRST, so
+    /// an English Mac with Apple Intelligence still uses the free zero-download backend; MLX is consulted only as fallback.
+    static let supportedLanguages: Set<String> = ["ru", "uk", "en"]
 
     /// Chars fed to the model in one pass (mirror FoundationModels' budget). Long/chunked notes = P4 map-reduce.
     static let maxInputChars = 8000
@@ -251,7 +253,8 @@ struct MLXLLMService: LocalLLMService {
         guard !trimmed.isEmpty else { throw AIError.unavailable }   // nothing to summarize → don't fabricate
         let raw = try await MLXEngine.shared.generate(
             prompt: String(trimmed.prefix(Self.maxInputChars)), instructions: Self.instructions)
-        guard let parsed = Self.parseInsights(from: raw) else { throw AIError.unavailable }
+        guard var parsed = Self.parseInsights(from: raw) else { throw AIError.unavailable }
+        parsed.backend = .mlx   // provenance: this insight was produced by MLX/Qwen (matters for the EN fallback)
         return parsed
     }
 

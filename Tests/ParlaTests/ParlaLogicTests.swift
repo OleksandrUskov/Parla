@@ -800,16 +800,16 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
-    /// MLX covers the languages FoundationModels can't (ru/uk), not English; until the model is downloaded it
-    /// is dormant (.needsModelDownload), never .ready. Apple-Silicon-gated.
+    /// MLX covers ru/uk AND English-as-a-fallback (FoundationModels is tried first for EN); other languages it can't
+    /// (fr → .languageUnsupported). Until the model is downloaded it is dormant (.needsModelDownload), never .ready.
     func testMLXAvailabilityLanguageGating() {
         let mlx = MLXLLMService()
         #if arch(arm64)
         XCTAssertEqual(mlx.availability(forLanguage: "ru"), .needsModelDownload)
         XCTAssertEqual(mlx.availability(forLanguage: "uk"), .needsModelDownload)
         XCTAssertEqual(mlx.availability(forLanguage: "ru-RU"), .needsModelDownload)
-        XCTAssertEqual(mlx.availability(forLanguage: "en"), .languageUnsupported)   // English = Backend A's job
-        XCTAssertEqual(mlx.availability(forLanguage: "fr"), .languageUnsupported)
+        XCTAssertEqual(mlx.availability(forLanguage: "en"), .needsModelDownload)    // English = MLX fallback (P4)
+        XCTAssertEqual(mlx.availability(forLanguage: "fr"), .languageUnsupported)   // still not covered
         #else
         XCTAssertEqual(mlx.availability(forLanguage: "ru"), .noAppleSilicon)
         #endif
@@ -1234,6 +1234,47 @@ final class ParlaLogicTests: XCTestCase {
             XCTAssertEqual(m.history.first?.title, "Планы")
             XCTAssertEqual(m.history.first?.aiModel, AppModel.mlxModelTag)
             XCTAssertNotEqual(m.history.first?.aiModel, AppModel.foundationModelTag)
+        }
+    }
+
+    /// EN→MLX fallback: MLX now declares English among its supported languages, so an EN note can be served by the
+    /// downloaded model when FoundationModels isn't usable (Apple Intelligence off). Until downloaded, EN reaches the
+    /// actionable .needsModelDownload (not .languageUnsupported). DefaultAIService still tries FoundationModels FIRST.
+    func testMLXServesEnglishAsFallback() {
+        XCTAssertTrue(MLXLLMService.supportedLanguages.contains("en"))
+        XCTAssertEqual(MLXLLMService().availability(forLanguage: "en"), .needsModelDownload)
+    }
+
+    /// Provenance follows the ACTUAL backend the service reports: an EN note produced by the MLX fallback is tagged
+    /// `mlx`, by FoundationModels `foundation`; with no reported backend (test/extractive) it uses the language default.
+    @MainActor func testEnrichTagsByActualBackend() async {
+        await withTemporaryHistoryStoreAsync {
+            let mlxBack = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: AIInsights(title: "T", summary: "S", actions: [], backend: .mlx)), embedder: FakeEmbedder())
+            mlxBack.history = [self.makeItem(text: "english note", lang: "en")]
+            await mlxBack.enrichInsights()
+            XCTAssertEqual(mlxBack.history.first?.aiModel, AppModel.mlxModelTag)        // EN made by MLX → mlx tag
+            let fdnBack = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: AIInsights(title: "T", summary: "S", actions: [], backend: .foundation)), embedder: FakeEmbedder())
+            fdnBack.history = [self.makeItem(text: "english note", lang: "en")]
+            await fdnBack.enrichInsights()
+            XCTAssertEqual(fdnBack.history.first?.aiModel, AppModel.foundationModelTag)
+            let noBack = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: AIInsights(title: "T", summary: "S", actions: [])), embedder: FakeEmbedder())
+            noBack.history = [self.makeItem(text: "english note", lang: "en")]
+            await noBack.enrichInsights()
+            XCTAssertEqual(noBack.history.first?.aiModel, AppModel.foundationModelTag)  // nil backend → language default (en)
+        }
+    }
+
+    /// An EN note already produced by the MLX fallback (tagged `mlx`) must NOT be re-enriched on every refresh just
+    /// because EN's DEFAULT backend is FoundationModels — either backend's CURRENT tag counts as "done".
+    @MainActor func testEnrichSkipsEnglishNoteAtMLXTag() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: AIInsights(title: "НЕ ДОЛЖНО", summary: "НЕ ДОЛЖНО", actions: [])), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "english note", lang: "en")
+            it.aiModel = AppModel.mlxModelTag; it.summary = "из mlx"
+            m.history = [it]
+            await m.enrichInsights()
+            XCTAssertEqual(m.history.first?.summary, "из mlx")              // unchanged → not reprocessed
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.mlxModelTag)
         }
     }
 

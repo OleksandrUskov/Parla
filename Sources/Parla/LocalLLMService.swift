@@ -16,6 +16,11 @@ import FoundationModels
 // search ride a *separate* `SemanticIndex` (P1), not this LLM service. See
 // `LOCAL_AI_LAYER.md`.
 
+/// Which on-device backend produced an insight. Drives provenance tagging when a language can be served by more
+/// than one backend — EN is FoundationModels normally, but falls back to MLX/Qwen when Apple Intelligence is off
+/// (e.g. the Mac's system language is Russian). nil = unknown → the caller uses the language-based default tag.
+enum AIBackend: Sendable { case foundation, mlx }
+
 /// The derived insights for one transcript. Transient transport (not persisted directly — the fields
 /// are folded onto `TranscriptItem`); `Equatable` for cheap diffing in tests/UI.
 struct AIInsights: Sendable, Equatable {
@@ -25,6 +30,8 @@ struct AIInsights: Sendable, Equatable {
     /// Generative topical keywords (the GENERATIVE upgrade over the extractive keyword pass). Empty when a backend
     /// doesn't produce them → the caller keeps the extractive keywords (so an un-downloaded model = default behavior).
     var keywords: [String] = []
+    /// Which backend produced this (set by the concrete service) — for provenance tagging. nil on test/extractive paths.
+    var backend: AIBackend? = nil
 }
 
 extension String {
@@ -182,7 +189,8 @@ struct GeneratedInsights {
             actions: actions
                 .map { ActionItem(text: $0.trimmingCharacters(in: .whitespacesAndNewlines).sentenceCased) }
                 .filter { !$0.text.isEmpty },
-            keywords: normalizedKeywords(keywords)
+            keywords: normalizedKeywords(keywords),
+            backend: .foundation
         )
     }
 }
