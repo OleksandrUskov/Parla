@@ -1,5 +1,8 @@
 import Foundation
 
+/// One regenerable insight field — drives the granular "Regenerate ▾" menu (regenerate just one field).
+enum InsightField: Sendable { case title, summary, keywords, actions }
+
 // MARK: - Semantic index orchestration (Local-AI Layer P1c/P1d)
 
 extension AppModel {
@@ -179,6 +182,47 @@ extension AppModel {
         regeneratingIDs.insert(id)
         defer { regeneratingIDs.remove(id) }
         await refreshSemanticIndex()   // re-derives this item (only it is now un-tagged); single-flight, best-effort
+    }
+
+    /// Regenerate ONLY one insight field on demand (the granular "Regenerate ▾" menu) — so the user can redo just the
+    /// title, or just the summary, without disturbing the rest. Pulls fresh insights from the best backend (generative
+    /// preferred, extractive fallback) and applies ONLY the chosen field. Best-effort: a total failure leaves everything
+    /// untouched; the transcript is never touched. Provenance (`aiModel`) is left as-is — the note is already at its
+    /// current tag, so the next refresh won't clobber this manual override. Reuses the `regeneratingIDs` spinner.
+    func regenerateInsight(for id: TranscriptItem.ID, field: InsightField) async {
+        guard let item = history.first(where: { $0.id == id }) else { return }
+        regeneratingIDs.insert(id)
+        defer { regeneratingIDs.remove(id) }
+        guard let fresh = await freshInsights(for: item) else { return }
+        guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
+        switch field {
+        case .title:    if let t = fresh.title { history[idx].title = t; history[idx].titleEdited = nil }  // explicit → auto again
+        case .summary:  history[idx].summary = fresh.summary                                              // truthful (may clear on a short note)
+        case .keywords: if let k = fresh.keywords { history[idx].keywords = k }                           // never blank good keywords
+        case .actions:  if fresh.generative { history[idx].actions = fresh.actions }                      // tasks are generative-only; don't clear on extractive fallback
+        }
+        HistoryStore.save(history)
+        await MLXEngine.shared.unload()   // free the MLX model after a generative single-field run (no-op otherwise)
+    }
+
+    /// Freshest insights for the granular per-field regenerate, from the best available backend: generative
+    /// (FoundationModels/MLX) when ready, else extractive (which yields no `actions`). `generative` flags which ran —
+    /// the caller uses it so a generative FAILURE that fell back to extractive doesn't clear the user's tasks. nil if
+    /// nothing could be produced (assets missing / empty text).
+    private func freshInsights(for item: TranscriptItem)
+        async -> (title: String?, summary: String?, keywords: [String]?, actions: [ActionItem]?, generative: Bool)? {
+        if ai.availability(forLanguage: item.language) == .ready, Self.isEnrichable(item.text),
+           let r = try? await ai.insights(forTranscript: item.text, language: item.language) {
+            return (r.title.isEmpty ? nil : r.title,
+                    r.summary.isEmpty ? nil : r.summary,
+                    r.keywords.isEmpty ? nil : r.keywords,
+                    r.actions.isEmpty ? nil : r.actions,
+                    true)
+        }
+        if let e = await extractiveInsights(for: item) {
+            return (e.title, e.summary, e.keywords.isEmpty ? nil : e.keywords, nil, false)
+        }
+        return nil
     }
 
     /// On-demand per-chapter summaries for a LONG note (the "Summarize chapters" button — chapter summaries don't

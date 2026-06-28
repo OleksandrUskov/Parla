@@ -95,6 +95,8 @@
 "transcript.retranscribe.help" = "Перерозпізнати іншою моделлю";
 "transcript.regenerate"        = "Перестворити зведення";
 "transcript.regenerate.help"   = "Заново створити заголовок, короткий зміст, ключові слова та завдання";
+"regenerate.all"               = "Перестворити все";
+"regenerate.only"              = "Перестворити лише";
 "transcript.source.unavailable"= "Початковий файл недоступний — перетягни його знову";
 "transcript.meta.words"        = "%lld сл.";
 "transcript.silence"           = "(тиша — нічого не розпізнано)";

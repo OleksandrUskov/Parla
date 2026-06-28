@@ -95,6 +95,8 @@
 "transcript.retranscribe.help" = "Перераспознать другой моделью";
 "transcript.regenerate"        = "Пересоздать сводку";
 "transcript.regenerate.help"   = "Заново создать заголовок, краткое содержание, ключевые слова и задачи";
+"regenerate.all"               = "Пересоздать всё";
+"regenerate.only"              = "Пересоздать только";
 "transcript.source.unavailable"= "Исходный файл недоступен — перетащи его заново";
 "transcript.meta.words"        = "%lld сл.";
 "transcript.silence"           = "(тишина — ничего не распознано)";

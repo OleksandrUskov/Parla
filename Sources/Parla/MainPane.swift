@@ -779,18 +779,32 @@ struct TranscriptCard: View {
             .buttonStyle(.plain)
             RetranscribeMenu(item: item)
             if !model.isBusy {
-                // Regenerate insights on demand (force a fresh title/summary/keywords/tasks). Same circular idiom as
-                // the edit pencil; while it runs the glyph becomes a spinner (insight work is off the isBusy lane, so
-                // the button stays visible to show progress) and the button disables to coalesce double taps.
+                // Regenerate insights on demand — a small menu so the user can redo EVERYTHING or just one field.
+                // Same circular idiom as the edit pencil; while it runs the glyph becomes a spinner (insight work is
+                // off the isBusy lane, so it stays visible) and the menu disables to coalesce taps.
                 let regenerating = model.regeneratingIDs.contains(item.id)
-                Button { Task { await model.regenerateInsights(for: item.id) } } label: {
+                Menu {
+                    Button(L("regenerate.all")) { Task { await model.regenerateInsights(for: item.id) } }
+                    Section(L("regenerate.only")) {
+                        Button(L("transcript.title")) { Task { await model.regenerateInsight(for: item.id, field: .title) } }
+                        Button(L("transcript.summary")) { Task { await model.regenerateInsight(for: item.id, field: .summary) } }
+                        Button(L("transcript.keywords")) { Task { await model.regenerateInsight(for: item.id, field: .keywords) } }
+                        // Tasks are generative-only — offer the item only when a generative backend can serve this note.
+                        if model.ai.availability(forLanguage: item.language) == .ready {
+                            Button(L("transcript.actions")) { Task { await model.regenerateInsight(for: item.id, field: .actions) } }
+                        }
+                    }
+                } label: {
                     Group {
                         if regenerating { ProgressView().controlSize(.small) }
                         else { Image(systemName: "sparkles").font(.body) }
                     }
                     .padding(9).background(.ultraThinMaterial, in: Circle())
                 }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
                 .buttonStyle(.plain)
+                .fixedSize()
                 .disabled(regenerating)
                 .help(Text(L("transcript.regenerate.help")))
                 .accessibilityLabel(Text(L("transcript.regenerate")))

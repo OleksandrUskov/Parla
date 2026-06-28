@@ -1517,6 +1517,58 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// Granular regenerate (P4 menu): regenerating ONE field applies only that field, leaving the others intact.
+    @MainActor func testRegenerateInsightSummaryOnly() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "NewТ", summary: "NewС", actions: [ActionItem(text: "NewЗ")], keywords: ["newK"])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "english note", lang: "en")
+            it.title = "oldT"; it.titleEdited = true; it.summary = "oldS"; it.keywords = ["oldK"]; it.actions = [ActionItem(text: "oldA")]
+            m.history = [it]
+            await m.regenerateInsight(for: it.id, field: .summary)
+            XCTAssertEqual(m.history.first?.summary, "NewС")                  // only summary regenerated
+            XCTAssertEqual(m.history.first?.title, "oldT")                    // others untouched
+            XCTAssertEqual(m.history.first?.keywords, ["oldK"])
+            XCTAssertEqual(m.history.first?.actions?.map(\.text), ["oldA"])
+            XCTAssertTrue(m.regeneratingIDs.isEmpty)                          // spinner cleared
+        }
+    }
+
+    /// Explicit title regenerate overwrites even a hand-edited title and clears `titleEdited` (it's auto again).
+    @MainActor func testRegenerateInsightTitleClearsHandEdit() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "NewТ", summary: "S", actions: [], keywords: [])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "english note", lang: "en")
+            it.title = "Мой ручной"; it.titleEdited = true; it.summary = "keepS"
+            m.history = [it]
+            await m.regenerateInsight(for: it.id, field: .title)
+            XCTAssertEqual(m.history.first?.title, "NewТ")     // overwrites the hand title (explicit action)
+            XCTAssertNil(m.history.first?.titleEdited)         // ...now auto again
+            XCTAssertEqual(m.history.first?.summary, "keepS")  // summary untouched
+        }
+    }
+
+    /// Tasks are generative-only: with a backend they regenerate; without one, extractive can't make them, so the
+    /// existing tasks are LEFT untouched (a generative failure/absence must not silently clear the user's tasks).
+    @MainActor func testRegenerateInsightActionsGenerativeOnly() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "T", summary: "S", actions: [ActionItem(text: "NewЗ")], keywords: [])
+            let gen = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "english note", lang: "en")
+            it.actions = [ActionItem(text: "oldA")]
+            gen.history = [it]
+            await gen.regenerateInsight(for: it.id, field: .actions)
+            XCTAssertEqual(gen.history.first?.actions?.map(\.text), ["NewЗ"])   // generative → regenerated
+            let ext = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())  // NoopAIService → not ready
+            var it2 = self.makeItem(text: "ru заметка здесь", lang: "ru")
+            it2.actions = [ActionItem(text: "keep")]
+            ext.history = [it2]
+            await ext.regenerateInsight(for: it2.id, field: .actions)
+            XCTAssertEqual(ext.history.first?.actions?.map(\.text), ["keep"])   // extractive can't → untouched
+        }
+    }
+
     @MainActor func testDefaultBackendsAreNoopUnderTests() {
         // Locks the load-bearing headless gate: a test that doesn't inject fakes never hits the real model/embedder.
         XCTAssertTrue(AppModel.defaultAI() is NoopAIService)
