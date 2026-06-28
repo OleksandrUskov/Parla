@@ -93,4 +93,10 @@ struct Chapter: Identifiable, Equatable {
 
     /// `[mm:ss–mm:ss]` window label.
     var rangeLabel: String { "[\(fmtTime(startSec))–\(fmtTime(endSec))]" }
+
+    /// The chapter's transcript text for summarization/export: segment `cleanText` (WhisperKit tokens
+    /// stripped — load-bearing), empty segments dropped, space-joined. Pure + unit-testable.
+    var joinedText: String {
+        segments.map(\.cleanText).filter { !$0.isEmpty }.joined(separator: " ")
+    }
 }

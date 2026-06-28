@@ -239,6 +239,9 @@
 "chunk.label"        = "Chunk %1$lld/%2$lld";
 "chunk.failed"       = "(chunk %lld failed)";
 "chapter.title"      = "Chapter %lld";
+"chapter.summarize"       = "Summarize chapters";
+"chapter.summarize.again" = "Regenerate summaries";
+"chapter.summarize.help"  = "Summarize each chapter with on-device AI";
 
 /* Export + units */
 "export.menu.help" = "Export transcript";

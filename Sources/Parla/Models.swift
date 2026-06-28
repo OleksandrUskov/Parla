@@ -46,6 +46,28 @@ extension ActionItem {
     }
 }
 
+/// One per-chapter summary for a long recording (AI P4). Persisted on `TranscriptItem.chapterSummaries`,
+/// keyed by the chapter's time window `(startSec,endSec)` — a STABLE key (the window is `bucket * chapterSizeSec`,
+/// deterministic from the segments), so it survives re-bucketing / renumbering that a bare positional index would not.
+struct ChapterSummary: Codable, Hashable, Sendable {
+    var startSec: Double
+    var endSec: Double
+    var summary: String
+}
+
+extension ChapterSummary {
+    private enum CodingKeys: String, CodingKey { case startSec, endSec, summary }
+    /// Tolerant decode (mirrors `ActionItem`): a missing field defaults instead of throwing. A `ChapterSummary`
+    /// decodes nested inside `FailableDecodable<TranscriptItem>` on the salvage path, where a `keyNotFound` would
+    /// drop the WHOLE record. Living in an extension keeps the memberwise init + the synthesized `encode(to:)`.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(startSec: try c.decodeIfPresent(Double.self, forKey: .startSec) ?? 0,
+                  endSec: try c.decodeIfPresent(Double.self, forKey: .endSec) ?? 0,
+                  summary: try c.decodeIfPresent(String.self, forKey: .summary) ?? "")
+    }
+}
+
 /// A single transcript in the history.
 struct TranscriptItem: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
@@ -69,6 +91,7 @@ struct TranscriptItem: Identifiable, Codable, Hashable {
     var aiModel: String?       = nil  // which backend/model produced the insights (provenance / regeneration)
     var titleEdited: Bool?     = nil  // user renamed the title by hand → never overwrite it on regeneration
     var keywords: [String]?    = nil  // embedding-ranked topic tags (KeyBERT-style); nil = none/legacy
+    var chapterSummaries: [ChapterSummary]? = nil  // per-chapter generative summaries for LONG notes (P4); nil = none/short/legacy
 
     /// Convenience accessor: nil/false → not edited.
     var isEdited: Bool { edited == true }
@@ -214,7 +237,7 @@ func exportText(_ items: [TranscriptItem], includeInsights: Bool = false) -> Str
         out += "## \(it.sourceName)\n"
         let editedMark = it.isEdited ? " · " + L("transcript.edited") : ""
         out += "_\(it.date.formatted(date: .abbreviated, time: .shortened)) · \(it.language.uppercased()) · \(friendlyModel(it.model))\(editedMark)_\n\n"
-        if includeInsights { out += insightBlock(it, markdown: true) }   // "" when the note has no insights
+        if includeInsights { out += insightBlock(it, markdown: true); out += chapterDigest(it, markdown: true) }   // "" when none
         out += it.text + "\n\n---\n\n"
     }
     return out

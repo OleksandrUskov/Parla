@@ -115,6 +115,9 @@ final class AppModel {
                                                        // demand (the "Regenerate" button) — drives a per-note spinner.
                                                        // OBSERVED (not @ObservationIgnored) so the button updates;
                                                        // transient, never persisted. Off the isBusy lane (best-effort).
+    var summarizingChaptersIDs: Set<UUID> = []         // +Semantic: long notes whose per-chapter summaries are being
+                                                       // generated on demand (the "Summarize chapters" button) — drives
+                                                       // its spinner. OBSERVED; transient; off the isBusy lane (best-effort).
     var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys

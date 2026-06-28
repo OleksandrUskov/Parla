@@ -890,7 +890,7 @@ struct TranscriptCard: View {
     @ViewBuilder private var readBody: some View {
         if model.showTimestamps, !item.isEdited, !item.segments.isEmpty {
             if AudioChunker.isLong(durationSec: item.durationSec) {
-                ChapterListView(segments: item.segments, player: player, tappable: audioURL != nil)
+                ChapterListView(item: item, player: player, tappable: audioURL != nil)
             } else {
                 SegmentList(segments: item.segments, player: player, tappable: audioURL != nil)
             }
@@ -1079,16 +1079,24 @@ struct SegmentRow: View {
 /// Chapter-grouped transcript for long recordings: collapsible ~2-min sections (first one expanded),
 /// each a list of tap-to-seek segments. Derived from segments via `AudioChunker.chapters` — no state.
 struct ChapterListView: View {
-    let segments: [Segment]
+    @Environment(AppModel.self) private var model
+    let item: TranscriptItem
     let player: PlaybackController
     let tappable: Bool
 
-    private var chapters: [Chapter] { AudioChunker.chapters(from: segments) }
+    private var chapters: [Chapter] { AudioChunker.chapters(from: item.segments) }
+    private var summaries: [ChapterSummary] { item.chapterSummaries ?? [] }
+    /// Match a chapter to its persisted summary by the stable start window (NOT positional index).
+    private func summary(for chapter: Chapter) -> String? {
+        summaries.first(where: { abs($0.startSec - chapter.startSec) < 0.5 })?.summary
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            chapterActions
             ForEach(chapters) { chapter in
-                ChapterSection(chapter: chapter, player: player, tappable: tappable,
+                ChapterSection(chapter: chapter, summary: summary(for: chapter),
+                               player: player, tappable: tappable,
                                initiallyExpanded: chapter.index == 0)
             }
         }
@@ -1096,16 +1104,44 @@ struct ChapterListView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
     }
+
+    /// On-demand "Summarize chapters" — shown only when a generative backend can actually serve this language
+    /// (RU/UK need the MLX model downloaded; EN needs Apple Intelligence). Honest label: "Summarize" the first
+    /// time (the summaries don't auto-exist), "Regenerate" once they do. A spinner runs while it works.
+    @ViewBuilder private var chapterActions: some View {
+        if model.ai.availability(forLanguage: item.language) == .ready {
+            let busy = model.summarizingChaptersIDs.contains(item.id)
+            HStack(spacing: 6) {
+                Spacer(minLength: 0)
+                Button { Task { await model.generateChapterSummaries(for: item.id) } } label: {
+                    HStack(spacing: 5) {
+                        if busy { ProgressView().controlSize(.mini) }
+                        else { Image(systemName: "sparkles").font(.caption2) }
+                        Text(summaries.isEmpty ? L("chapter.summarize") : L("chapter.summarize.again"))
+                    }
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Brand.accent.opacity(0.15), in: Capsule())
+                    .foregroundStyle(Brand.accent)
+                }
+                .buttonStyle(.plain)
+                .disabled(busy)
+                .help(Text(L("chapter.summarize.help")))
+            }
+        }
+    }
 }
 
 struct ChapterSection: View {
     let chapter: Chapter
+    let summary: String?
     let player: PlaybackController
     let tappable: Bool
     @State private var expanded: Bool
 
-    init(chapter: Chapter, player: PlaybackController, tappable: Bool, initiallyExpanded: Bool) {
+    init(chapter: Chapter, summary: String?, player: PlaybackController, tappable: Bool, initiallyExpanded: Bool) {
         self.chapter = chapter
+        self.summary = summary
         self.player = player
         self.tappable = tappable
         _expanded = State(initialValue: initiallyExpanded)
@@ -1114,6 +1150,16 @@ struct ChapterSection: View {
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 2) {
+                // The chapter's AI summary (P4) — when generated — sits above its segments, marked with the
+                // insight glyph so it reads as a digest, not another transcript line.
+                if let summary, !summary.isEmpty {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Image(systemName: "sparkles").font(.caption2).foregroundStyle(Brand.accent)
+                        Text(summary).font(.callout).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, 4)
+                }
                 ForEach(Array(chapter.segments.enumerated()), id: \.offset) { _, seg in
                     if !seg.cleanText.isEmpty {
                         SegmentRow(seg: seg, active: false, tappable: tappable)

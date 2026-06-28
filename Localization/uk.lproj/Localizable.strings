@@ -239,6 +239,9 @@
 "chunk.label"        = "Фрагмент %1$lld/%2$lld";
 "chunk.failed"       = "(фрагмент %lld не розпізнано)";
 "chapter.title"      = "Розділ %lld";
+"chapter.summarize"       = "Зведення за розділами";
+"chapter.summarize.again" = "Перестворити зведення";
+"chapter.summarize.help"  = "Зробити зведення кожного розділу локальним ШІ";
 
 /* Export + units */
 "export.menu.help" = "Експортувати запис";

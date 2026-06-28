@@ -119,6 +119,24 @@ func insightBlock(_ item: TranscriptItem, markdown: Bool) -> String {
     return out
 }
 
+/// Per-chapter digest for a LONG note's export: `### [mm:ss–mm:ss]` + that chapter's summary, for every chapter
+/// that has one (matched by its stable start-time window). "" for short notes / notes without chapter summaries.
+/// Placed ABOVE the full transcript — a navigable digest that ADDS to the source, never replaces it. `markdown`
+/// switches between a `###` heading + blockquote and plain `range` + line. Ends with one trailing blank line.
+func chapterDigest(_ item: TranscriptItem, markdown: Bool) -> String {
+    guard let summaries = item.chapterSummaries, !summaries.isEmpty else { return "" }
+    let chapters = AudioChunker.chapters(from: item.segments)
+    guard !chapters.isEmpty else { return "" }
+    var out = ""
+    for chapter in chapters {
+        // Match by the stable (start) window, NOT by positional index (which renumbers on time gaps).
+        guard let cs = summaries.first(where: { abs($0.startSec - chapter.startSec) < 0.5 }) else { continue }
+        out += markdown ? "### \(chapter.rangeLabel)\n> \(cs.summary)\n\n"
+                        : "\(chapter.rangeLabel)\n\(cs.summary)\n\n"
+    }
+    return out
+}
+
 /// The insight header framed as a WebVTT `NOTE` comment block (spec-valid: `NOTE`, lines, then a blank line
 /// that terminates it before the first cue). "" when the note has no insights. Built from the plain block,
 /// which has no interior blank lines (each would otherwise close the comment early).
@@ -171,7 +189,8 @@ func exportJSON(_ item: TranscriptItem) throws -> Data {
 /// With `includeInsights`, a labelled insight header precedes the body.
 func exportPlainTXT(_ item: TranscriptItem, timestamps: Bool, includeInsights: Bool = false) -> String {
     let block = includeInsights ? insightBlock(item, markdown: false) : ""   // "" → byte-identical to pre-P4
-    return block + item.display(timestamps: timestamps)
+    let chapters = includeInsights ? chapterDigest(item, markdown: false) : ""   // long notes only; "" otherwise
+    return block + chapters + item.display(timestamps: timestamps)
 }
 
 /// One transcript as a Markdown block — the same shape as a single `exportText` record, minus the
@@ -181,7 +200,8 @@ func exportMarkdown(_ item: TranscriptItem, includeInsights: Bool = false) -> St
     let editedMark = item.isEdited ? " · " + L("transcript.edited") : ""
     let meta = "_\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(item.language.uppercased()) · \(friendlyModel(item.model))\(editedMark)_"
     let block = includeInsights ? insightBlock(item, markdown: true) : ""   // "" → byte-identical to pre-P4
-    return "## \(item.sourceName)\n\(meta)\n\n\(block)\(item.text)\n"
+    let chapters = includeInsights ? chapterDigest(item, markdown: true) : ""   // long notes only; "" otherwise
+    return "## \(item.sourceName)\n\(meta)\n\n\(block)\(chapters)\(item.text)\n"
 }
 
 /// Render one item to a string for a given format (UI entry point). `.json` is handled separately

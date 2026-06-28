@@ -1343,6 +1343,102 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: AI P4 piece 3 — per-chapter summaries (on-demand, generative-only)
+
+    /// A chapter's text source strips WhisperKit tokens (cleanText), drops empties, space-joins.
+    func testChapterJoinedText() {
+        let ch = Chapter(index: 0, startSec: 0, endSec: 120, segments: [
+            Segment(start: 0, end: 1, text: "<|0.00|> привет<|1.0|>"),   // tokens stripped
+            Segment(start: 1, end: 2, text: "<|endoftext|>"),            // tokens-only → empty → dropped
+            Segment(start: 2, end: 3, text: "мир"),
+        ])
+        XCTAssertEqual(ch.joinedText, "привет мир")
+    }
+
+    /// ChapterSummary round-trips; absent key → nil (legacy); a partial element does NOT drop the whole record.
+    func testChapterSummaryCodableRoundtripAndTolerant() throws {
+        var item = makeItem(text: "t")
+        item.chapterSummaries = [ChapterSummary(startSec: 0, endSec: 120, summary: "первая"),
+                                 ChapterSummary(startSec: 120, endSec: 240, summary: "вторая")]
+        let back = try JSONDecoder().decode([TranscriptItem].self, from: JSONEncoder().encode([item]))
+        XCTAssertEqual(back.first?.chapterSummaries, item.chapterSummaries)
+        // Legacy record without the key → nil (Optional invariant).
+        let legacy = #"[{"id":"\#(UUID().uuidString)","date":1,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"m","text":"t","segments":[]}]"#
+        XCTAssertNil(try JSONDecoder().decode([TranscriptItem].self, from: Data(legacy.utf8)).first?.chapterSummaries)
+        // Tolerant nested decode: a ChapterSummary missing fields survives instead of dropping the WHOLE record.
+        let partial = #"[{"id":"\#(UUID().uuidString)","date":1,"sourceName":"a.ogg","language":"ru","durationSec":1,"model":"m","text":"t","segments":[],"chapterSummaries":[{"summary":"только текст"}]}]"#
+        let items = try JSONDecoder().decode([TranscriptItem].self, from: Data(partial.utf8))
+        XCTAssertEqual(items.first?.chapterSummaries?.first, ChapterSummary(startSec: 0, endSec: 0, summary: "только текст"))
+    }
+
+    @MainActor func testGenerateChapterSummariesPersistsPerChapter() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "T", summary: "сводка главы", actions: [])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная запись", segments: [
+                Segment(start: 0, end: 5, text: "первая глава тут"),
+                Segment(start: 130, end: 135, text: "вторая глава тут"),
+            ], lang: "ru")
+            it.durationSec = 700   // > 600 → long → has chapters
+            m.history = [it]
+            await m.generateChapterSummaries(for: it.id)
+            let cs = m.history.first?.chapterSummaries
+            XCTAssertEqual(cs?.count, 2)
+            XCTAssertEqual(cs?.map(\.startSec).sorted(), [0, 120])            // keyed by the stable window
+            XCTAssertTrue(cs?.allSatisfy { $0.summary == "сводка главы" } ?? false)
+            XCTAssertTrue(m.summarizingChaptersIDs.isEmpty)                   // spinner flag cleared (defer)
+        }
+    }
+
+    /// Per-chapter best-effort: one chapter's generation fails → it's skipped, the others land, transcript untouched.
+    @MainActor func testGenerateChapterSummariesBestEffortPartial() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: PerChapterAIService(failMarker: "СЛОМАЙ"), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная", segments: [
+                Segment(start: 0, end: 5, text: "норм глава"),
+                Segment(start: 130, end: 135, text: "СЛОМАЙ глава"),
+            ], lang: "ru")
+            it.durationSec = 700
+            m.history = [it]
+            await m.generateChapterSummaries(for: it.id)
+            let cs = m.history.first?.chapterSummaries
+            XCTAssertEqual(cs?.count, 1)                       // the failing chapter skipped, the other survives
+            XCTAssertEqual(cs?.first?.startSec, 0)
+            XCTAssertEqual(m.history.first?.text, "длинная")   // transcript untouched
+            XCTAssertEqual(m.history.first?.segments.count, 2)
+        }
+    }
+
+    @MainActor func testGenerateChapterSummariesSkipsShortOrNoBackend() async {
+        await withTemporaryHistoryStoreAsync {
+            // Short note → not long → no-op even with a ready backend.
+            let canned = AIInsights(title: "T", summary: "s", actions: [])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            let short = self.makeItem(text: "коротко", segments: [Segment(start: 0, end: 1, text: "коротко")], lang: "ru")
+            m.history = [short]
+            await m.generateChapterSummaries(for: short.id)
+            XCTAssertNil(m.history.first?.chapterSummaries)
+            // Long note but NO ready backend (default NoopAIService) → no-op.
+            let m2 = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            var long = self.makeItem(text: "длинная", segments: [Segment(start: 0, end: 5, text: "глава")], lang: "ru")
+            long.durationSec = 700
+            m2.history = [long]
+            await m2.generateChapterSummaries(for: long.id)
+            XCTAssertNil(m2.history.first?.chapterSummaries)
+        }
+    }
+
+    @MainActor func testInvalidateClearsChapterSummaries() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "текст", lang: "ru")
+            it.chapterSummaries = [ChapterSummary(startSec: 0, endSec: 120, summary: "с")]
+            m.history = [it]
+            m.invalidateDerivedData(for: it.id)   // an edit re-buckets chapters → stale summaries must drop
+            XCTAssertNil(m.history.first?.chapterSummaries)
+        }
+    }
+
     @MainActor func testDefaultBackendsAreNoopUnderTests() {
         // Locks the load-bearing headless gate: a test that doesn't inject fakes never hits the real model/embedder.
         XCTAssertTrue(AppModel.defaultAI() is NoopAIService)
@@ -2476,6 +2572,27 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(back, j)                           // full round-trip (no drift)
     }
 
+    /// A long note with per-chapter summaries exports a chapter digest ABOVE the full transcript (chapters ADD,
+    /// never replace). Gated by includeInsights; absent for short / summary-less notes.
+    func testExportLongNoteHasChapterDigest() {
+        var it = makeItem(name: "talk.ogg", text: "полный текст записи", segments: [
+            Segment(start: 0, end: 5, text: "первая"),
+            Segment(start: 130, end: 135, text: "вторая"),
+        ], lang: "ru")
+        it.durationSec = 700
+        it.chapterSummaries = [ChapterSummary(startSec: 0, endSec: 120, summary: "сум один"),
+                               ChapterSummary(startSec: 120, endSec: 240, summary: "сум два")]
+        let md = exportMarkdown(it, includeInsights: true)
+        XCTAssertTrue(md.contains("### [00:00"))               // chapter heading (range label)
+        XCTAssertTrue(md.contains("> сум один"))
+        XCTAssertTrue(md.contains("> сум два"))
+        XCTAssertTrue(md.contains("полный текст записи"))      // full transcript still present (ADD, not replace)
+        XCTAssertFalse(exportMarkdown(it, includeInsights: false).contains("### ["))   // gated by the flag
+        // A note without chapter summaries → no chapter sections even with the flag.
+        let bare = makeItem(text: "коротыш", lang: "ru")
+        XCTAssertFalse(exportMarkdown(bare, includeInsights: true).contains("### ["))
+    }
+
     func testExportEditedRecordDegrades() {
         // text ≠ segments → one full-text cue [0, durationSec=1], never the stale segment timecodes
         let item = makeItem(text: "edited full text",
@@ -3458,6 +3575,17 @@ private struct FakeAIService: LocalLLMService {
     func insights(forTranscript text: String, language: String) async throws -> AIInsights {
         if let error { throw error }
         return canned
+    }
+}
+
+/// AI double that throws ONLY for inputs containing `failMarker` — to prove per-chapter best-effort
+/// (one chapter fails, the others still get summaries). Always `.ready`.
+private struct PerChapterAIService: LocalLLMService {
+    let failMarker: String
+    func availability(forLanguage language: String) -> AIAvailability { .ready }
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
+        if text.contains(failMarker) { throw AIError.unavailable }
+        return AIInsights(title: "T", summary: "ok", actions: [])
     }
 }
 

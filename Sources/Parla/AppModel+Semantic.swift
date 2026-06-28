@@ -153,6 +153,7 @@ extension AppModel {
             history[idx].summary = nil
             history[idx].keywords = nil
             history[idx].actions = nil
+            history[idx].chapterSummaries = nil   // text changed → chapters re-bucket; stale per-chapter summaries drop
             if history[idx].titleEdited != true { history[idx].title = nil } // auto-title regenerates; hand titles kept
         }
         refreshRelatedNotes()                                               // clear the now-stale "Related" footer
@@ -178,6 +179,41 @@ extension AppModel {
         regeneratingIDs.insert(id)
         defer { regeneratingIDs.remove(id) }
         await refreshSemanticIndex()   // re-derives this item (only it is now un-tagged); single-flight, best-effort
+    }
+
+    /// On-demand per-chapter summaries for a LONG note (the "Summarize chapters" button — chapter summaries don't
+    /// auto-exist, so this is a deliberate GENERATE, not the auto "Regenerate" of the overall insights). Each
+    /// chapter's text is summarized by the generative backend (FoundationModels EN / MLX RU/UK); only the summary is
+    /// kept, keyed by the chapter's stable `(startSec,endSec)` window. Best-effort PER CHAPTER: a chapter that fails
+    /// (or is empty/silence) is skipped, the rest still land, and the transcript is NEVER touched. Generative-only:
+    /// a no-op when the language has no ready backend (the button is hidden then). Re-running replaces the set.
+    func generateChapterSummaries(for id: TranscriptItem.ID) async {
+        guard let item = history.first(where: { $0.id == id }),
+              AudioChunker.isLong(durationSec: item.durationSec),
+              ai.availability(forLanguage: item.language) == .ready else { return }
+        let chapters = AudioChunker.chapters(from: item.segments)
+        guard !chapters.isEmpty else { return }
+        summarizingChaptersIDs.insert(id)
+        defer { summarizingChaptersIDs.remove(id) }
+        var built: [ChapterSummary] = []
+        for chapter in chapters {
+            let text = chapter.joinedText
+            guard Self.isEnrichable(text) else { continue }   // skip empty / silence chapters → no fabricated summary
+            do {
+                let result = try await ai.insights(forTranscript: text, language: item.language)
+                let summary = result.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !summary.isEmpty {
+                    built.append(ChapterSummary(startSec: chapter.startSec, endSec: chapter.endSec, summary: summary))
+                }
+            } catch { continue }   // best-effort: this chapter failed → skip it, keep going
+        }
+        // TOCTOU (mirror enrichInsights): an edit during the long run re-buckets chapters → the keys no longer line
+        // up, so drop this stale result rather than persist a misaligned set.
+        guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
+        history[idx].chapterSummaries = built.isEmpty ? nil : built
+        HistoryStore.save(history)
+        // Free the ~2.3GB MLX model after the batch (no-op for the FoundationModels/English path — never loaded).
+        await MLXEngine.shared.unload()
     }
 
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight
