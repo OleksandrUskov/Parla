@@ -4,19 +4,23 @@ struct MainPane: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        VStack(spacing: 18) {
-            BrandHeader()
-            DropZoneView().frame(height: 210)
-            StatusBar()
-            if let item = model.selectedItem {
-                TranscriptCard(item: item)
-            } else {
-                EmptyState()
+        // The whole right pane scrolls (like the history list): everything flows top-to-bottom and a long
+        // transcript just extends the page. The transcript is a plain block (no nested ScrollView), so there's
+        // exactly ONE scroll axis here — no inner/outer scroll conflict, and nothing can collapse to zero height.
+        ScrollView {
+            VStack(spacing: 18) {
+                BrandHeader()
+                DropZoneView().frame(height: 210)
+                StatusBar()
+                if let item = model.selectedItem {
+                    TranscriptCard(item: item)
+                } else {
+                    EmptyState()
+                }
             }
-            Spacer(minLength: 0)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -548,7 +552,7 @@ struct EmptyState: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 320)
         .padding(40)
     }
 }
@@ -580,7 +584,7 @@ struct TranscriptCard: View {
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)   // sizes to its content; the page ScrollView handles scrolling
         // Selection change (or a new transcript): discard any in-progress edit (so we don't
         // write it into someone else's record) and reload the player with the new record's audio.
         // initial:true — also load on first appearance.
@@ -845,7 +849,7 @@ struct TranscriptCard: View {
                 .font(.system(.body, design: .rounded))
                 .scrollContentBackground(.hidden)          // macOS 14-safe; keeps the card's dark background
                 .focused($editorFocused)
-                .frame(maxWidth: .infinity, minHeight: 160, maxHeight: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 280, alignment: .leading)
                 .padding(10)
                 .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
         } else {
@@ -853,7 +857,6 @@ struct TranscriptCard: View {
                 TransportBar(player: player, hasAudio: audioURL != nil)
                 readBody
             }
-            .frame(maxHeight: .infinity)   // the transcript is the primary, space-filling region (scrolls within)
         }
     }
 
@@ -868,14 +871,12 @@ struct TranscriptCard: View {
                 SegmentList(segments: item.segments, player: player, tappable: audioURL != nil)
             }
         } else {
-            ScrollView {
-                Text(text)
-                    .font(.system(.body, design: .rounded))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-            }
-            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+            Text(text)
+                .font(.system(.body, design: .rounded))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
         }
     }
 
@@ -1015,18 +1016,17 @@ struct SegmentList: View {
     private var activeIdx: Int? { activeSegmentIndex(segments, at: player.currentTime) }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
-                    if !seg.cleanText.isEmpty {
-                        SegmentRow(seg: seg, active: i == activeIdx, tappable: tappable)
-                            .contentShape(Rectangle())
-                            .onTapGesture { if tappable { player.seek(to: seg.start) } }
-                    }
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
+                if !seg.cleanText.isEmpty {
+                    SegmentRow(seg: seg, active: i == activeIdx, tappable: tappable)
+                        .contentShape(Rectangle())
+                        .onTapGesture { if tappable { player.seek(to: seg.start) } }
                 }
             }
-            .padding(12)
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
     }
 }
@@ -1062,15 +1062,14 @@ struct ChapterListView: View {
     private var chapters: [Chapter] { AudioChunker.chapters(from: segments) }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(chapters) { chapter in
-                    ChapterSection(chapter: chapter, player: player, tappable: tappable,
-                                   initiallyExpanded: chapter.index == 0)
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(chapters) { chapter in
+                ChapterSection(chapter: chapter, player: player, tappable: tappable,
+                               initiallyExpanded: chapter.index == 0)
             }
-            .padding(12)
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
     }
 }
