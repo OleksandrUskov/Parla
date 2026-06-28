@@ -1,0 +1,161 @@
+import Foundation
+import MLX
+import MLXEmbedders
+import MLXLMCommon
+
+// MARK: - Download-tier embedder (Local-AI Layer P3.5 — real query→note semantic search)
+//
+// A proper multilingual SENTENCE-EMBEDDING model (default Qwen3-Embedding-0.6B) for query→note retrieval — the
+// thing NLContextualEmbedding can't do (short queries collapse; see the embedder-retrieval lesson). Validated
+// empirically by the P3.5 probe: RU/UK/EN query↔query separation 0.13–0.26 (no collapse), every query ranks its
+// topic note #1, cross-lingual EN→RU / UK→RU works.
+//
+// SWAPPABLE BY DESIGN: the active model is a single `EmbeddingModelSpec.active`. If Qwen ever underperforms on
+// RU/UK with real notes, swap `active` to BGE-M3 (`bgeM3Fallback` below) — the RU-champion (MIRACL ru 70.1) and
+// STILL multilingual, so we keep ONE unified embedding space + cross-lingual search. The store's provenance tag
+// (`EmbeddingModelSpec.active.tag`) then triggers a one-time re-embed of history into the new space; no rebuild.
+// Two PARALLEL models would fragment the space and kill cross-lingual query→note, so we SWAP, never add a second.
+//
+// Reuses the P3 `MLXHubDownloader` / `MLXTokenizerLoader` (same module). Best-effort: any failure → nil (graceful,
+// mirrors `NLEmbedder`); the model + container stay actor-internal. MLX → the .app must be built via xcodebuild.
+
+/// How a model decorates query vs document text, and whether it's an XLM-R encoder (needs explicit positionIds).
+enum EmbedderProfile: Sendable {
+    /// Qwen3-Embedding: an instruction prefix on the QUERY only; documents are bare. (Decoder + RoPE → no positionIds fix.)
+    case instruct(task: String)
+    /// multilingual-e5: `query: ` on queries, `passage: ` on documents. (XLM-R → needs positionIds when batching.)
+    case e5
+    /// BGE-M3 etc.: no prefixes. (XLM-R → needs positionIds when batching.)
+    case plain
+
+    func decorate(_ text: String, kind: EmbedKind) -> String {
+        switch self {
+        case .instruct(let task): return kind == .query ? "Instruct: \(task)\nQuery: \(text)" : text
+        case .e5:                 return (kind == .query ? "query: " : "passage: ") + text
+        case .plain:              return text
+        }
+    }
+}
+
+/// The active download-tier model + its on-disk location (cache under Application Support, like `MLXModelSpec`).
+struct EmbeddingModelSpec: Sendable {
+    let repoId: String
+    let revision: String
+    let profile: EmbedderProfile
+    /// XLM-R encoders (BGE-M3 / e5) need explicit position IDs offset by padding_idx+1; Qwen3 (RoPE) does not.
+    /// Unused while embedding one text at a time (no padding), but kept so a swap to an XLM-R model is localized.
+    let needsXLMPositionIds: Bool
+
+    /// Provenance tag stamped onto stored vectors. A change here ≠ the vectors' tag → `backfillEmbeddings` re-embeds.
+    var tag: String { "emb:" + repoId }
+
+    /// ACTIVE model — Qwen3-Embedding-0.6B (4-bit), Apache-2.0, non-gated, SOTA RU/UK/EN, validated by the probe.
+    /// To swap (e.g. RU/UK underperforms): set `active = .bgeM3Fallback`. That's the whole change — history re-embeds.
+    static let active = EmbeddingModelSpec(
+        repoId: "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
+        revision: "main",
+        profile: .instruct(task: "Given a search query, retrieve notes relevant to the query"),
+        needsXLMPositionIds: false)
+
+    /// Designated RU/UK FALLBACK (not active) — BGE-M3, the RU-champion, MIT, non-gated, prefix-free, multilingual.
+    /// A drop-in swap target kept here so `active = .bgeM3Fallback` is the only change needed. (XLM-R → the embed
+    /// forward's positionIds branch must be wired + probe-validated when this becomes active; tracked in STATE.)
+    static let bgeM3Fallback = EmbeddingModelSpec(
+        repoId: "mlx-community/bge-m3-mlx-fp16",
+        revision: "main",
+        profile: .plain,
+        needsXLMPositionIds: true)
+
+    /// HubApi download base under Parla's Application Support. A settable `var` so tests redirect it to a temp dir
+    /// (mirror of `MLXModelSpec.downloadBase` / `HistoryStore.fileURL`) — else `isDownloaded()` reads the real model.
+    nonisolated(unsafe) static var downloadBase: URL = defaultDownloadBase()
+    private static func defaultDownloadBase() -> URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return support.appendingPathComponent("Parla/embed", isDirectory: true)
+    }
+
+    /// Where `HubApi.snapshot` materializes the active model.
+    static func modelDirectory() -> URL {
+        downloadBase.appendingPathComponent("models/\(active.repoId)", isDirectory: true)
+    }
+
+    /// "Downloaded" = a COMPLETE-enough snapshot (config + tokenizer files + a weight shard), so an interrupted
+    /// download isn't reported ready. Cheap, synchronous — drives availability + the embed gate. Mirrors `MLXModelSpec`.
+    static func isDownloaded() -> Bool {
+        let dir = modelDirectory()
+        let fm = FileManager.default
+        func has(_ name: String) -> Bool { fm.fileExists(atPath: dir.appendingPathComponent(name).path) }
+        guard has("config.json"), has("tokenizer_config.json"),
+              has("tokenizer.json") || has("tokenizer.model") else { return false }
+        let contents = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
+        return contents.contains { $0.hasSuffix(".safetensors") }
+    }
+
+    /// Bytes on disk for the "disk used" line / delete recompute. 0 if absent.
+    static func bytesOnDisk() -> Int64 {
+        let dir = modelDirectory()
+        guard let e = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in e {
+            total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        }
+        return total
+    }
+}
+
+/// Loads the active embedding model (actor-internal, single-flight) and produces pooled, L2-normalized vectors.
+/// Returns nil until the model is downloaded (graceful — callers degrade to lexical search / NL "Related").
+actor MLXTextEmbedder: TextEmbedder {
+    static let shared = MLXTextEmbedder()
+
+    private var container: EmbedderModelContainer?
+    private var loadTask: Task<EmbedderModelContainer?, Never>?
+
+    /// Get-or-load the container, single-flight. nil if the model isn't downloaded or the load fails.
+    private func loaded() async -> EmbedderModelContainer? {
+        if let container { return container }
+        if let loadTask { return await loadTask.value }
+        guard EmbeddingModelSpec.isDownloaded() else { return nil }
+        let task = Task { () -> EmbedderModelContainer? in
+            try? await EmbedderModelFactory.shared.loadContainer(
+                from: MLXHubDownloader(downloadBase: EmbeddingModelSpec.downloadBase),
+                using: MLXTokenizerLoader(),
+                configuration: ModelConfiguration(id: EmbeddingModelSpec.active.repoId))
+        }
+        loadTask = task
+        let c = await task.value
+        container = c
+        loadTask = nil
+        return c
+    }
+
+    /// Drop the model from RAM (after a re-embed batch, or on delete). The next embed re-loads on demand.
+    func unload() {
+        container = nil
+        loadTask = nil
+    }
+
+    func embed(_ text: String, language: String, kind: EmbedKind) async -> Embedding? {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, let c = await loaded() else { return nil }
+        let input = EmbeddingModelSpec.active.profile.decorate(clean, kind: kind)
+        return await c.perform { ctx -> Embedding? in
+            let ids = ctx.tokenizer.encode(text: input, addSpecialTokens: true)
+            guard !ids.isEmpty else { return nil }
+            // One text at a time → no padding, so last-token pooling (Qwen3) is exact and we avoid the
+            // pad==eos masking footgun. positionIds nil is correct for Qwen3 (RoPE); an XLM-R swap (BGE-M3/e5)
+            // would compute explicit positionIds here, gated on `EmbeddingModelSpec.active.needsXLMPositionIds`.
+            let arr = MLXArray(ids).reshaped([1, ids.count])
+            let mask = MLXArray.ones([1, ids.count])
+            let tokenTypes = MLXArray.zeros(like: arr)
+            let out = ctx.model(arr, positionIds: nil, tokenTypeIds: tokenTypes, attentionMask: mask)
+            let pooled = ctx.pooling(out, mask: mask, normalize: true, applyLayerNorm: false)
+            pooled.eval()
+            return pooled.map { $0.asArray(Float.self) }[0].map(Double.init)
+        }
+    }
+
+    /// Not used by retrieval — the per-token (extractive/keyword) path stays on `NLEmbedder`. nil here.
+    func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? { nil }
+}

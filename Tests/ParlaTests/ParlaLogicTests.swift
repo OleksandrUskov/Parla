@@ -3291,7 +3291,7 @@ private final class FakeEmbedder: TextEmbedder, @unchecked Sendable {
     private let vector: Embedding?
     private(set) var calls = 0
     init(vector: Embedding? = [1, 0, 0]) { self.vector = vector }
-    func embed(_ text: String, language: String) async -> Embedding? { calls += 1; return vector }
+    func embed(_ text: String, language: String, kind: EmbedKind) async -> Embedding? { calls += 1; return vector }
     func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? {
         guard let vector, !text.isEmpty else { return vector == nil ? nil : [] }
         return [(text.startIndex..<text.endIndex, vector)]   // one token spanning the whole string
@@ -3303,7 +3303,7 @@ private final class FakeEmbedder: TextEmbedder, @unchecked Sendable {
 private final class HookEmbedder: TextEmbedder, @unchecked Sendable {
     var hook: (@MainActor @Sendable () -> Void)?
     private func vec(_ text: String) -> Embedding { text.contains("новый") ? [0, 1] : [1, 0] }
-    func embed(_ text: String, language: String) async -> Embedding? {
+    func embed(_ text: String, language: String, kind: EmbedKind) async -> Embedding? {
         if let hook { await MainActor.run { hook() } }   // main actor is free (caller is awaiting us)
         return vec(text)
     }

@@ -34,6 +34,9 @@ let package = Package(
                 // has loadModelContainer/ChatSession + the Downloader/TokenizerLoader protocols we implement.
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                // P3.5: on-device sentence-embedding retrieval (Qwen3-Embedding) for query→note semantic search.
+                // Same pinned package, NO new dependency, no swift-transformers conflict (MLXEmbedders deps = MLX/MLXNN/MLXLMCommon only).
+                .product(name: "MLXEmbedders", package: "mlx-swift-lm"),
                 .product(name: "MLX", package: "mlx-swift"),   // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cache
 
                 // swift-transformers (WhisperKit's 1.1.x) backs our Downloader (Hub.HubApi) + TokenizerLoader (AutoTokenizer).
