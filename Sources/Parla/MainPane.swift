@@ -564,7 +564,8 @@ struct TranscriptCard: View {
             } else {
                 Text(item.displayTitle)
                     .font(.system(.headline, design: .rounded))
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)   // wrap a long title onto more lines instead of truncating
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture { beginTitleEdit() }
                     .help(Text(L("transcript.title.edit.help")))
