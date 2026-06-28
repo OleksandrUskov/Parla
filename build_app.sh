@@ -70,6 +70,12 @@ fi
 # these implicitly; xcodebuild does not, so the assembler MUST copy them. Copy ALL of them (belt-and-braces).
 shopt -s nullglob
 for b in "$DERIVED/Build/Products/Release/"*.bundle; do
+  # Skip mlx-swift_Cmlx.bundle: its ONLY payload is default.metallib, which we already place colocated as
+  # Contents/MacOS/mlx.metallib (the loader's search path #0 — proven self-sufficient in the P3 spike). Avoids
+  # shipping the 3.6MB metallib twice.
+  case "$(basename "$b")" in
+    mlx-swift_Cmlx.bundle) echo "• Пропущен mlx-swift_Cmlx.bundle (metallib уже colocated → без дубля ~3.6MB)"; continue ;;
+  esac
   cp -R "$b" "$APPDIR/Contents/Resources/"
   echo "• Вшит ресурс-бандл: $(basename "$b")"
 done

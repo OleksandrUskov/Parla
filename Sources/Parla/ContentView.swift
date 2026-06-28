@@ -21,11 +21,12 @@ struct ContentView: View {
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    @State private var showClearConfirm = false
 
     var body: some View {
         @Bindable var model = model
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 12) {
                 Text(L("history.title"))
                     .font(.system(.headline, design: .rounded))
                     .foregroundStyle(.secondary)
@@ -38,6 +39,13 @@ struct SidebarView: View {
                     .foregroundStyle(.secondary)
                     .help(Text(L("history.export.help")))
                     .accessibilityLabel(Text(L("history.export.help")))
+                    Button { showClearConfirm = true } label: {
+                        Image(systemName: "trash").font(.callout)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help(Text(L("history.clear.help")))
+                    .accessibilityLabel(Text(L("history.clear.help")))
                 }
             }
             .padding(.horizontal, 16)
@@ -78,10 +86,17 @@ struct SidebarView: View {
         .overlay(alignment: .trailing) {
             Rectangle().fill(.white.opacity(0.08)).frame(width: 1)
         }
+        .confirmationDialog(L("history.clear.confirm.title"), isPresented: $showClearConfirm, titleVisibility: .visible) {
+            Button(L("history.clear.confirm.button"), role: .destructive) { model.clearHistory() }
+            Button(L("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(L("history.clear.confirm.message"))
+        }
     }
 
     @ViewBuilder private func row(_ item: TranscriptItem) -> some View {
-        SidebarRow(item: item, title: model.sidebarTitle(for: item), selected: model.selection == item.id)
+        SidebarRow(item: item, title: model.sidebarTitle(for: item), selected: model.selection == item.id,
+                   onDelete: { model.delete(item) })
             .onTapGesture { model.selection = item.id }
             .contextMenu {
                 Button(L("common.copy")) { model.copyItem(item) }
@@ -94,6 +109,8 @@ struct SidebarRow: View {
     let item: TranscriptItem
     let title: String
     let selected: Bool
+    var onDelete: () -> Void = {}
+    @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -112,6 +129,21 @@ struct SidebarRow: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(selected ? Brand.accent.opacity(0.7) : Color.clear, lineWidth: 1)
         )
+        // Visible per-note delete on hover (the right-click menu still works too).
+        .overlay(alignment: .topTrailing) {
+            if hovering {
+                Button(action: onDelete) {
+                    Image(systemName: "trash").font(.caption2)
+                        .padding(5).background(.ultraThinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(Text(L("history.delete.help")))
+                .accessibilityLabel(Text(L("history.delete.help")))
+                .padding(6)
+            }
+        }
+        .onHover { hovering = $0 }
         .contentShape(Rectangle())
     }
 }

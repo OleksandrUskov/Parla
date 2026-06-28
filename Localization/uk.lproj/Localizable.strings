@@ -20,6 +20,11 @@
 "history.search"      = "Пошук…";
 "history.empty"       = "Поки порожньо";
 "history.notfound"    = "Нічого не знайдено";
+"history.delete.help"           = "Видалити нотатку";
+"history.clear.help"            = "Очистити всю історію";
+"history.clear.confirm.title"   = "Очистити всю історію?";
+"history.clear.confirm.message" = "Усі нотатки та їхнє аудіо буде видалено назавжди. Скасувати не можна.";
+"history.clear.confirm.button"  = "Очистити все";
 "transcript.related"  = "Схожі нотатки";
 
 /* Drop zone */
@@ -52,11 +57,11 @@
 "error.mlx.download"   = "Не вдалося завантажити модель ШІ: %@";
 
 /* Model tiers */
-"model.tier.tiny.hint"  = "дуже швидко · чернетка";
-"model.tier.base.hint"  = "швидко · базова якість";
+"model.tier.tiny.hint"  = "найшвидша, низька якість · чернетки";
+"model.tier.base.hint"  = "швидка · базова точність";
 "model.tier.small.hint" = "баланс швидкість / точність";
-"model.tier.turbo.hint" = "швидка, компактна · топ для EN/UK · добра RU";
-"model.tier.large.hint" = "повна модель · більша й повільніша";
+"model.tier.turbo.hint" = "найкращий універсал: сильний EN, добрий RU/UK, компактна";
+"model.tier.large.hint" = "найретельніша на EN · повільніша, на RU не краще за turbo";
 
 /* Model size estimates */
 "model.size.tiny"  = "~75 МБ";
@@ -119,6 +124,7 @@
 "settings.insights.summary"     = "Показувати короткий зміст";
 "settings.insights.actions"     = "Показувати завдання";
 "settings.insights.hint"        = "Генерується на пристрої з транскрипту — без хмари. Будь-що можна вимкнути; заголовок редагується прямо в картці.";
+"settings.insights.mlxhint"     = "Для генеративних інсайтів російською/українською завантажте модель ШІ в пікері моделей (верхня панель).";
 "transcript.summary"            = "Короткий зміст";
 "transcript.keywords"           = "Ключові слова";
 "transcript.actions"            = "Завдання";

@@ -183,7 +183,7 @@ struct MLXModelRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(L("mlx.model.title")).font(.callout).lineLimit(1)
                 Text(L("mlx.model.hint")).font(.caption2).foregroundStyle(.secondary)
-                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                    .fixedSize(horizontal: false, vertical: true)   // wrap fully — don't truncate the hint
                 if let err = model.mlxDownloadError, !model.mlxDownloading {
                     Text(err).font(.caption2).foregroundStyle(.red)
                         .lineLimit(2).fixedSize(horizontal: false, vertical: true)

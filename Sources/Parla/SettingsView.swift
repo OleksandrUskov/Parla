@@ -56,6 +56,10 @@ struct SettingsView: View {
                 Toggle(L("settings.insights.actions"), isOn: $model.showActions)
                 Text(L("settings.insights.hint"))
                     .font(.caption).foregroundStyle(.secondary)
+                if MLXLLMService.isSupportedHardware {
+                    Text(L("settings.insights.mlxhint"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             Section(L("settings.section.folderwatch")) {

@@ -20,6 +20,11 @@
 "history.search"      = "Search…";
 "history.empty"       = "Nothing yet";
 "history.notfound"    = "Nothing found";
+"history.delete.help"           = "Delete this note";
+"history.clear.help"            = "Clear all history";
+"history.clear.confirm.title"   = "Clear all history?";
+"history.clear.confirm.message" = "All transcripts and their audio will be permanently deleted. This can't be undone.";
+"history.clear.confirm.button"  = "Clear All";
 "transcript.related"  = "Related notes";
 
 /* Drop zone */
@@ -52,11 +57,11 @@
 "error.mlx.download"   = "Couldn't download the AI model: %@";
 
 /* Model tiers */
-"model.tier.tiny.hint"  = "very fast · draft";
-"model.tier.base.hint"  = "fast · basic quality";
-"model.tier.small.hint" = "balance of speed / accuracy";
-"model.tier.turbo.hint" = "fast, compact · top for EN/UK · good RU";
-"model.tier.large.hint" = "full model · larger & slower";
+"model.tier.tiny.hint"  = "fastest, lowest quality · quick drafts";
+"model.tier.base.hint"  = "fast · basic accuracy";
+"model.tier.small.hint" = "balanced speed & accuracy";
+"model.tier.turbo.hint" = "best all-round: great EN, solid RU/UK, compact";
+"model.tier.large.hint" = "most thorough on EN · slower, no RU gain over turbo";
 
 /* Model size estimates */
 "model.size.tiny"  = "~75 MB";
@@ -119,6 +124,7 @@
 "settings.insights.summary"     = "Show summaries";
 "settings.insights.actions"     = "Show action items";
 "settings.insights.hint"        = "Generated on-device from the transcript — no cloud. Turn any off; titles are editable in the card.";
+"settings.insights.mlxhint"     = "For generative insights in Russian/Ukrainian, download the AI model from the model picker (top bar).";
 "transcript.summary"            = "Summary";
 "transcript.keywords"           = "Keywords";
 "transcript.actions"            = "Action items";

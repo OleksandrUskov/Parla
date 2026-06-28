@@ -20,6 +20,11 @@
 "history.search"      = "Поиск…";
 "history.empty"       = "Пока пусто";
 "history.notfound"    = "Ничего не найдено";
+"history.delete.help"           = "Удалить заметку";
+"history.clear.help"            = "Очистить всю историю";
+"history.clear.confirm.title"   = "Очистить всю историю?";
+"history.clear.confirm.message" = "Все заметки и их аудио будут удалены навсегда. Отменить нельзя.";
+"history.clear.confirm.button"  = "Очистить всё";
 "transcript.related"  = "Похожие заметки";
 
 /* Drop zone */
@@ -52,11 +57,11 @@
 "error.mlx.download"   = "Не удалось скачать модель ИИ: %@";
 
 /* Model tiers */
-"model.tier.tiny.hint"  = "очень быстро · черновик";
-"model.tier.base.hint"  = "быстро · базовое качество";
+"model.tier.tiny.hint"  = "самая быстрая, низкое качество · черновики";
+"model.tier.base.hint"  = "быстрая · базовая точность";
 "model.tier.small.hint" = "баланс скорость / точность";
-"model.tier.turbo.hint" = "быстрая, компактная · топ для EN/UK · хорошая RU";
-"model.tier.large.hint" = "полная модель · крупнее и медленнее";
+"model.tier.turbo.hint" = "лучший универсал: сильный EN, хороший RU/UK, компактная";
+"model.tier.large.hint" = "тщательнее всех на EN · медленнее, на RU не лучше turbo";
 
 /* Model size estimates */
 "model.size.tiny"  = "~75 МБ";
@@ -119,6 +124,7 @@
 "settings.insights.summary"     = "Показывать краткое содержание";
 "settings.insights.actions"     = "Показывать задачи";
 "settings.insights.hint"        = "Генерируется на устройстве из транскрипта — без облака. Любое можно отключить; заголовок правится прямо в карточке.";
+"settings.insights.mlxhint"     = "Для генеративных инсайтов на русском/украинском скачайте модель ИИ в пикере моделей (верхняя панель).";
 "transcript.summary"            = "Краткое содержание";
 "transcript.keywords"           = "Ключевые слова";
 "transcript.actions"            = "Задачи";
