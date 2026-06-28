@@ -158,6 +158,28 @@ extension AppModel {
         refreshRelatedNotes()                                               // clear the now-stale "Related" footer
     }
 
+    /// FORCE a re-run of insight generation for ONE note on demand (the "Regenerate insights" button) — even when
+    /// the note is already at the current provenance tag (which the passes would otherwise skip). The force is purely
+    /// a provenance clear: with `aiModel == nil` the item re-enters BOTH passes — the extractive fallback lands first,
+    /// then the generative backend upgrades it where the language has one. The derived fields are cleared too (the
+    /// passes only OVERWRITE when the text yields a value, so stale values would otherwise strand). A hand-edited
+    /// title is preserved (`titleEdited`). UNLIKE `invalidateDerivedData`, the doc-vector + lemmas are NOT dropped —
+    /// the TEXT didn't change, so those are still valid. Best-effort: a generative failure leaves the extractive
+    /// fallback and never touches the transcript. Drives a transient per-note spinner via `regeneratingIDs`.
+    func regenerateInsights(for id: TranscriptItem.ID) async {
+        guard let idx = history.firstIndex(where: { $0.id == id }) else { return }
+        history[idx].aiModel = nil                                          // re-eligible for BOTH passes (the force)
+        history[idx].summary = nil
+        history[idx].keywords = nil
+        history[idx].actions = nil
+        if history[idx].titleEdited != true { history[idx].title = nil }    // auto-title regenerates; hand titles kept
+        enrichFailedIDs.remove(id)   // a prior hard failure shouldn't block a DELIBERATE retry
+        HistoryStore.save(history)   // persist the cleared state so a quit mid-regenerate can't leave stale insights
+        regeneratingIDs.insert(id)
+        defer { regeneratingIDs.remove(id) }
+        await refreshSemanticIndex()   // re-derives this item (only it is now un-tagged); single-flight, best-effort
+    }
+
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight
     /// — a change that arrives mid-run schedules exactly one more pass after (so the new item is picked up
     /// without overlapping writes to history.json / embeddings.json). Safe to call from launch and after

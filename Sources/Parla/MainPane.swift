@@ -778,6 +778,23 @@ struct TranscriptCard: View {
             }
             .buttonStyle(.plain)
             RetranscribeMenu(item: item)
+            if !model.isBusy {
+                // Regenerate insights on demand (force a fresh title/summary/keywords/tasks). Same circular idiom as
+                // the edit pencil; while it runs the glyph becomes a spinner (insight work is off the isBusy lane, so
+                // the button stays visible to show progress) and the button disables to coalesce double taps.
+                let regenerating = model.regeneratingIDs.contains(item.id)
+                Button { Task { await model.regenerateInsights(for: item.id) } } label: {
+                    Group {
+                        if regenerating { ProgressView().controlSize(.small) }
+                        else { Image(systemName: "sparkles").font(.body) }
+                    }
+                    .padding(9).background(.ultraThinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(regenerating)
+                .help(Text(L("transcript.regenerate.help")))
+                .accessibilityLabel(Text(L("transcript.regenerate")))
+            }
             Menu {
                 ForEach(ExportFormat.allCases) { fmt in
                     Button(fmt.displayName) { model.export(item, as: fmt) }

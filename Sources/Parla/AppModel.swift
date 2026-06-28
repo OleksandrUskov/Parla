@@ -108,6 +108,10 @@ final class AppModel {
     var refiningDictations: Set<UUID> = []             // +Dictation: items showing the streamed text while a full
                                                        // decode refines them (transient — never persisted, so a
                                                        // quit mid-refine just leaves the good streamed text)
+    var regeneratingIDs: Set<UUID> = []                // +Semantic: items whose insights are being re-generated on
+                                                       // demand (the "Regenerate" button) — drives a per-note spinner.
+                                                       // OBSERVED (not @ObservationIgnored) so the button updates;
+                                                       // transient, never persisted. Off the isBusy lane (best-effort).
     var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys

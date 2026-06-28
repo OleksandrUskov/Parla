@@ -93,6 +93,8 @@
 "transcript.edited.manually"   = "Текст изменён вручную";
 "transcript.edit.help"         = "Редактировать текст";
 "transcript.retranscribe.help" = "Перераспознать другой моделью";
+"transcript.regenerate"        = "Пересоздать сводку";
+"transcript.regenerate.help"   = "Заново создать заголовок, краткое содержание, ключевые слова и задачи";
 "transcript.source.unavailable"= "Исходный файл недоступен — перетащи его заново";
 "transcript.meta.words"        = "%lld сл.";
 "transcript.silence"           = "(тишина — ничего не распознано)";

@@ -1301,6 +1301,48 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// The manual "Regenerate" button (P4) FORCES a re-run even on a note already at the current generative tag —
+    /// which enrich would otherwise SKIP. The force is a provenance clear, so the item re-enters both passes; a
+    /// hand-edited title survives, the other fields are re-generated, a prior failure block clears, and the per-note
+    /// spinner flag is gone when the await returns.
+    @MainActor func testRegenerateForcesReprocessAndKeepsHandTitle() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "Fresh", summary: "Fresh summary", actions: [ActionItem(text: "Do X")], keywords: ["fresh"])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "we discussed the roadmap and the plan", lang: "en")
+            it.aiModel = AppModel.foundationModelTag        // ALREADY at the current tag → enrich would skip without the force
+            it.title = "Stale"; it.titleEdited = true       // a hand-edited title (must survive)
+            it.summary = "Stale summary"; it.keywords = ["stale"]; it.actions = [ActionItem(text: "old")]
+            m.history = [it]
+            m.enrichFailedIDs.insert(it.id)                 // a prior hard failure must not block a deliberate retry
+            await m.regenerateInsights(for: it.id)
+            XCTAssertEqual(m.history.first?.title, "Stale")             // hand-edited title preserved through the force
+            XCTAssertEqual(m.history.first?.summary, "Fresh summary")   // ...but the rest is re-generated
+            XCTAssertEqual(m.history.first?.keywords, ["fresh"])
+            XCTAssertEqual(m.history.first?.actions?.map(\.text), ["Do X"])
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.foundationModelTag)
+            XCTAssertFalse(m.enrichFailedIDs.contains(it.id))           // the retry block was cleared
+            XCTAssertTrue(m.regeneratingIDs.isEmpty)                    // spinner flag cleared on completion (defer)
+        }
+    }
+
+    /// Best-effort: when the generative backend throws, Regenerate leaves the TRANSCRIPT (text + segments) entirely
+    /// untouched — only the derived insight fields fall back to extractive — and never drives the engine phase.
+    @MainActor func testRegenerateNeverTouchesTranscriptOnFailure() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, error: .unavailable), embedder: FakeEmbedder())
+            let segs = [Segment(start: 0, end: 1, text: "english"), Segment(start: 1, end: 2, text: "note")]
+            var it = self.makeItem(text: "english note", segments: segs, lang: "en")
+            it.aiModel = AppModel.foundationModelTag
+            m.history = [it]
+            await m.regenerateInsights(for: it.id)
+            XCTAssertEqual(m.history.first?.text, "english note")   // transcript text untouched on failure
+            XCTAssertEqual(m.history.first?.segments, segs)         // segments untouched
+            XCTAssertEqual(m.phase, .idle)                         // never drives the engine phase
+            XCTAssertTrue(m.regeneratingIDs.isEmpty)               // spinner flag cleared
+        }
+    }
+
     @MainActor func testDefaultBackendsAreNoopUnderTests() {
         // Locks the load-bearing headless gate: a test that doesn't inject fakes never hits the real model/embedder.
         XCTAssertTrue(AppModel.defaultAI() is NoopAIService)
