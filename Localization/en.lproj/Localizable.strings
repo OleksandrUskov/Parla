@@ -242,6 +242,8 @@
 "chapter.summarize"       = "Summarize chapters";
 "chapter.summarize.again" = "Regenerate summaries";
 "chapter.summarize.help"  = "Summarize each chapter with on-device AI";
+"chapter.summarize.one"   = "Summarize this chapter";
+"chapter.regenerate.one"  = "Regenerate this chapter";
 
 /* Export + units */
 "export.menu.help" = "Export transcript";

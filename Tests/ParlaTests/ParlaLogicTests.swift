@@ -1428,6 +1428,43 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// Per-chapter regenerate upserts ONE chapter's summary by its stable window key — updating an existing one
+    /// and inserting a missing one (kept sorted) — without re-running the whole recording.
+    @MainActor func testRegenerateChapterSummaryUpsertsOne() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "T", summary: "новое саммари", actions: [])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная", segments: [
+                Segment(start: 0, end: 5, text: "первая глава"),
+                Segment(start: 130, end: 135, text: "вторая глава"),
+            ], lang: "ru")
+            it.durationSec = 700
+            it.chapterSummaries = [ChapterSummary(startSec: 0, endSec: 120, summary: "старое1")]   // only ch0 has one
+            m.history = [it]
+            await m.regenerateChapterSummary(for: it.id, startSec: 0)     // update the existing one
+            XCTAssertEqual(m.history.first?.chapterSummaries?.first(where: { $0.startSec == 0 })?.summary, "новое саммари")
+            await m.regenerateChapterSummary(for: it.id, startSec: 120)   // insert the missing one
+            let cs = m.history.first?.chapterSummaries
+            XCTAssertEqual(cs?.map(\.startSec), [0, 120])                 // both present, sorted by start
+            XCTAssertEqual(cs?.first(where: { $0.startSec == 120 })?.summary, "новое саммари")
+            XCTAssertTrue(m.summarizingChapters.isEmpty)                  // per-chapter spinner cleared (defer)
+        }
+    }
+
+    /// Per-chapter regenerate is best-effort: a failure leaves the EXISTING summary and the transcript untouched.
+    @MainActor func testRegenerateChapterSummaryFailureKeepsOld() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, error: .unavailable), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная", segments: [Segment(start: 0, end: 5, text: "глава")], lang: "ru")
+            it.durationSec = 700
+            it.chapterSummaries = [ChapterSummary(startSec: 0, endSec: 120, summary: "старое")]
+            m.history = [it]
+            await m.regenerateChapterSummary(for: it.id, startSec: 0)     // AI throws → keep old
+            XCTAssertEqual(m.history.first?.chapterSummaries?.first?.summary, "старое")
+            XCTAssertEqual(m.history.first?.text, "длинная")             // transcript untouched
+        }
+    }
+
     @MainActor func testInvalidateClearsChapterSummaries() {
         withTemporaryHistoryStore {
             let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())

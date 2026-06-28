@@ -118,6 +118,8 @@ final class AppModel {
     var summarizingChaptersIDs: Set<UUID> = []         // +Semantic: long notes whose per-chapter summaries are being
                                                        // generated on demand (the "Summarize chapters" button) — drives
                                                        // its spinner. OBSERVED; transient; off the isBusy lane (best-effort).
+    var summarizingChapters: Set<ChapterRef> = []      // +Semantic: individual chapters being re-generated on demand
+                                                       // (per-chapter "regenerate" button) — drives each chapter's spinner.
     var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys

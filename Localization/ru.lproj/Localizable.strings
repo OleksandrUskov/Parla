@@ -242,6 +242,8 @@
 "chapter.summarize"       = "Саммари по главам";
 "chapter.summarize.again" = "Пересоздать саммари";
 "chapter.summarize.help"  = "Сделать саммари каждой главы локальным ИИ";
+"chapter.summarize.one"   = "Сделать саммари этой главы";
+"chapter.regenerate.one"  = "Пересоздать саммари этой главы";
 
 /* Export + units */
 "export.menu.help" = "Экспортировать запись";

@@ -242,6 +242,8 @@
 "chapter.summarize"       = "Зведення за розділами";
 "chapter.summarize.again" = "Перестворити зведення";
 "chapter.summarize.help"  = "Зробити зведення кожного розділу локальним ШІ";
+"chapter.summarize.one"   = "Зробити зведення цього розділу";
+"chapter.regenerate.one"  = "Перестворити зведення цього розділу";
 
 /* Export + units */
 "export.menu.help" = "Експортувати запис";

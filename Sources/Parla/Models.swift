@@ -68,6 +68,12 @@ extension ChapterSummary {
     }
 }
 
+/// Identifies one chapter of one note — the key for the per-chapter "regenerate this chapter" spinner state.
+struct ChapterRef: Hashable, Sendable {
+    let note: UUID
+    let startSec: Double   // the chapter's stable window start (bucket * chapterSizeSec)
+}
+
 /// A single transcript in the history.
 struct TranscriptItem: Identifiable, Codable, Hashable {
     var id: UUID = UUID()

@@ -196,16 +196,10 @@ extension AppModel {
         summarizingChaptersIDs.insert(id)
         defer { summarizingChaptersIDs.remove(id) }
         var built: [ChapterSummary] = []
-        for chapter in chapters {
-            let text = chapter.joinedText
-            guard Self.isEnrichable(text) else { continue }   // skip empty / silence chapters → no fabricated summary
-            do {
-                let result = try await ai.insights(forTranscript: text, language: item.language)
-                let summary = result.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !summary.isEmpty {
-                    built.append(ChapterSummary(startSec: chapter.startSec, endSec: chapter.endSec, summary: summary))
-                }
-            } catch { continue }   // best-effort: this chapter failed → skip it, keep going
+        for chapter in chapters {   // best-effort PER chapter: a failure/empty one is skipped, the rest still land
+            if let s = await chapterSummaryText(chapter, language: item.language) {
+                built.append(ChapterSummary(startSec: chapter.startSec, endSec: chapter.endSec, summary: s))
+            }
         }
         // TOCTOU (mirror enrichInsights): an edit during the long run re-buckets chapters → the keys no longer line
         // up, so drop this stale result rather than persist a misaligned set.
@@ -214,6 +208,45 @@ extension AppModel {
         HistoryStore.save(history)
         // Free the ~2.3GB MLX model after the batch (no-op for the FoundationModels/English path — never loaded).
         await MLXEngine.shared.unload()
+    }
+
+    /// Regenerate (or first-generate) the summary for ONE chapter — so a single failed/poor chapter in a long
+    /// recording can be redone without re-running the whole thing. Upserts into `chapterSummaries` by the stable
+    /// window key. Best-effort: a failure/empty leaves the existing summaries untouched; the transcript is never touched.
+    func regenerateChapterSummary(for id: TranscriptItem.ID, startSec: Double) async {
+        guard let item = history.first(where: { $0.id == id }),
+              AudioChunker.isLong(durationSec: item.durationSec),
+              ai.availability(forLanguage: item.language) == .ready,
+              let chapter = AudioChunker.chapters(from: item.segments).first(where: { abs($0.startSec - startSec) < 0.5 })
+        else { return }
+        let ref = ChapterRef(note: id, startSec: chapter.startSec)
+        summarizingChapters.insert(ref)
+        defer { summarizingChapters.remove(ref) }
+        guard let summary = await chapterSummaryText(chapter, language: item.language) else { return }   // keep old on fail
+        guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
+        var list = history[idx].chapterSummaries ?? []
+        let entry = ChapterSummary(startSec: chapter.startSec, endSec: chapter.endSec, summary: summary)
+        if let i = list.firstIndex(where: { abs($0.startSec - chapter.startSec) < 0.5 }) { list[i] = entry }   // update
+        else { list.append(entry); list.sort { $0.startSec < $1.startSec } }                                   // or insert
+        history[idx].chapterSummaries = list
+        HistoryStore.save(history)
+        await MLXEngine.shared.unload()
+    }
+
+    /// Whether any chapter-summary work (the whole-note batch or a single-chapter regen) is in flight for a note —
+    /// the chapter buttons disable on this so only one chapter-summary operation runs at a time per note.
+    func chapterWorkInFlight(for id: TranscriptItem.ID) -> Bool {
+        summarizingChaptersIDs.contains(id) || summarizingChapters.contains { $0.note == id }
+    }
+
+    /// Summarize ONE chapter's text via the generative backend; nil on empty/silence or failure (best-effort).
+    private func chapterSummaryText(_ chapter: Chapter, language: String) async -> String? {
+        guard Self.isEnrichable(chapter.joinedText) else { return nil }   // empty / silence → no fabricated summary
+        do {
+            let s = try await ai.insights(forTranscript: chapter.joinedText, language: language)
+                .summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            return s.isEmpty ? nil : s
+        } catch { return nil }   // this chapter failed → caller keeps going / keeps the old summary
     }
 
     /// Refresh the whole semantic layer: extractive title/summary, then search embeddings. Single-flight

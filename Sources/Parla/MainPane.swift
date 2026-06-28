@@ -1086,6 +1086,9 @@ struct ChapterListView: View {
 
     private var chapters: [Chapter] { AudioChunker.chapters(from: item.segments) }
     private var summaries: [ChapterSummary] { item.chapterSummaries ?? [] }
+    /// Whether a generative backend can serve this note's language (RU/UK → MLX downloaded; EN → Apple Intelligence
+    /// or the MLX fallback). Drives both the bulk button and the per-chapter regenerate buttons.
+    private var canSummarize: Bool { model.ai.availability(forLanguage: item.language) == .ready }
     /// Match a chapter to its persisted summary by the stable start window (NOT positional index).
     private func summary(for chapter: Chapter) -> String? {
         summaries.first(where: { abs($0.startSec - chapter.startSec) < 0.5 })?.summary
@@ -1096,6 +1099,7 @@ struct ChapterListView: View {
             chapterActions
             ForEach(chapters) { chapter in
                 ChapterSection(chapter: chapter, summary: summary(for: chapter),
+                               noteID: item.id, canSummarize: canSummarize,
                                player: player, tappable: tappable,
                                initiallyExpanded: chapter.index == 0)
             }
@@ -1105,11 +1109,11 @@ struct ChapterListView: View {
         .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    /// On-demand "Summarize chapters" — shown only when a generative backend can actually serve this language
-    /// (RU/UK need the MLX model downloaded; EN needs Apple Intelligence). Honest label: "Summarize" the first
-    /// time (the summaries don't auto-exist), "Regenerate" once they do. A spinner runs while it works.
+    /// On-demand "Summarize chapters" — shown only when a generative backend can serve this language. Honest label:
+    /// "Summarize" the first time (the summaries don't auto-exist), "Regenerate" once they do. A spinner runs while
+    /// the BULK pass works; disabled while any chapter-summary work (bulk or single) is in flight for this note.
     @ViewBuilder private var chapterActions: some View {
-        if model.ai.availability(forLanguage: item.language) == .ready {
+        if canSummarize {
             let busy = model.summarizingChaptersIDs.contains(item.id)
             HStack(spacing: 6) {
                 Spacer(minLength: 0)
@@ -1125,7 +1129,7 @@ struct ChapterListView: View {
                     .foregroundStyle(Brand.accent)
                 }
                 .buttonStyle(.plain)
-                .disabled(busy)
+                .disabled(model.chapterWorkInFlight(for: item.id))
                 .help(Text(L("chapter.summarize.help")))
             }
         }
@@ -1133,19 +1137,27 @@ struct ChapterListView: View {
 }
 
 struct ChapterSection: View {
+    @Environment(AppModel.self) private var model
     let chapter: Chapter
     let summary: String?
+    let noteID: UUID
+    let canSummarize: Bool
     let player: PlaybackController
     let tappable: Bool
     @State private var expanded: Bool
 
-    init(chapter: Chapter, summary: String?, player: PlaybackController, tappable: Bool, initiallyExpanded: Bool) {
+    init(chapter: Chapter, summary: String?, noteID: UUID, canSummarize: Bool,
+         player: PlaybackController, tappable: Bool, initiallyExpanded: Bool) {
         self.chapter = chapter
         self.summary = summary
+        self.noteID = noteID
+        self.canSummarize = canSummarize
         self.player = player
         self.tappable = tappable
         _expanded = State(initialValue: initiallyExpanded)
     }
+
+    private var ref: ChapterRef { ChapterRef(note: noteID, startSec: chapter.startSec) }
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
@@ -1176,9 +1188,28 @@ struct ChapterSection: View {
                 Text(chapter.rangeLabel)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                if canSummarize {
+                    Spacer(minLength: 8)
+                    chapterRegenButton
+                }
             }
         }
         .tint(Brand.accent)
         .padding(.horizontal, 6).padding(.vertical, 4)
+    }
+
+    /// Per-chapter (re)generate — so one failed/poor chapter can be redone without re-running the whole recording.
+    /// "sparkles" when the chapter has no summary yet (generate), "arrow.clockwise" once it does (regenerate); a
+    /// spinner while THIS chapter works; disabled while any chapter-summary work for the note is in flight.
+    @ViewBuilder private var chapterRegenButton: some View {
+        let busy = model.summarizingChapters.contains(ref)
+        Button { Task { await model.regenerateChapterSummary(for: noteID, startSec: chapter.startSec) } } label: {
+            if busy { ProgressView().controlSize(.mini) }
+            else { Image(systemName: summary == nil ? "sparkles" : "arrow.clockwise").font(.caption2) }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Brand.accent)
+        .disabled(model.chapterWorkInFlight(for: noteID))
+        .help(Text(L(summary == nil ? "chapter.summarize.one" : "chapter.regenerate.one")))
     }
 }
