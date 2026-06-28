@@ -181,17 +181,22 @@ extension AppModel {
     /// + MMR; v4 = in-context candidate vectors; v5 = min-3 keyword count + isolated fallback).
     static var extractiveModelTag: String { "extractive-v5" }
 
-    /// Provenance tag for model-generated (FoundationModels) insights — distinguishes them from extractive so the
-    /// extractive pass never clobbers them and the generative pass doesn't reprocess. Bump on prompt/schema change.
-    static var foundationModelTag: String { "foundation-v1" }
+    /// Generative provenance tags + their FAMILY prefixes. Bump the version suffix on any prompt/output change so
+    /// older records reprocess ONCE. The split (prefix vs exact tag) is load-bearing: the extractive pass skips ANY
+    /// generative version by PREFIX (never downgrades a v1 note while enrich is about to regenerate it to v2), while
+    /// enrich targets notes NOT at the CURRENT exact tag (so a version bump re-runs them). FoundationModels = Backend A.
+    static let foundationTagPrefix = "foundation-"
+    /// MLX (Qwen3) generative — the RU/UK backend (P3).
+    static let mlxTagPrefix = "mlx-qwen3-"
+    static var foundationModelTag: String { foundationTagPrefix + "v2" }   // v2: + generative keywords, stricter+cased actions
+    static var mlxModelTag: String { mlxTagPrefix + "v2" }                  // v2: + generative keywords, stricter+cased actions
 
-    /// Provenance tag for MLX (Qwen3) generative insights — the RU/UK backend (P3). Distinct from foundation so a
-    /// prompt/model change reprocesses only MLX records, and extractive never clobbers them. Bump on prompt/model change.
-    static var mlxModelTag: String { "mlx-qwen3-v1" }
-
-    /// True for any GENERATIVE provenance (FoundationModels or MLX): these own title/summary/actions, so the
-    /// extractive pass must not clobber them and enrich must not reprocess them.
-    static func isGenerativeTag(_ tag: String?) -> Bool { tag == foundationModelTag || tag == mlxModelTag }
+    /// True for ANY generative provenance of ANY version (matched by family prefix). The extractive pass uses this to
+    /// NEVER clobber a model-generated insight — even an older version that enrich will regenerate to the current one.
+    static func isGenerativeTag(_ tag: String?) -> Bool {
+        guard let tag else { return false }
+        return tag.hasPrefix(foundationTagPrefix) || tag.hasPrefix(mlxTagPrefix)
+    }
 
     /// Which generative backend owns a language. FoundationModels (English & co.) and MLX (RU/UK) cover DISJOINT
     /// language sets, so the language alone determines the correct provenance tag for enrich output.
@@ -207,7 +212,8 @@ extension AppModel {
     /// the await and skips it if the text changed.
     func enrichInsights() async {
         let targets = history.filter {
-            !Self.isGenerativeTag($0.aiModel)              // already generative (foundation OR mlx) → don't reprocess
+            $0.aiModel != generativeTag(forLanguage: $0.language)   // not at this language's CURRENT generative tag →
+                                                                    // reprocess (new note, extractive, OR an outdated version)
             && !enrichFailedIDs.contains($0.id)            // a hard failure this session → don't hammer the slow model
             && Self.isEnrichable($0.text)                  // skip empty / silence placeholder → no fabricated insights
             && ai.availability(forLanguage: $0.language) == .ready

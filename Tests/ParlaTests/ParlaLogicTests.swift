@@ -1191,6 +1191,24 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// A generative VERSION bump (e.g. mlx-qwen3-v1 → v2) reprocesses an outdated note via ENRICH, WITHOUT the
+    /// extractive pass downgrading it first (it's recognized generative by family prefix). A current-version note stays.
+    @MainActor func testGenerativeVersionBumpReprocessesNotDowngrades() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "Новый", summary: "S2", actions: [], keywords: ["k"])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned), embedder: FakeEmbedder())
+            var old = self.makeItem(text: "русский текст для теста переобработки", lang: "ru")
+            old.aiModel = "mlx-qwen3-v1"; old.title = "Старый"             // an OUTDATED generative note
+            m.history = [old]
+            await m.backfillInsights()                                      // extractive must NOT touch it...
+            XCTAssertEqual(m.history.first?.title, "Старый")
+            XCTAssertEqual(m.history.first?.aiModel, "mlx-qwen3-v1")
+            await m.enrichInsights()                                        // ...enrich reprocesses to the current tag
+            XCTAssertEqual(m.history.first?.title, "Новый")
+            XCTAssertEqual(m.history.first?.aiModel, AppModel.mlxModelTag)  // mlx-qwen3-v2
+        }
+    }
+
     @MainActor func testEnrichAIFailureKeepsExtractiveFallback() async {
         await withTemporaryHistoryStoreAsync {
             // ai.insights throws for every item → best-effort: extractive fallback stays, nothing tagged generative.
