@@ -204,6 +204,22 @@ extension AppModel {
         FoundationModelsService.maySupport(language: language) ? Self.foundationModelTag : Self.mlxModelTag
     }
 
+    // MARK: Retrieval embedder routing (P3.5) — the doc-vector / query producer for "Related" + semantic search.
+
+    /// Active RETRIEVAL embedder: the download-tier `MLXTextEmbedder` once its model is on disk, else the free
+    /// `NLEmbedder` (`embedder`). The EXTRACTIVE path (per-token `tokenVectors` → title/summary/keywords) ALWAYS
+    /// stays on `embedder` — Qwen3-Embedding produces no token vectors.
+    var retrievalEmbedder: any TextEmbedder {
+        if EmbeddingModelSpec.isDownloaded() { return MLXTextEmbedder.shared }
+        return embedder
+    }
+    /// Provenance tag for the active retrieval embedder's vectors — drives the re-embed-on-switch in `backfillEmbeddings`.
+    var retrievalModelTag: String {
+        EmbeddingModelSpec.isDownloaded() ? EmbeddingModelSpec.active.tag : Self.nlEmbeddingTag
+    }
+    /// Tag for vectors produced by the free `NLEmbedder` (when no download-tier model is present).
+    static var nlEmbeddingTag: String { "nl-contextual-v1" }
+
     /// Generative UPGRADE for transcripts whose LANGUAGE has an on-device generative backend: FoundationModels
     /// (English & co., macOS 26) OR MLX/Qwen3 (RU/UK, opt-in download — P3). Replaces the extractive title/summary
     /// with model output and adds real action items. Language-gated by `ai.availability` (RU/UK only reach `.ready`
@@ -257,30 +273,52 @@ extension AppModel {
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
     /// retried on a later pass. The compute lives in the embedder actor (off the main actor).
     func backfillEmbeddings() async {
-        // Embed missing items into a LOCAL map; don't mutate the persisted store across the awaits. Snapshot
-        // the EXACT text each vector was computed from, so a mid-embed edit can be detected on resume.
-        let initial = EmbeddingStore.load()
+        // The ACTIVE retrieval model (NL when nothing downloaded; the download-tier model once it's on disk). If it
+        // changed since the stored vectors were written, those vectors live in a DIFFERENT, incomparable space, so
+        // re-embed the whole corpus into the new space: treat everything as missing + start the store fresh under
+        // the new tag. (The extractive path keeps using `embedder` — Qwen3-Embedding has no token vectors.)
+        let activeTag = retrievalModelTag
+        let activeEmbedder = retrievalEmbedder
+        // A legacy P1 store (NL vectors) predates this sidecar, so an EMPTY stored tag means "NL" — don't churn a
+        // re-embed of the whole corpus on upgrade; only re-embed when the active model genuinely differs.
+        let storedTag = EmbeddingStore.loadModelTag()
+        let modelChanged = (storedTag.isEmpty ? Self.nlEmbeddingTag : storedTag) != activeTag
+
+        // Embed missing items into a LOCAL map; don't mutate the persisted store across the awaits. Snapshot the
+        // EXACT text each vector was computed from, so a mid-embed edit can be detected on resume.
+        let initial: [UUID: Embedding] = modelChanged ? [:] : EmbeddingStore.load()
         var fresh: [UUID: Embedding] = [:]
         var freshText: [UUID: String] = [:]
         for item in history where initial[item.id] == nil {
             let text = embedText(for: item)
-            if let vector = await embedder.embed(text, language: item.language) { fresh[item.id] = vector; freshText[item.id] = text }
+            if let vector = await activeEmbedder.embed(text, language: item.language, kind: .document) {
+                fresh[item.id] = vector; freshText[item.id] = text
+            }
         }
-        // TOCTOU re-validate (mirror pruneAudioCache): a delete/edit may have run on the main actor during an
-        // await. Re-read store + live set NOW, and commit a fresh vector only if its item is still live, still
-        // missing on disk, AND its text is unchanged since we embedded it — otherwise a brand-new item edited
-        // mid-embed (whose `EmbeddingStore.remove` was a no-op, since it wasn't on disk yet) would persist the
-        // STALE pre-edit vector and never re-embed. Skipping it leaves it missing → the next pass re-embeds it.
-        var store = EmbeddingStore.load()
+        // On a model switch that produced NOTHING for a non-empty history (e.g. a transient load failure), keep the
+        // previous vectors + tag working rather than wiping them — the next pass retries once the model can embed.
+        if modelChanged && fresh.isEmpty && !history.isEmpty {
+            embeddingIndex = EmbeddingStore.load()
+            return
+        }
+        // TOCTOU re-validate (mirror pruneAudioCache): a delete/edit may have run on the main actor during an await.
+        // Commit a fresh vector only if its item is still live, still missing, AND its text is unchanged since we
+        // embedded it — otherwise a brand-new item edited mid-embed (whose `EmbeddingStore.remove` was a no-op, since
+        // it wasn't on disk yet) would persist the STALE pre-edit vector. On a switch the store starts empty (the
+        // old-space vectors are dropped); otherwise we merge into the existing store.
+        var store: [UUID: Embedding] = modelChanged ? [:] : EmbeddingStore.load()
         let live = Set(history.map(\.id))
-        var changed = false
+        var changed = modelChanged   // a switch always rewrites the store + its tag, even if only some items re-embedded
         for (id, vector) in fresh where live.contains(id) && store[id] == nil {
             guard let item = history.first(where: { $0.id == id }), embedText(for: item) == freshText[id] else { continue }
             store[id] = vector; changed = true
         }
         let pruned = store.filter { live.contains($0.key) }
         if pruned.count != store.count { store = pruned; changed = true }
-        if changed { EmbeddingStore.save(store) }
+        if changed {
+            EmbeddingStore.save(store)
+            EmbeddingStore.saveModelTag(activeTag)
+        }
         embeddingIndex = store   // in-memory mirror == the just-persisted, re-validated store (no orphan, honors edits)
     }
 

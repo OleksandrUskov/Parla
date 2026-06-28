@@ -47,6 +47,10 @@ final class ParlaLogicTests: XCTestCase {
         // `MLXModelSpec.isDownloaded()` is deterministic (false) in tests. Otherwise, once the user has actually
         // downloaded the RU/UK model, availability tests would see `.ready` and flake. (Same class as above.)
         MLXModelSpec.downloadBase = storeDir.appendingPathComponent("mlx")
+        // The embedding-model cache is likewise a separate global path — redirect it so `EmbeddingModelSpec.isDownloaded()`
+        // is deterministic (false) in tests; otherwise the retrieval-embedder routing would pick the real downloaded
+        // model over the injected fake (the P3.5 probe already downloaded it on the dev machine).
+        EmbeddingModelSpec.downloadBase = storeDir.appendingPathComponent("embed")
     }
 
     // MARK: Model names
@@ -1049,6 +1053,44 @@ final class ParlaLogicTests: XCTestCase {
             await m.refreshSemanticIndex()          // must coalesce: set pending + return without doing work
             XCTAssertTrue(m.semanticRefreshPending)
             XCTAssertTrue(m.embeddingIndex.isEmpty) // no overlapping backfill happened
+        }
+    }
+
+    // MARK: P3.5 — embedding-store provenance tag + re-embed on model switch
+
+    func testEmbeddingStoreModelTagRoundtrip() {
+        withTemporaryHistoryStore {
+            XCTAssertEqual(EmbeddingStore.loadModelTag(), "")            // no sidecar yet
+            EmbeddingStore.saveModelTag("emb:test-model")
+            XCTAssertEqual(EmbeddingStore.loadModelTag(), "emb:test-model")
+        }
+    }
+
+    @MainActor func testBackfillReembedsOnModelSwitch() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [9, 9, 9]))
+            let it = self.makeItem(text: "крипто стартап")
+            m.history = [it]
+            // A vector tagged with a DIFFERENT model lives in an incomparable space → the backfill must re-embed the
+            // whole corpus with the active embedder and stamp the new tag.
+            EmbeddingStore.save([it.id: [1, 1, 1]])
+            EmbeddingStore.saveModelTag("emb:some-other-model")
+            await m.backfillEmbeddings()
+            XCTAssertEqual(m.embeddingIndex[it.id], [9, 9, 9])                       // re-embedded by the active fake
+            XCTAssertEqual(EmbeddingStore.loadModelTag(), AppModel.nlEmbeddingTag)   // tag updated to the active model
+        }
+    }
+
+    @MainActor func testBackfillKeepsLegacyVectorsWhenTagEmpty() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder(vector: [9, 9, 9]))
+            let it = self.makeItem(text: "заметка про работу")
+            m.history = [it]
+            // A legacy P1 store has NL vectors but NO sidecar; the active model is also NL (nothing downloaded), so
+            // an empty tag is treated as NL → the vectors are KEPT, not churned into a re-embed.
+            EmbeddingStore.save([it.id: [7, 7, 7]])
+            await m.backfillEmbeddings()
+            XCTAssertEqual(m.embeddingIndex[it.id], [7, 7, 7])   // preserved (NOT the fake's [9,9,9])
         }
     }
 

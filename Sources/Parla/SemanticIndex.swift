@@ -20,6 +20,16 @@ enum EmbeddingStore {
         HistoryStore.fileURL.deletingLastPathComponent().appendingPathComponent("embeddings.json")
     }
 
+    /// Which embedding model produced the vectors currently in `embeddings.json`. A SEPARATE sidecar so `load()` /
+    /// `save()` / `remove()` keep their plain `[UUID: Embedding]` shape (every call site + the unit tests stay
+    /// unchanged). When this ≠ the active model's tag, `backfillEmbeddings` re-embeds the whole corpus into the new
+    /// space — NL and the download-tier model are different, INCOMPARABLE spaces and must never be mixed.
+    static var modelFileURL: URL {
+        HistoryStore.fileURL.deletingLastPathComponent().appendingPathComponent("embeddings-model.txt")
+    }
+    static func loadModelTag() -> String { (try? String(contentsOf: modelFileURL, encoding: .utf8)) ?? "" }
+    static func saveModelTag(_ tag: String) { try? tag.write(to: modelFileURL, atomically: true, encoding: .utf8) }
+
     static func load() -> [UUID: Embedding] {
         guard let data = try? Data(contentsOf: fileURL),
               let raw = try? JSONDecoder().decode([String: Embedding].self, from: data) else { return [:] }
