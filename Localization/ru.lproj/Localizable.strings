@@ -247,7 +247,7 @@
 "chapter.summarize.one"   = "Сделать сводку главы";
 "chapter.regenerate.one"  = "Обновить сводку главы";
 "view.transcript"         = "Транскрипт";
-"view.digest"             = "Конспект";
+"view.digest"             = "Сводки";
 
 /* Export + units */
 "export.menu.help" = "Экспортировать запись";

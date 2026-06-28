@@ -247,7 +247,7 @@
 "chapter.summarize.one"   = "Зробити зведення цього розділу";
 "chapter.regenerate.one"  = "Перестворити зведення цього розділу";
 "view.transcript"         = "Транскрипт";
-"view.digest"             = "Конспект";
+"view.digest"             = "Зведення";
 
 /* Export + units */
 "export.menu.help" = "Експортувати запис";
