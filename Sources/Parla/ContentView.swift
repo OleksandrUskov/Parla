@@ -2,14 +2,38 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    private let sidebarWidth: CGFloat = 268
+    // Fixed reserve for the traffic-light strip. We deliberately DON'T rely on the window's title-bar
+    // safe-area inset: SwiftUI resolves it asynchronously after the window attaches (~1s), so the content
+    // visibly JUMPS once the provisional inset is swapped for the real one — and that inset is 0 in
+    // fullscreen, where the hover-revealed title bar then overlaps the header. Reserving a constant strip
+    // ourselves (and ignoring the system top inset) makes the top margin deterministic from the first
+    // frame: no jump, no overlap, identical in windowed and fullscreen. 28pt = standard title-bar height.
+    private let titleBarReserve: CGFloat = 28
 
     var body: some View {
         ZStack {
+            // Aurora + frosted left rail composited into ONE full-window background layer. CRUCIAL: the frost is
+            // an overlay INSIDE the (full-window, bleeding) AuroraBackground — NOT a separate column-width
+            // `.ignoresSafeArea()` sibling. A column-shaped bleeding sibling sitting in the sidebar's column
+            // collapses THAT column's title-bar safe-area inset (size-dependent, with a ~1s re-layout jump that
+            // slides the «История» header up toward the traffic lights); a full-window bleeding background does
+            // not — MainPane sits over the same AuroraBackground and never jumps. By painting the frost as a
+            // full-window overlay, the rail still bleeds behind the title bar, but as a LAYOUT sibling it's
+            // full-window (like aurora) → the sidebar CONTENT gets the same reliable inset as MainPane: no jump,
+            // no overlap, consistent across window sizes and correct (inset 0) in fullscreen.
             AuroraBackground()
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(.ultraThinMaterial)
+                        .frame(width: sidebarWidth)
+                        .overlay(alignment: .trailing) { Rectangle().fill(.white.opacity(0.08)).frame(width: 1) }
+                }
             HStack(spacing: 0) {
-                SidebarView().frame(width: 268)
+                SidebarView().frame(width: sidebarWidth)
                 MainPane()
             }
+            .padding(.top, titleBarReserve)              // reserve the traffic-light strip ourselves…
+            .ignoresSafeArea(.container, edges: .top)     // …and don't depend on the title-bar safe-area inset
         }
         .frame(minWidth: 860, minHeight: 580)
         // Rebuild the tree on a UI-language switch so the verbatim L() strings re-resolve live.
@@ -81,11 +105,10 @@ struct SidebarView: View {
                 }
             }
         }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(.white.opacity(0.08)).frame(width: 1)
-        }
+        // Pure content view (transparent) — the frosted rail + divider live in ContentView as a separate
+        // bleeding layer. Mirrors MainPane: no safe-area-ignoring background on the content path, so the
+        // «История» header always sits below the title bar in windowed mode, like the main pane already does.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .confirmationDialog(L("history.clear.confirm.title"), isPresented: $showClearConfirm, titleVisibility: .visible) {
             Button(L("history.clear.confirm.button"), role: .destructive) { model.clearHistory() }
             Button(L("common.cancel"), role: .cancel) {}
