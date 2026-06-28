@@ -569,10 +569,13 @@ struct TranscriptCard: View {
     @State private var titleDraft = ""
     @FocusState private var titleFocused: Bool
     @State private var summaryExpanded = false
+    @State private var showDigest = false      // right pane: Transcript vs Digest (per-chapter summaries) reading mode
 
     private var text: String { item.display(timestamps: model.showTimestamps) }
     private var justCopied: Bool { model.lastCopiedID == item.id }
     private var audioURL: URL? { AudioStore.playableURL(for: item) }
+    /// A long note with generated per-chapter summaries → offer the read-only "Digest" reading mode.
+    private var hasChapterDigest: Bool { !(item.chapterSummaries?.isEmpty ?? true) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -592,6 +595,7 @@ struct TranscriptCard: View {
             if isEditing { cancelEdit() }
             if isEditingTitle { cancelTitleEdit() }
             summaryExpanded = false          // each record opens with the transcript primary; expand the summary on demand
+            showDigest = false               // ...and on the Transcript view, not the Digest
             player.load(audioURL)
             model.refreshRelatedNotes()      // the open note changed → recompute its doc↔doc "Related"
         }
@@ -896,7 +900,21 @@ struct TranscriptCard: View {
         } else {
             VStack(spacing: 10) {
                 TransportBar(player: player, hasAudio: audioURL != nil)
-                readBody
+                // Transcript ⇄ Digest toggle — only when a long note has per-chapter summaries to read.
+                if hasChapterDigest {
+                    Picker("", selection: $showDigest) {
+                        Text(L("view.transcript")).tag(false)
+                        Text(L("view.digest")).tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 280)
+                }
+                if showDigest, hasChapterDigest {
+                    ChapterDigestView(item: item)
+                } else {
+                    readBody
+                }
             }
         }
     }
@@ -1232,5 +1250,41 @@ struct ChapterSection: View {
         .foregroundStyle(Brand.accent)
         .disabled(model.chapterWorkInFlight(for: noteID))
         .help(Text(L(summary == nil ? "chapter.summarize.one" : "chapter.regenerate.one")))
+    }
+}
+
+/// Read-only "Digest" of a long recording: every chapter's range + its AI summary, stacked for reading — no
+/// segments, no expand. Shown via the Transcript⇄Digest toggle when chapter summaries exist (the navigable conspectus).
+struct ChapterDigestView: View {
+    let item: TranscriptItem
+
+    /// Chapters that actually have a summary, matched by the stable start window (NOT positional index).
+    private var rows: [(chapter: Chapter, summary: String)] {
+        let summaries = item.chapterSummaries ?? []
+        return AudioChunker.chapters(from: item.segments).compactMap { ch in
+            guard let s = summaries.first(where: { abs($0.startSec - ch.startSec) < 0.5 })?.summary,
+                  !s.isEmpty else { return nil }
+            return (ch, s)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(rows, id: \.chapter.id) { row in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(Lf("chapter.title", row.chapter.index + 1)).font(.callout.weight(.semibold))
+                        Text(row.chapter.rangeLabel).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                    Text(row.summary).font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
     }
 }

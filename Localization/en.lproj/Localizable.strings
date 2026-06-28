@@ -246,6 +246,8 @@
 "chapter.summarize.help"  = "Summarize each chapter with on-device AI";
 "chapter.summarize.one"   = "Summarize this chapter";
 "chapter.regenerate.one"  = "Regenerate this chapter";
+"view.transcript"         = "Transcript";
+"view.digest"             = "Digest";
 
 /* Export + units */
 "export.menu.help" = "Export transcript";
