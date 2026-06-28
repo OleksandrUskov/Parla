@@ -240,15 +240,28 @@ extension AppModel {
         summarizingChaptersIDs.insert(id)
         defer { summarizingChaptersIDs.remove(id) }
         var built: [ChapterSummary] = []
-        for chapter in chapters {   // best-effort PER chapter: a failure/empty one is skipped, the rest still land
+        for chapter in chapters {   // MAP: best-effort PER chapter — a failure/empty one is skipped, the rest still land
             if let s = await chapterSummaryText(chapter, language: item.language) {
                 built.append(ChapterSummary(startSec: chapter.startSec, endSec: chapter.endSec, summary: s))
             }
         }
-        // TOCTOU (mirror enrichInsights): an edit during the long run re-buckets chapters → the keys no longer line
-        // up, so drop this stale result rather than persist a misaligned set.
+        // REDUCE: build a WHOLE-recording overall summary (+ title/keywords) from the chapter summaries. The first-pass
+        // enrich only saw ~maxInputChars (the opening minutes), so a long note's overall summary was skewed/thin;
+        // reducing the chapter summaries covers the entire recording. Best-effort. (If the joined summaries exceed the
+        // backend's input cap they're truncated — a hierarchical reduce for very long notes is a later refinement.)
+        var overall: AIInsights?
+        if !built.isEmpty {
+            overall = try? await ai.insights(forTranscript: built.map(\.summary).joined(separator: "\n"),
+                                             language: item.language)
+        }
+        // TOCTOU (mirror enrichInsights): re-find after the awaits; an edit re-buckets chapters → drop the stale result.
         guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
         history[idx].chapterSummaries = built.isEmpty ? nil : built
+        if let overall {
+            if !overall.summary.isEmpty { history[idx].summary = overall.summary }                            // whole-recording summary
+            if history[idx].titleEdited != true, !overall.title.isEmpty { history[idx].title = overall.title } // keep a hand title
+            if !overall.keywords.isEmpty { history[idx].keywords = overall.keywords }
+        }
         HistoryStore.save(history)
         // Free the ~2.3GB MLX model after the batch (no-op for the FoundationModels/English path — never loaded).
         await MLXEngine.shared.unload()

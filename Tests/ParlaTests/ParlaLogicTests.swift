@@ -1431,6 +1431,42 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// Map→reduce (P4 punch-list 8): after the per-chapter MAP, a REDUCE over the chapter summaries builds the
+    /// WHOLE-recording overall summary (+title/keywords) — fixing the thin first-minutes summary on long notes.
+    @MainActor func testGenerateChapterSummariesReducesOverallSummary() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: ReduceAIService(), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная запись", segments: [
+                Segment(start: 0, end: 5, text: "первая глава"),
+                Segment(start: 130, end: 135, text: "вторая глава"),
+            ], lang: "ru")
+            it.durationSec = 700
+            m.history = [it]
+            await m.generateChapterSummaries(for: it.id)
+            XCTAssertEqual(m.history.first?.chapterSummaries?.count, 2)
+            XCTAssertEqual(m.history.first?.chapterSummaries?.allSatisfy { $0.summary == "chS" }, true)  // MAP
+            XCTAssertEqual(m.history.first?.summary, "OVERALL")     // REDUCE → whole-recording summary
+            XCTAssertEqual(m.history.first?.title, "OverallТ")      // ...and title/keywords from the full digest
+            XCTAssertEqual(m.history.first?.keywords, ["ovk"])
+        }
+    }
+
+    /// The reduce respects a hand-edited title (never overwrites it) while still upgrading the summary.
+    @MainActor func testGenerateChapterSummariesReduceKeepsHandTitle() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: ReduceAIService(), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная", segments: [
+                Segment(start: 0, end: 5, text: "первая"),
+                Segment(start: 130, end: 135, text: "вторая"),
+            ], lang: "ru")
+            it.durationSec = 700; it.title = "Мой ручной"; it.titleEdited = true
+            m.history = [it]
+            await m.generateChapterSummaries(for: it.id)
+            XCTAssertEqual(m.history.first?.title, "Мой ручной")   // hand title survives the reduce
+            XCTAssertEqual(m.history.first?.summary, "OVERALL")    // summary still upgraded
+        }
+    }
+
     /// Per-chapter best-effort: one chapter's generation fails → it's skipped, the others land, transcript untouched.
     @MainActor func testGenerateChapterSummariesBestEffortPartial() async {
         await withTemporaryHistoryStoreAsync {
@@ -3738,6 +3774,17 @@ private struct PerChapterAIService: LocalLLMService {
     func insights(forTranscript text: String, language: String) async throws -> AIInsights {
         if text.contains(failMarker) { throw AIError.unavailable }
         return AIInsights(title: "T", summary: "ok", actions: [])
+    }
+}
+
+/// AI double for the map→reduce test: the REDUCE input is the chapter summaries joined by NEWLINES (multi-line),
+/// while each per-CHAPTER input is a single space-joined line → distinguish by the newline to return distinct results.
+private struct ReduceAIService: LocalLLMService {
+    func availability(forLanguage language: String) -> AIAvailability { .ready }
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
+        text.contains("\n")
+            ? AIInsights(title: "OverallТ", summary: "OVERALL", actions: [], keywords: ["ovk"])
+            : AIInsights(title: "chT", summary: "chS", actions: [], keywords: [])
     }
 }
 
