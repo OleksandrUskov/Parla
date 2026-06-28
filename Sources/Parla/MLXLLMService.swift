@@ -28,9 +28,13 @@ enum MLXModelSpec {
     /// What to fetch: weights + tokenizer/config (skip the rest of the repo).
     static let downloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.jinja", "tokenizer.model"]
 
-    /// HubApi download base under Parla's Application Support (clean delete + one "disk used" number), NOT the
-    /// hidden default HF cache. HubApi lays the snapshot down at `<base>/models/<repoId>`.
-    static func downloadBase() -> URL {
+    /// HubApi download base under Parla's Application Support (clean delete + one "disk used" number, NOT the hidden
+    /// default HF cache). HubApi lays the snapshot at `<base>/models/<repoId>`. A settable `var` (not a func) so tests
+    /// can redirect it to a temp dir — otherwise `isDownloaded()` reads the user's REAL model and availability tests
+    /// go non-deterministic (mirrors `HistoryStore.fileURL`). `nonisolated(unsafe)`: a test seam, set only in `setUp`.
+    nonisolated(unsafe) static var downloadBase: URL = defaultDownloadBase()
+
+    private static func defaultDownloadBase() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         return support.appendingPathComponent("Parla/mlx", isDirectory: true)
@@ -38,7 +42,7 @@ enum MLXModelSpec {
 
     /// Where `HubApi.snapshot` materializes the model.
     static func modelDirectory() -> URL {
-        downloadBase().appendingPathComponent("models/\(repoId)", isDirectory: true)
+        downloadBase.appendingPathComponent("models/\(repoId)", isDirectory: true)
     }
 
     /// "Downloaded" = a COMPLETE-enough snapshot: the model config, the tokenizer files `AutoTokenizer` needs, AND
@@ -161,7 +165,7 @@ actor MLXEngine {
         let gen = generation
         let task = Task {
             try await loadModelContainer(
-                from: MLXHubDownloader(downloadBase: MLXModelSpec.downloadBase()),
+                from: MLXHubDownloader(downloadBase: MLXModelSpec.downloadBase),
                 using: MLXTokenizerLoader(),
                 id: MLXModelSpec.repoId, revision: MLXModelSpec.revision,
                 progressHandler: progressHandler)
@@ -186,7 +190,7 @@ actor MLXEngine {
     /// Download (or refresh from cache) the model files WITHOUT loading them into memory — the explicit opt-in
     /// "Download" action. Generation later loads lazily from this cache via `loadContainer`.
     func downloadModel(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws {
-        _ = try await MLXHubDownloader(downloadBase: MLXModelSpec.downloadBase())
+        _ = try await MLXHubDownloader(downloadBase: MLXModelSpec.downloadBase)
             .download(
                 id: MLXModelSpec.repoId, revision: MLXModelSpec.revision,
                 matching: MLXModelSpec.downloadPatterns, useLatest: false, progressHandler: progressHandler)
@@ -213,12 +217,14 @@ struct MLXLLMService: LocalLLMService {
     static let maxInputChars = 8000
 
     static let instructions = """
-    You extract a title, a short summary, and any action items from a voice-message transcript.
+    You extract a title, a short summary, topical keywords, and any action items from a voice-message transcript.
     Respond with ONLY a JSON object and nothing else, in this exact shape:
-    {"title": "...", "summary": "...", "actions": ["...", "..."]}
-    ALWAYS write the title, summary and actions in the SAME language as the transcript. Keep the title to a few \
-    words. Keep the summary to 1–3 sentences. List only action items explicitly stated as tasks/intentions; if \
-    there are none, return an empty array. Do not invent information. Output no text outside the JSON object.
+    {"title": "...", "summary": "...", "keywords": ["...", "..."], "actions": ["...", "..."]}
+    ALWAYS write every field in the SAME language as the transcript. Keep the title to a few words; the summary to \
+    1–3 sentences. keywords: 3–6 short topical tags (single words or short phrases), no duplicates. actions: ONLY \
+    explicit tasks or intentions the speaker says THEY need to do — for a purely narrative, reflective, or \
+    descriptive note with no real task, return an EMPTY array; never turn a past action or a general statement \
+    into a task. Do not invent information. Output no text outside the JSON object.
     """
 
     /// MLX runs on Apple Silicon only. The app ships arm64; under Rosetta (x86_64) this is false → the backend
@@ -262,10 +268,11 @@ struct MLXLLMService: LocalLLMService {
             let title = stringField(obj["title"])
             let summary = stringField(obj["summary"])
             let actions = stringArrayField(obj["actions"])
-                .map { ActionItem(text: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                .map { ActionItem(text: $0.trimmingCharacters(in: .whitespacesAndNewlines).sentenceCased) }
                 .filter { !$0.text.isEmpty }
+            let keywords = normalizedKeywords(stringArrayField(obj["keywords"]))
             if !title.isEmpty || !summary.isEmpty {
-                return AIInsights(title: title, summary: summary, actions: actions)
+                return AIInsights(title: title, summary: summary, actions: actions, keywords: keywords)
             }
         }
         return nil

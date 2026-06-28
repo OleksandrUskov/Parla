@@ -43,6 +43,10 @@ final class ParlaLogicTests: XCTestCase {
         // or folder-watch tests would write the user's real processed.json. (EmbeddingStore/AudioStore DO derive
         // from HistoryStore.fileURL's dir, so they're already covered.)
         ProcessedStore.fileURL = storeDir.appendingPathComponent("processed.json")
+        // The MLX model cache is ANOTHER global path that reads the real disk — redirect it to a temp dir so
+        // `MLXModelSpec.isDownloaded()` is deterministic (false) in tests. Otherwise, once the user has actually
+        // downloaded the RU/UK model, availability tests would see `.ready` and flake. (Same class as above.)
+        MLXModelSpec.downloadBase = storeDir.appendingPathComponent("mlx")
     }
 
     // MARK: Model names
@@ -723,7 +727,7 @@ final class ParlaLogicTests: XCTestCase {
         let got = MLXLLMService.parseInsights(from: raw)
         XCTAssertEqual(got?.title, "Звонок маме")
         XCTAssertEqual(got?.summary, "Обсудили планы.")
-        XCTAssertEqual(got?.actions.map(\.text), ["позвонить маме"])   // blank dropped
+        XCTAssertEqual(got?.actions.map(\.text), ["Позвонить маме"])   // blank dropped + first-letter cased
 
         let fenced = "Here you go:\n```json\n{\"title\":\"T\",\"summary\":\"S\",\"actions\":[]}\n```"
         XCTAssertEqual(MLXLLMService.parseInsights(from: fenced)?.title, "T")
@@ -741,10 +745,10 @@ final class ParlaLogicTests: XCTestCase {
         // actions as a bare string → one action
         let s = MLXLLMService.parseInsights(from: #"{"title":"T","summary":"S","actions":"call Bob"}"#)
         XCTAssertEqual(s?.title, "T"); XCTAssertEqual(s?.summary, "S")
-        XCTAssertEqual(s?.actions.map(\.text), ["call Bob"])
+        XCTAssertEqual(s?.actions.map(\.text), ["Call Bob"])   // first-letter cased
         // actions as an array of OBJECTS → non-string elements dropped, title+summary survive
         let o = MLXLLMService.parseInsights(from: #"{"title":"T2","summary":"S2","actions":[{"text":"x"},"ok"]}"#)
-        XCTAssertEqual(o?.title, "T2"); XCTAssertEqual(o?.actions.map(\.text), ["ok"])
+        XCTAssertEqual(o?.title, "T2"); XCTAssertEqual(o?.actions.map(\.text), ["Ok"])
         // title is the wrong type → empty title but a valid summary still salvages the result
         let n = MLXLLMService.parseInsights(from: #"{"title":123,"summary":"only summary"}"#)
         XCTAssertEqual(n?.summary, "only summary"); XCTAssertEqual(n?.title, "")
@@ -755,6 +759,41 @@ final class ParlaLogicTests: XCTestCase {
         let raw = "Note: {not json here} then the real one:\n{\"title\":\"Real\",\"summary\":\"S\"}"
         XCTAssertEqual(MLXLLMService.parseInsights(from: raw)?.title, "Real")
         XCTAssertEqual(MLXLLMService.balancedJSONObjects(in: raw).count, 2)
+    }
+
+    /// Generative keywords are parsed (trimmed, case-insensitive de-duped, capped 6) and action items get
+    /// first-letter casing normalized (so the checklist isn't a mix of cases).
+    func testMLXParseInsightsKeywordsAndActionCasing() {
+        let raw = #"{"title":"T","summary":"S","keywords":["крипта","API","крипта","биржа"],"actions":["позвонить бобу","  ","написать тесты"]}"#
+        let r = MLXLLMService.parseInsights(from: raw)
+        XCTAssertEqual(r?.keywords, ["крипта", "API", "биржа"])                       // trimmed + deduped (case-insens), order kept
+        XCTAssertEqual(r?.actions.map(\.text), ["Позвонить бобу", "Написать тесты"])  // first letter cased, blank dropped
+    }
+
+    func testNormalizedKeywordsTrimsDedupesCaps() {
+        XCTAssertEqual(
+            normalizedKeywords([" one ", "ONE", "two", "", "three", "four", "five", "six", "seven"]),
+            ["one", "two", "three", "four", "five", "six"])   // dedupe case-insens (keep first) + cap 6
+    }
+
+    /// Generative keywords UPGRADE the extractive ones; an empty generative list keeps the extractive default
+    /// (so an un-downloaded model behaves exactly as before).
+    @MainActor func testEnrichKeywordsUpgradeButEmptyKeepsExtractive() async {
+        await withTemporaryHistoryStoreAsync {
+            let withKw = AIInsights(title: "T", summary: "S", actions: [], keywords: ["альфа", "бета"])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: withKw), embedder: FakeEmbedder())
+            var a = self.makeItem(text: "обсудили альфа и бета", lang: "ru"); a.keywords = ["старое"]
+            m.history = [a]
+            await m.enrichInsights()
+            XCTAssertEqual(m.history.first?.keywords, ["альфа", "бета"])   // generative replaced extractive
+
+            let noKw = AIInsights(title: "T", summary: "S", actions: [], keywords: [])
+            let m2 = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: noKw), embedder: FakeEmbedder())
+            var b = self.makeItem(text: "другой текст", lang: "ru"); b.keywords = ["сохранить"]
+            m2.history = [b]
+            await m2.enrichInsights()
+            XCTAssertEqual(m2.history.first?.keywords, ["сохранить"])      // empty generative → extractive kept
+        }
     }
 
     /// MLX covers the languages FoundationModels can't (ru/uk), not English; until the model is downloaded it

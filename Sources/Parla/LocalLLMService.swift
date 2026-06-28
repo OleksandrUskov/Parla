@@ -22,6 +22,29 @@ struct AIInsights: Sendable, Equatable {
     var title: String
     var summary: String
     var actions: [ActionItem]
+    /// Generative topical keywords (the GENERATIVE upgrade over the extractive keyword pass). Empty when a backend
+    /// doesn't produce them → the caller keeps the extractive keywords (so an un-downloaded model = default behavior).
+    var keywords: [String] = []
+}
+
+extension String {
+    /// Uppercase ONLY the first character — normalizes model-generated action items (Cyrillic-aware) so the
+    /// checklist isn't a mix of "Позвонить…" and "позвонить…". Leaves the rest (e.g. "API") untouched.
+    var sentenceCased: String {
+        guard let first = first else { return self }
+        return first.uppercased() + dropFirst()
+    }
+}
+
+/// Normalize a raw model keyword list: trim, drop empties, case-insensitive de-dupe (keep first), cap at 6.
+func normalizedKeywords(_ raw: [String]) -> [String] {
+    var seen = Set<String>(), out: [String] = []
+    for k in raw.map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }) where !k.isEmpty {
+        let key = k.lowercased()
+        if seen.insert(key).inserted { out.append(k) }
+        if out.count == 6 { break }
+    }
+    return out
 }
 
 /// Why (or whether) an AI backend can serve a given transcript. The UI only shows AI affordances on
@@ -99,10 +122,12 @@ struct FoundationModelsService: LocalLLMService {
     static let maxResponseTokens = 500
 
     static let instructions = """
-    You extract a title, a short summary, and any action items from a voice-message transcript.
-    ALWAYS respond in the SAME language as the transcript. Keep the title to a few words. Keep the summary to \
-    1–3 sentences. Only list action items that are explicitly stated as tasks/intentions; if there are none, \
-    return an empty list. Do not invent information.
+    You extract a title, a short summary, topical keywords, and any action items from a voice-message transcript.
+    ALWAYS respond in the SAME language as the transcript. Keep the title to a few words; the summary to 1–3 \
+    sentences. Keywords: 3–6 short topical tags (single words or short phrases), no duplicates. Action items: \
+    list ONLY explicit tasks or intentions the speaker says THEY need to do. For a purely narrative, reflective, \
+    or descriptive note with no real task, return an EMPTY list — never turn a past action or a general \
+    statement into a task. Do not invent information.
     """
 
     func insights(forTranscript text: String, language: String) async throws -> AIInsights {
@@ -145,7 +170,9 @@ struct GeneratedInsights {
     var title: String
     @Guide(description: "A 1–3 sentence summary of the key points, in the same language as the transcript")
     var summary: String
-    @Guide(description: "Concrete tasks or action items explicitly stated in the transcript; an empty list if there are none")
+    @Guide(description: "3–6 short topical keywords (single words or short phrases), no duplicates, in the same language as the transcript")
+    var keywords: [String]
+    @Guide(description: "ONLY explicit tasks/intentions the speaker says they need to do; an EMPTY list for a narrative/reflective note with no real task — never a past action or general statement")
     var actions: [String]
 
     var asInsights: AIInsights {
@@ -153,8 +180,9 @@ struct GeneratedInsights {
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
             actions: actions
-                .map { ActionItem(text: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                .filter { !$0.text.isEmpty }
+                .map { ActionItem(text: $0.trimmingCharacters(in: .whitespacesAndNewlines).sentenceCased) }
+                .filter { !$0.text.isEmpty },
+            keywords: normalizedKeywords(keywords)
         )
     }
 }

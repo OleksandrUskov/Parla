@@ -222,6 +222,9 @@ extension AppModel {
                 if history[idx].titleEdited != true, !result.title.isEmpty { history[idx].title = result.title }
                 if !result.summary.isEmpty { history[idx].summary = result.summary }
                 history[idx].actions = result.actions.isEmpty ? nil : result.actions
+                // Generative keywords UPGRADE the extractive ones; if the model returned none, keep extractive
+                // (so an un-downloaded model = the old extractive-keyword default).
+                if !result.keywords.isEmpty { history[idx].keywords = result.keywords }
                 history[idx].aiModel = generativeTag(forLanguage: item.language)   // en→foundation, ru/uk→mlx
                 changed = true
             } catch {
