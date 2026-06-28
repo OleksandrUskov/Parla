@@ -132,6 +132,7 @@
 "settings.insights.actions"     = "Показувати завдання";
 "settings.insights.hint"        = "Генерується на пристрої з транскрипту — без хмари. Будь-що можна вимкнути; заголовок редагується прямо в картці.";
 "settings.insights.mlxhint"     = "Для генеративних інсайтів російською/українською завантажте модель ШІ в пікері моделей (верхня панель).";
+"transcript.title"              = "Заголовок";
 "transcript.summary"            = "Короткий зміст";
 "transcript.keywords"           = "Ключові слова";
 "transcript.actions"            = "Завдання";
@@ -241,6 +242,7 @@
 
 /* Export + units */
 "export.menu.help" = "Експортувати запис";
+"export.includeInsights" = "Включити зведення";
 "export.title" = "# Parla — історія розшифровок\n\n";
 "unit.gb.fmt"  = "%.1f ГБ";
 "unit.mb.fmt"  = "%.0f МБ";

@@ -132,6 +132,7 @@
 "settings.insights.actions"     = "Show action items";
 "settings.insights.hint"        = "Generated on-device from the transcript — no cloud. Turn any off; titles are editable in the card.";
 "settings.insights.mlxhint"     = "For generative insights in Russian/Ukrainian, download the AI model from the model picker (top bar).";
+"transcript.title"              = "Title";
 "transcript.summary"            = "Summary";
 "transcript.keywords"           = "Keywords";
 "transcript.actions"            = "Action items";
@@ -241,6 +242,7 @@
 
 /* Export + units */
 "export.menu.help" = "Export transcript";
+"export.includeInsights" = "Include insights";
 "export.title" = "# Parla — transcript history\n\n";
 "unit.gb.fmt"  = "%.1f GB";
 "unit.mb.fmt"  = "%.0f MB";

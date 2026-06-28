@@ -796,6 +796,13 @@ struct TranscriptCard: View {
                 .accessibilityLabel(Text(L("transcript.regenerate")))
             }
             Menu {
+                // Opt-in (remembered): fold the AI insights into the exported file. Per-export choice, right here,
+                // so it fits "not always" without a trip to Settings.
+                Toggle(isOn: Binding(get: { model.exportIncludeInsights },
+                                     set: { model.exportIncludeInsights = $0 })) {
+                    Text(L("export.includeInsights"))
+                }
+                Divider()
                 ForEach(ExportFormat.allCases) { fmt in
                     Button(fmt.displayName) { model.export(item, as: fmt) }
                 }

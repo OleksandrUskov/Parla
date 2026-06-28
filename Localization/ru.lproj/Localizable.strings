@@ -132,6 +132,7 @@
 "settings.insights.actions"     = "Показывать задачи";
 "settings.insights.hint"        = "Генерируется на устройстве из транскрипта — без облака. Любое можно отключить; заголовок правится прямо в карточке.";
 "settings.insights.mlxhint"     = "Для генеративных инсайтов на русском/украинском скачайте модель ИИ в пикере моделей (верхняя панель).";
+"transcript.title"              = "Заголовок";
 "transcript.summary"            = "Краткое содержание";
 "transcript.keywords"           = "Ключевые слова";
 "transcript.actions"            = "Задачи";
@@ -241,6 +242,7 @@
 
 /* Export + units */
 "export.menu.help" = "Экспортировать запись";
+"export.includeInsights" = "Включить сводку";
 "export.title" = "# Parla — история расшифровок\n\n";
 "unit.gb.fmt"  = "%.1f ГБ";
 "unit.mb.fmt"  = "%.0f МБ";

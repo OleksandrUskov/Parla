@@ -206,13 +206,15 @@ func filterHistory(_ items: [TranscriptItem], query: String,
     }
 }
 
-/// The entire history as a single markdown text (for export/backup).
-func exportText(_ items: [TranscriptItem]) -> String {
+/// The entire history as a single markdown text (for export/backup). With `includeInsights`, each record
+/// gets the SAME insight header as the per-item Markdown export (shared `insightBlock` → no drift).
+func exportText(_ items: [TranscriptItem], includeInsights: Bool = false) -> String {
     var out = L("export.title")
     for it in items {
         out += "## \(it.sourceName)\n"
         let editedMark = it.isEdited ? " · " + L("transcript.edited") : ""
         out += "_\(it.date.formatted(date: .abbreviated, time: .shortened)) · \(it.language.uppercased()) · \(friendlyModel(it.model))\(editedMark)_\n\n"
+        if includeInsights { out += insightBlock(it, markdown: true) }   // "" when the note has no insights
         out += it.text + "\n\n---\n\n"
     }
     return out

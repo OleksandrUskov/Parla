@@ -84,10 +84,55 @@ func subtitleCues(_ item: TranscriptItem) -> [(start: Double, end: Double, text:
         .filter { !$0.text.isEmpty }   // a tokens-only segment becomes empty after cleaning → drop it
 }
 
+// MARK: - Insight header (AI P4 — opt-in via the export menu)
+
+/// A human-readable insight header for an exported transcript: title / summary / keywords / action items,
+/// each emitted ONLY when its field is set — so an insight-less note contributes NOTHING and its export stays
+/// byte-identical to before P4. Returns "" when the note has no insights at all. `markdown` switches between
+/// Markdown (blockquote summary, bold labels, `- [ ]`/`- [x]` GitHub checkboxes) and plain labelled lines.
+/// When non-empty the block ALWAYS ends with exactly one trailing blank line, so a caller can prepend it
+/// before the body. Labels are localized (resolve to the current UI language, like `exportMarkdown`'s `transcript.edited`).
+func insightBlock(_ item: TranscriptItem, markdown: Bool) -> String {
+    var out = ""
+    // Title: the real AI/extractive title only (NOT the sourceName fallback — the header already carries the name).
+    let title = item.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !title.isEmpty {
+        out += markdown ? "**\(L("transcript.title")):** \(title)\n\n" : "\(L("transcript.title")): \(title)\n"
+    }
+    let summary = item.summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !summary.isEmpty {
+        out += markdown ? "> \(summary)\n\n" : "\(L("transcript.summary")): \(summary)\n"
+    }
+    if let keywords = item.keywords, !keywords.isEmpty {
+        let joined = keywords.joined(separator: ", ")
+        out += markdown ? "**\(L("transcript.keywords")):** \(joined)\n\n" : "\(L("transcript.keywords")): \(joined)\n"
+    }
+    if let actions = item.actions, !actions.isEmpty {
+        out += markdown ? "**\(L("transcript.actions")):**\n" : "\(L("transcript.actions")):\n"
+        for a in actions { out += (a.done ? "- [x] " : "- [ ] ") + a.text + "\n" }   // GFM checkboxes (space is load-bearing)
+        if markdown { out += "\n" }   // close the markdown block with a blank line
+    }
+    guard !out.isEmpty else { return "" }
+    // Plain mode emits single-`\n` lines; normalize to exactly one trailing blank line so the body is separated
+    // (the markdown branches already end each block with `\n\n`).
+    if !markdown && !out.hasSuffix("\n\n") { out += "\n" }
+    return out
+}
+
+/// The insight header framed as a WebVTT `NOTE` comment block (spec-valid: `NOTE`, lines, then a blank line
+/// that terminates it before the first cue). "" when the note has no insights. Built from the plain block,
+/// which has no interior blank lines (each would otherwise close the comment early).
+private func insightNoteVTT(_ item: TranscriptItem) -> String {
+    let body = insightBlock(item, markdown: false)   // ends with a single trailing blank line
+    return body.isEmpty ? "" : "NOTE\n\(body)"
+}
+
 // MARK: - Formatters (pure)
 
 /// SubRip: 1-based cue index, `start --> end` (comma ms), blank line between cues.
 /// Empty when there are no usable cues (never a 0-cue garbage file).
+/// NOTE: insights are DELIBERATELY never injected — SubRip has no comment syntax, so any header would parse
+/// as a malformed first cue and break players (WebVTT carries them in a `NOTE` block instead).
 func exportSRT(_ item: TranscriptItem) -> String {
     let cues = subtitleCues(item)
     guard !cues.isEmpty else { return "" }
@@ -101,8 +146,10 @@ func exportSRT(_ item: TranscriptItem) -> String {
 }
 
 /// WebVTT: `WEBVTT` header, dot-ms timecodes, no integer cue index. Always valid (header even if empty).
-func exportVTT(_ item: TranscriptItem) -> String {
+/// With `includeInsights`, a `NOTE` comment block carrying the insights is inserted after the header.
+func exportVTT(_ item: TranscriptItem, includeInsights: Bool = false) -> String {
     var out = "WEBVTT\n\n"
+    if includeInsights { out += insightNoteVTT(item) }   // "" when the note has no insights → byte-identical
     for cue in subtitleCues(item) {
         out += "\(vttTimecode(cue.start)) --> \(vttTimecode(cue.end))\n"
         out += "\(cue.text)\n\n"
@@ -121,26 +168,32 @@ func exportJSON(_ item: TranscriptItem) throws -> Data {
 }
 
 /// Plain text — flat (`item.text`) or timestamped (`[mm:ss] line`), via the existing `display`.
-func exportPlainTXT(_ item: TranscriptItem, timestamps: Bool) -> String {
-    item.display(timestamps: timestamps)
+/// With `includeInsights`, a labelled insight header precedes the body.
+func exportPlainTXT(_ item: TranscriptItem, timestamps: Bool, includeInsights: Bool = false) -> String {
+    let block = includeInsights ? insightBlock(item, markdown: false) : ""   // "" → byte-identical to pre-P4
+    return block + item.display(timestamps: timestamps)
 }
 
 /// One transcript as a Markdown block — the same shape as a single `exportText` record, minus the
 /// archive title header and the trailing `---` separator (that divider sits between records).
-func exportMarkdown(_ item: TranscriptItem) -> String {
+/// With `includeInsights`, the insight header sits between the meta line and the body.
+func exportMarkdown(_ item: TranscriptItem, includeInsights: Bool = false) -> String {
     let editedMark = item.isEdited ? " · " + L("transcript.edited") : ""
     let meta = "_\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(item.language.uppercased()) · \(friendlyModel(item.model))\(editedMark)_"
-    return "## \(item.sourceName)\n\(meta)\n\n\(item.text)\n"
+    let block = includeInsights ? insightBlock(item, markdown: true) : ""   // "" → byte-identical to pre-P4
+    return "## \(item.sourceName)\n\(meta)\n\n\(block)\(item.text)\n"
 }
 
 /// Render one item to a string for a given format (UI entry point). `.json` is handled separately
-/// (it returns `Data`); this returns its UTF-8 string form for share-sheet convenience.
-func exportString(_ item: TranscriptItem, as format: ExportFormat, timestamps: Bool = true) -> String {
+/// (it returns `Data`); this returns its UTF-8 string form for share-sheet convenience. `includeInsights`
+/// (opt-in via the export menu) folds the AI insights into the human-readable formats; JSON already carries
+/// them as stored fields, and SRT deliberately omits them (no comment syntax).
+func exportString(_ item: TranscriptItem, as format: ExportFormat, timestamps: Bool = true, includeInsights: Bool = false) -> String {
     switch format {
-    case .txt:      return exportPlainTXT(item, timestamps: timestamps)
-    case .markdown: return exportMarkdown(item)
+    case .txt:      return exportPlainTXT(item, timestamps: timestamps, includeInsights: includeInsights)
+    case .markdown: return exportMarkdown(item, includeInsights: includeInsights)
     case .srt:      return exportSRT(item)
-    case .vtt:      return exportVTT(item)
+    case .vtt:      return exportVTT(item, includeInsights: includeInsights)
     case .json:     return (try? exportJSON(item)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
     }
 }
