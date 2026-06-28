@@ -81,6 +81,7 @@ struct SidebarView: View {
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
+                    .onChange(of: model.searchQuery) { _, _ in model.onSearchQueryChanged() }
             }
 
             if model.history.isEmpty {

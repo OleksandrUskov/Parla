@@ -1094,6 +1094,22 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testFilteredHistoryBlendsSemanticHitsBelowLexical() {
+        withTemporaryHistoryStore {
+            let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())
+            let lex = self.makeItem(text: "крипта и биржи")    // literal match for «крипт»
+            let sem = self.makeItem(text: "мой стартап")       // no literal match — a semantic-only hit
+            let off = self.makeItem(text: "погода сегодня")    // neither
+            m.history = [lex, sem, off]
+            m.searchQuery = "крипт"
+            m.semanticHitIDs = [sem.id, lex.id]                // download-tier ranking (lex is also lexical → not duplicated)
+            // Lexical hit first, the semantic-ONLY hit appended below it; the unrelated note excluded.
+            XCTAssertEqual(m.filteredHistory.map(\.id), [lex.id, sem.id])
+            m.semanticHitIDs = []
+            XCTAssertEqual(m.filteredHistory.map(\.id), [lex.id])   // no model / no hits → pure lexical (unchanged behavior)
+        }
+    }
+
     @MainActor func testRelatedNotesEmptyForHomogeneousCluster() {
         withTemporaryHistoryStore {
             let m = AppModel(engine: FakeEngine(), embedder: FakeEmbedder())

@@ -29,6 +29,8 @@ final class AppModel {
     var downloadProgress: Double = 0
     var searchQuery: String = ""
     var relatedIDs: [UUID] = []                         // "Related notes" to the OPEN item (doc↔doc semantic, P1) — recomputed on selection
+    var semanticHitIDs: [UUID] = []                     // download-tier query→note matches (P3.5) — blended into filteredHistory below the lexical hits
+    @ObservationIgnored var searchDebounce: Task<Void, Never>?   // debounces the semantic search on each keystroke
     @ObservationIgnored var embeddingIndex: [UUID: Embedding] = [:]   // in-memory mirror of embeddings.json (doc↔doc related reads it; effect flows through observable relatedIDs)
     @ObservationIgnored var enrichFailedIDs: Set<UUID> = []           // items whose generative enrich hard-failed this session — don't re-submit to the slow model every refresh (cleared on edit / next launch)
     var lemmaIndex: [UUID: Set<String>] = [:]                         // per-item lemma set for morphology search; OBSERVED — filteredHistory depends on it, so it must re-evaluate when the index builds
@@ -240,7 +242,16 @@ final class AppModel {
         return filteredHistory.first
     }
 
-    var filteredHistory: [TranscriptItem] { filterHistory(history, query: searchQuery, lemmaIndex: lemmaIndex) }
+    /// The sidebar list: lexical (substring + lemma) matches, EXTENDED with download-tier semantic query→note
+    /// matches the literal search missed — appended in relevance order below the exact matches. `semanticHitIDs` is
+    /// computed asynchronously (debounced) so this stays synchronous + cheap; empty → today's pure-lexical list.
+    var filteredHistory: [TranscriptItem] {
+        let lexical = filterHistory(history, query: searchQuery, lemmaIndex: lemmaIndex)
+        guard !semanticHitIDs.isEmpty else { return lexical }
+        let lexicalIDs = Set(lexical.map(\.id))
+        let semanticOnly = semanticHitIDs.compactMap { id in lexicalIDs.contains(id) ? nil : history.first { $0.id == id } }
+        return lexical + semanticOnly
+    }
 
     /// Most recent transcript's text, or "" — the read value behind GetLastTranscriptIntent (Shortcuts).
     var lastTranscriptText: String { history.first?.text ?? "" }

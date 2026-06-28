@@ -56,6 +56,17 @@ extension AppModel {
     /// live in a different space). Pure in-memory (`embeddingIndex`); best-effort — no vector / no peers → none.
     func refreshRelatedNotes() {
         guard let item = selectedItem, let selfVec = embeddingIndex[item.id] else { relatedIDs = []; return }
+        // Download-tier (Qwen) vectors are isotropic + cross-lingual → raw cosine, NO mean-centering and NO
+        // same-script restriction (an English note CAN relate to a Russian one). The NL path below needs centering.
+        if EmbeddingModelSpec.isDownloaded(), EmbeddingStore.loadModelTag() == EmbeddingModelSpec.active.tag {
+            let pool = history.filter { $0.id != item.id && embeddingIndex[$0.id] != nil }
+            guard !pool.isEmpty else { relatedIDs = []; return }
+            let scored = pool.map { (id: $0.id, score: SemanticIndex.cosine(selfVec, embeddingIndex[$0.id]!)) }
+                .sorted { $0.score > $1.score }
+            guard let top = scored.first?.score, top >= Self.semanticSearchFloor else { relatedIDs = []; return }
+            relatedIDs = scored.filter { $0.score >= Swift.max(Self.semanticSearchFloor, 0.7 * top) }.prefix(3).map(\.id)
+            return
+        }
         let script = dominantScript(item.text)
         let pool = history.filter { $0.id != item.id && embeddingIndex[$0.id] != nil && dominantScript($0.text) == script }
         // Need ≥2 peers: mean-centering over a 2-element set {peer, self} puts them at EXACTLY opposite
@@ -83,6 +94,41 @@ extension AppModel {
     /// Min centered doc↔doc cosine to count as "related". Calibrated on real data (LOCAL_AI_LAYER.md §5):
     /// true topic pairs land ≈0.4–0.7, unrelated/noise notes go negative; 0.30 keeps the former, drops the latter.
     static var relatedFloor: Double { 0.30 }
+
+    // MARK: Semantic search (P3.5) — real query→note retrieval via the download-tier model
+
+    /// Min query→note cosine to surface a semantic search hit. Probe-calibrated (Qwen3-Embedding): in-topic notes
+    /// land 0.41–0.73 (incl. cross-lingual), off-topic 0.23–0.31 → 0.40 keeps the former, drops the latter.
+    static var semanticSearchFloor: Double { 0.40 }
+
+    /// Debounced kick for semantic search on each keystroke. Clears stale hits immediately (the list shows pure
+    /// lexical during the debounce), then re-ranks once typing settles. No-op without a download-tier model.
+    func onSearchQueryChanged() {
+        searchDebounce?.cancel()
+        semanticHitIDs = []
+        guard EmbeddingModelSpec.isDownloaded() else { return }
+        searchDebounce = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await self?.refreshSemanticSearch()
+        }
+    }
+
+    /// Rank history by MEANING for the current query — the download-tier query→note retrieval NL can't do. Embeds
+    /// the query, cosine-ranks the active-space note vectors, keeps those above the floor (cross-lingual included).
+    /// Best-effort; gated on the model being present AND the corpus re-embedded into its space (store tag matches).
+    func refreshSemanticSearch() async {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2,
+              EmbeddingModelSpec.isDownloaded(),
+              EmbeddingStore.loadModelTag() == EmbeddingModelSpec.active.tag,
+              let qvec = await retrievalEmbedder.embed(query, language: "", kind: .query)
+        else { semanticHitIDs = []; return }
+        guard searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }   // typed on → stale
+        let ids = Array(embeddingIndex.keys)
+        let vectors = ids.map { embeddingIndex[$0]! }
+        semanticHitIDs = SemanticIndex.topK(qvec, in: vectors, k: 8, minScore: Self.semanticSearchFloor).map { ids[$0.index] }
+    }
 
     /// Drop ALL derived data for an item whose text changed in place — edit (`saveEdit`), re-transcribe
     /// (`runRetranscribe`), dictation refine (`refineDictation`) — so the next `refreshSemanticIndex` recomputes
