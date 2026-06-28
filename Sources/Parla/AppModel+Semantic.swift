@@ -63,8 +63,8 @@ extension AppModel {
             guard !pool.isEmpty else { relatedIDs = []; return }
             let scored = pool.map { (id: $0.id, score: SemanticIndex.cosine(selfVec, embeddingIndex[$0.id]!)) }
                 .sorted { $0.score > $1.score }
-            guard let top = scored.first?.score, top >= Self.semanticSearchFloor else { relatedIDs = []; return }
-            relatedIDs = scored.filter { $0.score >= Swift.max(Self.semanticSearchFloor, 0.7 * top) }.prefix(3).map(\.id)
+            guard let top = scored.first?.score, top >= Self.semanticRelatedFloor else { relatedIDs = []; return }
+            relatedIDs = scored.filter { $0.score >= Swift.max(Self.semanticRelatedFloor, 0.7 * top) }.prefix(3).map(\.id)
             return
         }
         let script = dominantScript(item.text)
@@ -97,9 +97,15 @@ extension AppModel {
 
     // MARK: Semantic search (P3.5) — real query→note retrieval via the download-tier model
 
-    /// Min query→note cosine to surface a semantic search hit. Probe-calibrated (Qwen3-Embedding): in-topic notes
-    /// land 0.41–0.73 (incl. cross-lingual), off-topic 0.23–0.31 → 0.40 keeps the former, drops the latter.
-    static var semanticSearchFloor: Double { 0.40 }
+    /// Min query→note cosine to surface a semantic search hit. The probe put in-topic at 0.41–0.73 and off-topic at
+    /// 0.23–0.31, but REAL queries are shorter / more abstract than a note and score lower, so 0.40 missed genuine
+    /// paraphrases («свой бизнес» → a crypto-startup note). 0.33 sits just above the off-topic ceiling (0.31) to
+    /// favour RECALL for search; the lexical layer already guarantees exact-keyword hits, so this is purely additive.
+    static var semanticSearchFloor: Double { 0.33 }
+
+    /// Min raw Qwen doc↔doc cosine for "Related" — kept higher than the search floor: Related is a PRECISE
+    /// suggestion (both sides are full notes → higher scores), whereas search favours recall.
+    static var semanticRelatedFloor: Double { 0.42 }
 
     /// Debounced kick for semantic search on each keystroke. Clears stale hits immediately (the list shows pure
     /// lexical during the debounce), then re-ranks once typing settles. No-op without a download-tier model.
