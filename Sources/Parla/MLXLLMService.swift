@@ -273,9 +273,10 @@ struct MLXLLMService: LocalLLMService {
         guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw AIError.unavailable }
+        // Generous cap so a long recording's summary FINISHES; completeSentences is the safety net if it's still hit.
         let raw = try await MLXEngine.shared.generate(prompt: String(trimmed.prefix(Self.maxInputChars)),
-                                                      instructions: Self.summaryInstructions, maxTokens: 1500)
-        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                                                      instructions: Self.summaryInstructions, maxTokens: 3000)
+        return completeSentences(raw)
     }
 
     // MARK: Tolerant JSON parse (MLX has no guided decoding → prompt-then-parse; pure + unit-tested)

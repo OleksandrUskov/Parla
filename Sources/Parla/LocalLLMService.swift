@@ -95,6 +95,20 @@ func languagePrimarySubtag(_ code: String) -> String {
     code.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? ""
 }
 
+/// If a generated summary looks truncated (doesn't end on sentence-final punctuation — a token-cap cutoff), trim
+/// it back to the last COMPLETE sentence so it never dangles mid-word ("…Трамп призвал Зелен"). No-op when it
+/// already ends cleanly (incl. a closing quote/paren after the terminal). Pure + unit-tested.
+func completeSentences(_ s: String) -> String {
+    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let last = t.last else { return t }
+    let terminals: Set<Character> = [".", "!", "?", "…"]
+    let closers: Set<Character> = ["»", "\"", "”", ")", "’", "'"]
+    if terminals.contains(last) { return t }                                              // ends on a sentence boundary
+    if closers.contains(last), let prev = t.dropLast().last, terminals.contains(prev) { return t }  // …».  …!"
+    guard let cut = t.lastIndex(where: { terminals.contains($0) }) else { return t }      // no boundary → leave as-is
+    return String(t[...cut]).trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 // MARK: - Backend A — FoundationModels (English-first, zero-cost, macOS 26)
 
 /// FoundationModels backend. Below the macOS-26 floor (or where the framework can't be imported) the
@@ -137,8 +151,9 @@ struct FoundationModelsService: LocalLLMService {
     static let maxInputChars = 8000
     /// Output cap so a title/summary can't run away (the @Guide prose steers length, this bounds it hard).
     static let maxResponseTokens = 500
-    /// Higher cap for the comprehensive `summarize` (long-note map-reduce) — it intentionally produces more.
-    static let maxSummaryTokens = 1500
+    /// Higher cap for the comprehensive `summarize` (long-note map-reduce) — it intentionally produces more. Generous
+    /// so a long recording's summary FINISHES; `completeSentences` is the safety net if an even longer note hits it.
+    static let maxSummaryTokens = 3000
 
     /// Comprehensive free-form summary prompt (NOT the terse 1–3-sentence `instructions`) — for long-note map-reduce.
     static let summaryInstructions = """
@@ -187,7 +202,7 @@ struct FoundationModelsService: LocalLLMService {
             let response = try await LanguageModelSession(instructions: Self.summaryInstructions)
                 .respond(to: String(trimmed.prefix(Self.maxInputChars)),
                          options: GenerationOptions(maximumResponseTokens: Self.maxSummaryTokens))
-            return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return completeSentences(response.content)   // never dangle if the cap is hit
         }
         #endif
         throw AIError.unavailable

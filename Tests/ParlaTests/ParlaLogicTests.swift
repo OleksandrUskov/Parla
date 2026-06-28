@@ -2813,6 +2813,17 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(ExportFormat.json.supportsInsightsOnly)    // JSON = full record
     }
 
+    /// Truncated summaries (token-cap cutoff) are trimmed back to the last complete sentence — never a dangling word.
+    func testCompleteSentences() {
+        XCTAssertEqual(completeSentences("Привет. Как дел"), "Привет.")              // drop the dangling fragment
+        XCTAssertEqual(completeSentences("Готово."), "Готово.")                      // already clean → unchanged
+        XCTAssertEqual(completeSentences("Раз. Два! Три? Четыре"), "Раз. Два! Три?") // trim to the last terminal
+        XCTAssertEqual(completeSentences("Хвост…"), "Хвост…")                        // ellipsis is a clean end
+        XCTAssertEqual(completeSentences("без точек вообще"), "без точек вообще")    // no boundary → leave as-is
+        XCTAssertEqual(completeSentences("Он сказал «да»."), "Он сказал «да».")      // closer after terminal → clean
+        XCTAssertEqual(completeSentences("  пробелы.  "), "пробелы.")                // trims surrounding whitespace
+    }
+
     func testExportEditedRecordDegrades() {
         // text ≠ segments → one full-text cue [0, durationSec=1], never the stale segment timecodes
         let item = makeItem(text: "edited full text",

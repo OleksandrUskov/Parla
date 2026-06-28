@@ -1083,9 +1083,8 @@ struct SegmentList: View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(Array(segments.enumerated()), id: \.offset) { i, seg in
                 if !seg.cleanText.isEmpty {
-                    SegmentRow(seg: seg, active: i == activeIdx, tappable: tappable)
-                        .contentShape(Rectangle())
-                        .onTapGesture { if tappable { player.seek(to: seg.start) } }
+                    SegmentRow(seg: seg, active: i == activeIdx, tappable: tappable,
+                               onSeek: { if tappable { player.seek(to: seg.start) } })
                 }
             }
         }
@@ -1099,12 +1098,20 @@ struct SegmentRow: View {
     let seg: Segment
     let active: Bool
     let tappable: Bool
+    var onSeek: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("[\(fmtTime(seg.start))]")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(active || tappable ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.tertiary))
+            // Timecode = the seek control: a click jumps the player. Selection is OFF here so clicking the digits
+            // seeks (not selects); the transcript text beside it stays selectable/copyable.
+            Button { onSeek() } label: {
+                Text("[\(fmtTime(seg.start))]")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(active || tappable ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.tertiary))
+            }
+            .buttonStyle(.plain)
+            .disabled(!tappable)
+            .textSelection(.disabled)
             Text(seg.cleanText)
                 .font(.system(.body, design: .rounded))
                 .textSelection(.enabled)
@@ -1230,9 +1237,8 @@ struct ChapterSection: View {
                     }
                     ForEach(Array(chapter.segments.enumerated()), id: \.offset) { _, seg in
                         if !seg.cleanText.isEmpty {
-                            SegmentRow(seg: seg, active: false, tappable: tappable)
-                                .contentShape(Rectangle())
-                                .onTapGesture { if tappable { player.seek(to: seg.start) } }
+                            SegmentRow(seg: seg, active: false, tappable: tappable,
+                                       onSeek: { if tappable { player.seek(to: seg.start) } })
                         }
                     }
                 }
