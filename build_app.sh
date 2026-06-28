@@ -63,6 +63,18 @@ else
   echo "❌ MLX metallib не найден (mlx-swift_Cmlx.bundle/.../default.metallib) — сборка MLX сломана, не отгружаю .app"; exit 1
 fi
 
+# SwiftPM RESOURCE BUNDLES: xcodebuild emits one `<Package>_<Target>.bundle` per package that ships resources
+# (KeyboardShortcuts, swift-transformers Hub, swift-crypto, mlx Cmlx, …). `Bundle.module` resolves them from the
+# app's Contents/Resources at runtime — WITHOUT copying them the FIRST access fatalErrors (EXC_BREAKPOINT). This bit
+# us hard: opening Settings builds a KeyboardShortcuts recorder → its Bundle.module → crash. `swift build` resolved
+# these implicitly; xcodebuild does not, so the assembler MUST copy them. Copy ALL of them (belt-and-braces).
+shopt -s nullglob
+for b in "$DERIVED/Build/Products/Release/"*.bundle; do
+  cp -R "$b" "$APPDIR/Contents/Resources/"
+  echo "• Вшит ресурс-бандл: $(basename "$b")"
+done
+shopt -u nullglob
+
 ICON_LINE=""
 if [ -f "Resources/AppIcon.icns" ]; then
   cp "Resources/AppIcon.icns" "$APPDIR/Contents/Resources/AppIcon.icns"
