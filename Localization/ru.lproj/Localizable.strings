@@ -239,11 +239,11 @@
 "chunk.label"        = "Фрагмент %1$lld/%2$lld";
 "chunk.failed"       = "(фрагмент %lld не распознан)";
 "chapter.title"      = "Глава %lld";
-"chapter.summarize"       = "Саммари по главам";
-"chapter.summarize.again" = "Пересоздать саммари";
-"chapter.summarize.help"  = "Сделать саммари каждой главы локальным ИИ";
-"chapter.summarize.one"   = "Сделать саммари этой главы";
-"chapter.regenerate.one"  = "Пересоздать саммари этой главы";
+"chapter.summarize"       = "Сводка по главам";
+"chapter.summarize.again" = "Обновить все сводки";
+"chapter.summarize.help"  = "Сделать сводку каждой главы локальным ИИ";
+"chapter.summarize.one"   = "Сделать сводку главы";
+"chapter.regenerate.one"  = "Обновить сводку главы";
 
 /* Export + units */
 "export.menu.help" = "Экспортировать запись";

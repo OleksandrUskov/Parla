@@ -1160,42 +1160,46 @@ struct ChapterSection: View {
     private var ref: ChapterRef { ChapterRef(note: noteID, startSec: chapter.startSec) }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $expanded) {
-            VStack(alignment: .leading, spacing: 2) {
-                // The chapter's AI summary (P4) — when generated — sits above its segments, marked with the
-                // insight glyph so it reads as a digest, not another transcript line.
-                if let summary, !summary.isEmpty {
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Image(systemName: "sparkles").font(.caption2).foregroundStyle(Brand.accent)
-                        Text(summary).font(.callout).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.vertical, 4)
-                }
-                ForEach(Array(chapter.segments.enumerated()), id: \.offset) { _, seg in
-                    if !seg.cleanText.isEmpty {
-                        SegmentRow(seg: seg, active: false, tappable: tappable)
-                            .contentShape(Rectangle())
-                            .onTapGesture { if tappable { player.seek(to: seg.start) } }
-                    }
-                }
-            }
-            .padding(.top, 2)
-        } label: {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header — the WHOLE row toggles expand (not just the chevron). The regen button is a separate Button,
+            // so it captures its own taps and doesn't toggle the row.
             HStack(spacing: 8) {
-                Text(Lf("chapter.title", chapter.index + 1))
-                    .font(.callout.weight(.semibold))
-                Text(chapter.rangeLabel)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if canSummarize {
-                    Spacer(minLength: 8)
-                    chapterRegenButton
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    .frame(width: 10)
+                Text(Lf("chapter.title", chapter.index + 1)).font(.callout.weight(.semibold))
+                Text(chapter.rangeLabel).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                if canSummarize { chapterRegenButton }
+            }
+            .padding(.horizontal, 6).padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } }
+
+            if expanded {
+                VStack(alignment: .leading, spacing: 2) {
+                    // The chapter's AI summary (P4) — when generated — sits above its segments, marked with the
+                    // insight glyph so it reads as a digest, not another transcript line.
+                    if let summary, !summary.isEmpty {
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            Image(systemName: "sparkles").font(.caption2).foregroundStyle(Brand.accent)
+                            Text(summary).font(.callout).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    ForEach(Array(chapter.segments.enumerated()), id: \.offset) { _, seg in
+                        if !seg.cleanText.isEmpty {
+                            SegmentRow(seg: seg, active: false, tappable: tappable)
+                                .contentShape(Rectangle())
+                                .onTapGesture { if tappable { player.seek(to: seg.start) } }
+                        }
+                    }
                 }
+                .padding(.horizontal, 6).padding(.bottom, 6)
             }
         }
         .tint(Brand.accent)
-        .padding(.horizontal, 6).padding(.vertical, 4)
     }
 
     /// Per-chapter (re)generate — so one failed/poor chapter can be redone without re-running the whole recording.
