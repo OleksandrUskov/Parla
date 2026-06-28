@@ -265,8 +265,8 @@ extension AppModel {
         var richSummary: String?
         if !built.isEmpty {
             let joined = built.map(\.summary).joined(separator: "\n")
-            overall = try? await ai.insights(forTranscript: joined, language: item.language)
-            richSummary = (try? await ai.summarize(joined, language: item.language))?.trimmingCharacters(in: .whitespacesAndNewlines)
+            overall = try? await ai.insights(forTranscript: joined, language: item.language)   // title + keywords
+            richSummary = await hierarchicalSummary(of: built.map(\.summary), language: item.language)  // detailed summary, ANY length
         }
         // TOCTOU (mirror enrichInsights): re-find after the awaits; an edit re-buckets chapters → drop the stale result.
         guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
@@ -312,13 +312,57 @@ extension AppModel {
     }
 
     /// DETAILED overall summary REDUCED from the chapter summaries — whole-recording coverage AND real length (the
-    /// per-note brief summary is 1–3 sentences over only the opening minutes). Best-effort; nil if unavailable/empty.
+    /// per-note brief summary is 1–3 sentences over only the opening minutes). HIERARCHICAL, so it scales to ANY
+    /// recording length. Best-effort; nil if unavailable/empty.
     private func reducedSummary(from chapterSummaries: [ChapterSummary], language: String) async -> String? {
-        guard !chapterSummaries.isEmpty else { return nil }
-        let joined = chapterSummaries.map(\.summary).joined(separator: "\n")
-        let s = (try? await ai.summarize(joined, language: language))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        await hierarchicalSummary(of: chapterSummaries.map(\.summary), language: language)
+    }
+
+    /// Reduce many chapter summaries into ONE overall summary, scaling to ANY recording length. If the summaries fit
+    /// the input budget → one comprehensive pass; otherwise MAP each over-budget batch to a batch summary and RECURSE
+    /// on those — so a 10-hour recording (hundreds of chapters) is covered in stages instead of truncating to the
+    /// first ~8000 chars. Each pass is bounded (token cap + `completeSentences`), and the FINAL summary stays a
+    /// readable bounded length (a summary shouldn't be infinite) while COVERAGE spans everything. Depth-bounded backstop.
+    func hierarchicalSummary(of summaries: [String], language: String) async -> String? {
+        var level = summaries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !level.isEmpty else { return nil }
+        let budget = Self.summaryReduceCharBudget
+        for _ in 0..<4 {                                   // depth backstop — each level shrinks ~budget-fold
+            let joined = level.joined(separator: "\n")
+            if joined.count <= budget || level.count == 1 { return await summarizeOnce(joined, language: language) }
+            let batches = Self.batched(level, maxChars: budget)
+            guard batches.count < level.count else { return await summarizeOnce(joined, language: language) }  // can't group → one pass
+            var next: [String] = []
+            for batch in batches {   // MAP each batch → a batch summary
+                if let s = await summarizeOnce(batch.joined(separator: "\n"), language: language) { next.append(s) }
+            }
+            guard !next.isEmpty else { return nil }
+            level = next            // RECURSE on the (far fewer) batch summaries
+        }
+        return await summarizeOnce(level.joined(separator: "\n"), language: language)
+    }
+
+    /// One best-effort `summarize` pass → trimmed non-empty text, or nil.
+    private func summarizeOnce(_ text: String, language: String) async -> String? {
+        let s = (try? await ai.summarize(text, language: language))?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (s?.isEmpty == false) ? s : nil
     }
+
+    /// Greedy-pack strings into batches whose joined length stays within `maxChars` (an item bigger than the budget
+    /// goes alone — never split). Pure + testable.
+    nonisolated static func batched(_ items: [String], maxChars: Int) -> [[String]] {
+        var batches: [[String]] = [], current: [String] = [], currentLen = 0
+        for item in items {
+            let add = item.count + 1   // +1 for the "\n" separator
+            if !current.isEmpty, currentLen + add > maxChars { batches.append(current); current = []; currentLen = 0 }
+            current.append(item); currentLen += add
+        }
+        if !current.isEmpty { batches.append(current) }
+        return batches
+    }
+
+    /// Char budget per reduce pass — kept under the backends' `maxInputChars` (8000) so a batch is never truncated.
+    static var summaryReduceCharBudget: Int { 7000 }
 
     /// Summarize ONE chapter's text via the generative backend; nil on empty/silence or failure (best-effort).
     private func chapterSummaryText(_ chapter: Chapter, language: String) async -> String? {

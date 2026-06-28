@@ -1469,6 +1469,32 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// Greedy batching packs strings under the budget, never splits a single item, and drops nothing.
+    func testBatchedPacksUnderBudget() {
+        let items = Array(repeating: String(repeating: "a", count: 100), count: 10)
+        let batches = AppModel.batched(items, maxChars: 250)
+        XCTAssertEqual(batches.flatMap { $0 }.count, 10)                                            // nothing dropped
+        XCTAssertGreaterThan(batches.count, 1)                                                      // actually split
+        XCTAssertTrue(batches.allSatisfy { $0.count == 1 || $0.joined(separator: "\n").count <= 250 })
+        // an item bigger than the budget goes ALONE (never split)
+        let big = AppModel.batched([String(repeating: "x", count: 500), "tiny"], maxChars: 250)
+        XCTAssertEqual(big.first, [String(repeating: "x", count: 500)])
+    }
+
+    /// Hierarchical reduce: over-budget input is BATCHED + RECURSED (many summarize calls); fitting input = one pass.
+    @MainActor func testHierarchicalSummaryRecursesForLargeInput() async {
+        let ai = CountingSummaryAIService()
+        let m = AppModel(engine: FakeEngine(), ai: ai, embedder: FakeEmbedder())
+        let big = Array(repeating: String(repeating: "ы", count: 600), count: 40)   // 24000 chars ≫ budget
+        let result = await m.hierarchicalSummary(of: big, language: "ru")
+        XCTAssertEqual(result, "SUM")
+        XCTAssertGreaterThan(ai.summarizeCalls, 1)                                   // batched + recursed
+        let ai2 = CountingSummaryAIService()
+        let m2 = AppModel(engine: FakeEngine(), ai: ai2, embedder: FakeEmbedder())
+        _ = await m2.hierarchicalSummary(of: ["short", "two"], language: "ru")
+        XCTAssertEqual(ai2.summarizeCalls, 1)                                        // fits → single pass
+    }
+
     /// Granular "regenerate summary" on a long note WITH chapter summaries uses the DETAILED reduce, not a brief pass.
     @MainActor func testGranularSummaryUsesReduceForLongNote() async {
         await withTemporaryHistoryStoreAsync {
@@ -3839,6 +3865,17 @@ private struct DetailedSummaryAIService: LocalLLMService {
         AIInsights(title: "T", summary: "BRIEF", actions: [], keywords: ["k"])
     }
     func summarize(_ text: String, language: String) async throws -> String { "DETAILED whole-recording summary" }
+}
+
+/// Counts `summarize` calls — to prove the hierarchical reduce BATCHES + RECURSES on over-budget input (many calls)
+/// vs a single pass when it fits. Single-flight in tests → unchecked Sendable is safe (same as FakeEngine).
+private final class CountingSummaryAIService: LocalLLMService, @unchecked Sendable {
+    private(set) var summarizeCalls = 0
+    func availability(forLanguage language: String) -> AIAvailability { .ready }
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
+        AIInsights(title: "T", summary: "S", actions: [])
+    }
+    func summarize(_ text: String, language: String) async throws -> String { summarizeCalls += 1; return "SUM" }
 }
 
 /// Fake `TextEmbedder`: returns a canned vector (or nil) and counts calls. Single-flight in tests
