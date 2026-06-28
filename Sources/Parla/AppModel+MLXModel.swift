@@ -15,15 +15,16 @@ extension AppModel {
     }
 
     /// Opt-in download of the RU/UK generative model (~2.3 GB) from Hugging Face's public (non-gated) CDN — the
-    /// same in-app UX as the Whisper models, no browser/account. On success, kicks a semantic refresh so existing
-    /// RU/UK notes get generative insights. Holds the lane through that refresh (the model load is memory-heavy —
-    /// don't let a transcription start alongside it). Best-effort: a failure surfaces a transient error and keeps
-    /// everything extractive.
+    /// same in-app UX as the Whisper models, no browser/account. On success it kicks a BACKGROUND semantic refresh
+    /// so existing RU/UK notes get generative insights — WITHOUT holding the lane: the refresh is best-effort and
+    /// must not freeze the UI (the progress bar) or block transcription for minutes while it loads the model and
+    /// generates per note. Memory is bounded by the engine's GPU-cache cap + the post-batch model unload. A failure
+    /// surfaces inline (mlxDownloadError) + as a transient chip, and keeps everything extractive.
     func downloadMLXModel() async {
         guard !isBusy, downloadingModel == nil, !mlxDownloading, !mlxModelDownloaded else { return }
         mlxDownloading = true
         mlxDownloadProgress = 0
-        defer { mlxDownloading = false }   // released only after the post-download enrich (lane held throughout)
+        mlxDownloadError = nil
         do {
             try await MLXEngine.shared.downloadModel(progressHandler: { @Sendable [weak self] p in
                 // @Sendable: crosses into HubApi's nonisolated download. `self` (@MainActor → Sendable) is
@@ -31,11 +32,15 @@ extension AppModel {
                 Task { @MainActor in self?.mlxDownloadProgress = p.fractionCompleted }
             })
         } catch {
-            phase = .failed(Lf("error.mlx.download", (error as? LocalizedError)?.errorDescription ?? error.localizedDescription))
+            let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            mlxDownloadError = msg
+            phase = .failed(Lf("error.mlx.download", msg))
+            mlxDownloading = false
             return
         }
+        mlxDownloading = false
         refreshMLXModelState()
-        await refreshSemanticIndex()   // RU/UK items now reach `.ready` → enrich upgrades them to generative
+        Task { await refreshSemanticIndex() }   // background enrich: lane released; memory bounded by cacheLimit + post-batch unload
     }
 
     /// Delete the downloaded RU/UK model + drop it from memory (frees the disk + RAM). Recomputes the size line.

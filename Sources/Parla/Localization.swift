@@ -47,6 +47,19 @@ enum Localized {
     static func format(_ key: String, _ args: [CVarArg]) -> String {
         String(format: string(key), arguments: args)
     }
+
+    /// Every bundled-language rendering of a key (en/ru/uk + the active bundle). Used to match a STORED localized
+    /// string regardless of the CURRENT UI language — the value was saved in whatever language was active back then
+    /// (e.g. the "silence" placeholder on a silent clip), so a single-language compare would miss after a switch.
+    static func allLanguageStrings(_ key: String) -> Set<String> {
+        var out: Set<String> = [string(key)]
+        for code in ["en", "ru", "uk"] {
+            if let path = baseBundle.path(forResource: code, ofType: "lproj"), let b = Bundle(path: path) {
+                out.insert(b.localizedString(forKey: key, value: key, table: nil))
+            }
+        }
+        return out
+    }
 }
 
 /// Localized string for `key` in the active UI language.

@@ -1,8 +1,9 @@
 import Foundation
 import Hub          // swift-transformers (WhisperKit's 1.1.x): HubApi — backs our Downloader
 import Tokenizers   // swift-transformers: AutoTokenizer + Tokenizer — backs our TokenizerLoader/bridge
-import MLXLMCommon  // loadModelContainer / ChatSession / Downloader / TokenizerLoader / Tokenizer / ModelContainer
+import MLXLMCommon  // loadModelContainer / ChatSession / Downloader / TokenizerLoader / Tokenizer / ModelContainer / GenerateParameters
 import MLXLLM        // registers the Qwen3 architecture into the model-factory registry (linked for its side effect)
+import MLX           // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cache (memory discipline on a 16GB Mac)
 
 // MARK: - Backend B — MLX (RU/UK GENERATIVE insights, opt-in download, macOS-14 floor)
 //
@@ -40,11 +41,15 @@ enum MLXModelSpec {
         downloadBase().appendingPathComponent("models/\(repoId)", isDirectory: true)
     }
 
-    /// "Downloaded" = the config + at least one weight shard are present. Cheap, synchronous — drives availability.
+    /// "Downloaded" = a COMPLETE-enough snapshot: the model config, the tokenizer files `AutoTokenizer` needs, AND
+    /// a weight shard. Stricter than "config + any shard" so an INTERRUPTED download (which lands files one by one)
+    /// isn't reported `.ready` with a green check while generation would fail. Cheap, synchronous — drives availability.
     static func isDownloaded() -> Bool {
         let dir = modelDirectory()
         let fm = FileManager.default
-        guard fm.fileExists(atPath: dir.appendingPathComponent("config.json").path) else { return false }
+        func has(_ name: String) -> Bool { fm.fileExists(atPath: dir.appendingPathComponent(name).path) }
+        guard has("config.json"), has("tokenizer_config.json"),
+              has("tokenizer.json") || has("tokenizer.model") else { return false }
         let contents = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
         return contents.contains { $0.hasSuffix(".safetensors") }
     }
@@ -131,26 +136,50 @@ struct MLXTokenizerBridge: MLXLMCommon.Tokenizer {
 actor MLXEngine {
     static let shared = MLXEngine()
 
-    private var container: ModelContainer?
+    /// Bound the model's output so one note can't run away (mirror Backend A's 500-token cap).
+    static let maxOutputTokens = 500
 
-    /// Download (if missing) + load the model, caching the container. Used both by the explicit "Download" action
-    /// (with a real progress handler) and lazily by the first generation (cache hit → instant).
+    private var container: ModelContainer?
+    private var loadTask: Task<ModelContainer, Error>?   // single-flight: concurrent callers join one load
+    private var generation = 0                            // bumped by unload() to invalidate an in-flight load
+    private var didCapGPUCache = false
+
+    /// Cap the Metal buffer cache ONCE so freed buffers return to the OS instead of growing unbounded — essential
+    /// alongside a resident ~2.3GB model + WhisperKit (~1.5GB) on a 16GB Mac. (mlx-swift defaults to ~1.5× working set.)
+    private func capGPUCacheOnce() {
+        guard !didCapGPUCache else { return }
+        MLX.Memory.cacheLimit = 48 * 1024 * 1024   // 48 MB (non-deprecated property; GPU.set(cacheLimit:) is deprecated)
+        didCapGPUCache = true
+    }
+
+    /// Download-if-needed + load the model, caching the container. SINGLE-FLIGHT (concurrent callers await one load)
+    /// and TOCTOU-safe: if `unload()` (a delete) lands during the load, the result is discarded — never cached stale.
     func loadContainer(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws -> ModelContainer {
         if let container { return container }
-        let c = try await loadModelContainer(
-            from: MLXHubDownloader(downloadBase: MLXModelSpec.downloadBase()),
-            using: MLXTokenizerLoader(),
-            id: MLXModelSpec.repoId,
-            revision: MLXModelSpec.revision,
-            progressHandler: progressHandler)
+        if let loadTask { return try await loadTask.value }   // join the in-flight load
+        capGPUCacheOnce()
+        let gen = generation
+        let task = Task {
+            try await loadModelContainer(
+                from: MLXHubDownloader(downloadBase: MLXModelSpec.downloadBase()),
+                using: MLXTokenizerLoader(),
+                id: MLXModelSpec.repoId, revision: MLXModelSpec.revision,
+                progressHandler: progressHandler)
+        }
+        loadTask = task
+        defer { loadTask = nil }
+        let c = try await task.value
+        guard gen == generation else { throw AIError.unavailable }   // unloaded/deleted mid-load → don't cache
         container = c
         return c
     }
 
-    /// One generation pass: build a fresh session (stateless per note), return the raw model text.
+    /// One generation pass: a fresh session (stateless per note) with a bounded output, return the raw model text.
     func generate(prompt: String, instructions: String) async throws -> String {
         let container = try await loadContainer()
-        let session = ChatSession(container, instructions: instructions)
+        var params = GenerateParameters()
+        params.maxTokens = Self.maxOutputTokens
+        let session = ChatSession(container, instructions: instructions, generateParameters: params)
         return try await session.respond(to: prompt)
     }
 
@@ -163,8 +192,14 @@ actor MLXEngine {
                 matching: MLXModelSpec.downloadPatterns, useLatest: false, progressHandler: progressHandler)
     }
 
-    /// Drop the in-memory model (e.g. after the user deletes the download) so a later load re-reads from disk.
-    func unload() { container = nil }
+    /// Drop the in-memory model (after a delete, or to free RAM after an enrich batch) + invalidate any in-flight
+    /// load so it won't cache a now-stale container. A later `loadContainer` re-reads from disk.
+    func unload() {
+        container = nil
+        loadTask?.cancel()
+        loadTask = nil
+        generation &+= 1
+    }
 }
 
 // MARK: Service — the LocalLLMService seam (Backend B)
@@ -216,46 +251,69 @@ struct MLXLLMService: LocalLLMService {
 
     // MARK: Tolerant JSON parse (MLX has no guided decoding → prompt-then-parse; pure + unit-tested)
 
-    /// Decode the model's text into `AIInsights`: strip ``` fences, take the first balanced `{…}`, JSON-decode.
-    /// Returns nil on any failure → caller throws → extractive fallback kept. Empty title AND summary → nil.
+    /// Decode the model's text into `AIInsights` with maximum tolerance (MLX has no guided decoding): scan EACH
+    /// top-level balanced `{…}` (the model may fence it or wrap it in prose), parse loosely via JSONSerialization,
+    /// and read title/summary/actions INDEPENDENTLY — a malformed `actions` field never discards a good title+summary.
+    /// Returns the first object that yields a non-empty title or summary; nil if none → caller keeps extractive.
     static func parseInsights(from raw: String) -> AIInsights? {
-        guard let json = firstJSONObject(in: raw), let data = json.data(using: .utf8) else { return nil }
-        struct Raw: Decodable { var title: String?; var summary: String?; var actions: [String]? }
-        guard let decoded = try? JSONDecoder().decode(Raw.self, from: data) else { return nil }
-        let title = (decoded.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let summary = (decoded.summary ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let actions = (decoded.actions ?? [])
-            .map { ActionItem(text: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            .filter { !$0.text.isEmpty }
-        guard !title.isEmpty || !summary.isEmpty else { return nil }
-        return AIInsights(title: title, summary: summary, actions: actions)
-    }
-
-    /// First top-level balanced `{…}` substring (ignores braces inside strings + escapes). Handles ```json fences
-    /// implicitly by scanning for the first `{`. Pure + testable.
-    static func firstJSONObject(in text: String) -> String? {
-        let chars = Array(text)
-        guard let start = chars.firstIndex(of: "{") else { return nil }
-        var depth = 0
-        var inString = false
-        var escaped = false
-        var i = start
-        while i < chars.count {
-            let c = chars[i]
-            if inString {
-                if escaped { escaped = false }
-                else if c == "\\" { escaped = true }
-                else if c == "\"" { inString = false }
-            } else {
-                if c == "\"" { inString = true }
-                else if c == "{" { depth += 1 }
-                else if c == "}" {
-                    depth -= 1
-                    if depth == 0 { return String(chars[start...i]) }
-                }
+        for json in balancedJSONObjects(in: raw) {
+            guard let data = json.data(using: .utf8),
+                  let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
+            let title = stringField(obj["title"])
+            let summary = stringField(obj["summary"])
+            let actions = stringArrayField(obj["actions"])
+                .map { ActionItem(text: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                .filter { !$0.text.isEmpty }
+            if !title.isEmpty || !summary.isEmpty {
+                return AIInsights(title: title, summary: summary, actions: actions)
             }
-            i += 1
         }
         return nil
     }
+
+    /// A JSON value read leniently as a trimmed String (accepts a String; ignores any other type).
+    private static func stringField(_ value: Any?) -> String {
+        (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    /// A JSON value read leniently as `[String]`: an array (keep its string elements) or a lone string → `[string]`;
+    /// anything else → `[]`. So a model that emits `"actions":"call Bob"` or `[{…}]` doesn't sink the whole parse.
+    private static func stringArrayField(_ value: Any?) -> [String] {
+        if let arr = value as? [Any] { return arr.compactMap { $0 as? String } }
+        if let s = value as? String { return [s] }
+        return []
+    }
+
+    /// All top-level balanced `{…}` substrings, in order (braces inside strings + escapes ignored). Lets the parser
+    /// skip a stray brace-pair in pre-JSON prose and find the real object. Pure + testable.
+    static func balancedJSONObjects(in text: String) -> [String] {
+        let chars = Array(text)
+        var objects: [String] = []
+        var i = 0
+        while i < chars.count {
+            guard chars[i] == "{" else { i += 1; continue }
+            let start = i
+            var depth = 0, inString = false, escaped = false
+            var j = i
+            scan: while j < chars.count {
+                let c = chars[j]
+                if inString {
+                    if escaped { escaped = false }
+                    else if c == "\\" { escaped = true }
+                    else if c == "\"" { inString = false }
+                } else if c == "\"" { inString = true }
+                else if c == "{" { depth += 1 }
+                else if c == "}" {
+                    depth -= 1
+                    if depth == 0 { objects.append(String(chars[start...j])); break scan }
+                }
+                j += 1
+            }
+            i = max(j, start) + 1
+        }
+        return objects
+    }
+
+    /// First top-level balanced `{…}` (kept for simple callers + the unit tests).
+    static func firstJSONObject(in text: String) -> String? { balancedJSONObjects(in: text).first }
 }

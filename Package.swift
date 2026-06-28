@@ -17,6 +17,9 @@ let package = Package(
         // swift-huggingface, что КОНФЛИКТУЕТ с пином WhisperKit (1.1.x). Вместо него — свои Downloader/
         // TokenizerLoader поверх transformers WhisperKit'а + не-макро loadModelContainer (см. MLXLLMService).
         .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", exact: "3.31.3"),
+        // mlx-swift is transitive (via mlx-swift-lm); declared directly so we can `import MLX` for
+        // MLX.GPU.set(cacheLimit:). Same constraint mlx-swift-lm uses → the solver unifies to one 0.31.x version.
+        .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.31.3")),
         // Уже в графе транзитивно через WhisperKit (Hub/Tokenizers). Объявляем прямо, чтобы импортировать
         // их в MLXLLMService; диапазон совпадает с пином WhisperKit (1.1.6..<1.2.0) → конфликта нет.
         .package(url: "https://github.com/huggingface/swift-transformers.git", "1.1.6" ..< "1.2.0"),
@@ -31,6 +34,8 @@ let package = Package(
                 // has loadModelContainer/ChatSession + the Downloader/TokenizerLoader protocols we implement.
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLX", package: "mlx-swift"),   // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cache
+
                 // swift-transformers (WhisperKit's 1.1.x) backs our Downloader (Hub.HubApi) + TokenizerLoader (AutoTokenizer).
                 .product(name: "Tokenizers", package: "swift-transformers"),
                 .product(name: "Hub", package: "swift-transformers"),

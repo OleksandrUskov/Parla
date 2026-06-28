@@ -58,7 +58,9 @@ if [ -n "$MLXLIB" ]; then
   cp "$MLXLIB" "$APPDIR/Contents/MacOS/mlx.metallib"
   echo "• Вшит MLX default.metallib → Contents/MacOS/mlx.metallib"
 else
-  echo "⚠️  MLX metallib не найден — генеративные RU/UK инсайты (P3) упадут в рантайме (ищи mlx-swift_Cmlx.bundle)"
+  # HARD fail: without the metallib, MLX aborts via a C++ std::terminate at first use (uncatchable by Swift) —
+  # i.e. shipping a broken .app. Every other prerequisite above is fatal too; this must be as well.
+  echo "❌ MLX metallib не найден (mlx-swift_Cmlx.bundle/.../default.metallib) — сборка MLX сломана, не отгружаю .app"; exit 1
 fi
 
 ICON_LINE=""

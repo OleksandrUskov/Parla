@@ -122,6 +122,10 @@ extension AppModel {
             await backfillEmbeddings()
             backfillLemmas()
         } while semanticRefreshPending
+        // Free the ~2.3GB MLX model after the enrich batch so it isn't left resident during transcription (the core
+        // hot path — keep its RAM clear). No-op if MLX never loaded (English/Noop backends). It re-loads lazily on
+        // the next batch that has RU/UK targets. Generation already capped the Metal cache (MLXEngine.capGPUCacheOnce).
+        await MLXEngine.shared.unload()
         refreshRelatedNotes()   // the index just grew/shrank → refresh the open note's "Related"
     }
 
@@ -233,7 +237,11 @@ extension AppModel {
     /// can't fabricate a title/summary for "nothing recognized".
     private static func isEnrichable(_ text: String) -> Bool {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !t.isEmpty && t != L("transcript.silence")
+        guard !t.isEmpty else { return false }
+        // Compare against the silence placeholder in EVERY bundled language: it was stored in whatever UI language
+        // was active at transcription time, so after a language switch a single-language compare would miss and the
+        // model would fabricate a title/summary for "nothing recognized".
+        return !Localized.allLanguageStrings("transcript.silence").contains(t)
     }
 
     /// Backfill search embeddings for items missing a vector, then persist. Best-effort: an item the

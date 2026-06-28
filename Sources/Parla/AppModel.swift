@@ -39,6 +39,7 @@ final class AppModel {
     var mlxModelBytes: Int64 = 0               // its on-disk size (for the "disk used" line)
     var mlxDownloading: Bool = false           // single-flight + busy guard for the MLX download
     var mlxDownloadProgress: Double = 0
+    var mlxDownloadError: String?              // last MLX download error — shown inline in the model row (cleared on retry/success)
 
     // Settings (mirrored into UserDefaults).
     var selectedModel: String { didSet { UserDefaults.standard.set(selectedModel, forKey: Keys.model) } }

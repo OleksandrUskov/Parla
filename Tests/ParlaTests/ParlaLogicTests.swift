@@ -734,6 +734,29 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(MLXLLMService.parseInsights(from: #"{"title":"","summary":"","actions":[]}"#))
     }
 
+    /// Tolerant parse salvages a good title+summary even when `actions` (or `title`) has the WRONG JSON type — MLX
+    /// has no guided decoding, so a model that emits a string instead of an array, or an array of objects, must not
+    /// sink the whole result to the extractive fallback.
+    func testMLXParseInsightsTolerantFields() {
+        // actions as a bare string → one action
+        let s = MLXLLMService.parseInsights(from: #"{"title":"T","summary":"S","actions":"call Bob"}"#)
+        XCTAssertEqual(s?.title, "T"); XCTAssertEqual(s?.summary, "S")
+        XCTAssertEqual(s?.actions.map(\.text), ["call Bob"])
+        // actions as an array of OBJECTS → non-string elements dropped, title+summary survive
+        let o = MLXLLMService.parseInsights(from: #"{"title":"T2","summary":"S2","actions":[{"text":"x"},"ok"]}"#)
+        XCTAssertEqual(o?.title, "T2"); XCTAssertEqual(o?.actions.map(\.text), ["ok"])
+        // title is the wrong type → empty title but a valid summary still salvages the result
+        let n = MLXLLMService.parseInsights(from: #"{"title":123,"summary":"only summary"}"#)
+        XCTAssertEqual(n?.summary, "only summary"); XCTAssertEqual(n?.title, "")
+    }
+
+    /// The parser scans ALL top-level balanced objects and skips a non-JSON brace-pair in pre-JSON prose.
+    func testMLXParseInsightsSkipsProseBraces() {
+        let raw = "Note: {not json here} then the real one:\n{\"title\":\"Real\",\"summary\":\"S\"}"
+        XCTAssertEqual(MLXLLMService.parseInsights(from: raw)?.title, "Real")
+        XCTAssertEqual(MLXLLMService.balancedJSONObjects(in: raw).count, 2)
+    }
+
     /// MLX covers the languages FoundationModels can't (ru/uk), not English; until the model is downloaded it
     /// is dormant (.needsModelDownload), never .ready. Apple-Silicon-gated.
     func testMLXAvailabilityLanguageGating() {

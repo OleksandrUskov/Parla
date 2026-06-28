@@ -184,6 +184,10 @@ struct MLXModelRow: View {
                 Text(L("mlx.model.title")).font(.callout).lineLimit(1)
                 Text(L("mlx.model.hint")).font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                if let err = model.mlxDownloadError, !model.mlxDownloading {
+                    Text(err).font(.caption2).foregroundStyle(.red)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer(minLength: 8)
             trailing
