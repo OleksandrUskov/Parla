@@ -580,9 +580,14 @@ struct TranscriptCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            insights
-            content
-            relatedNotes
+            // Make the reading content selectable/copyable (summary, transcript, chapter digest, related) — users
+            // expect to grab text by default. The header is excluded so its action buttons stay click-first.
+            VStack(alignment: .leading, spacing: 12) {
+                insights
+                content
+                relatedNotes
+            }
+            .textSelection(.enabled)
         }
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
