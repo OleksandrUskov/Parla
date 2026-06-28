@@ -179,10 +179,11 @@ actor MLXEngine {
     }
 
     /// One generation pass: a fresh session (stateless per note) with a bounded output, return the raw model text.
-    func generate(prompt: String, instructions: String) async throws -> String {
+    /// `maxTokens` defaults to the terse insight cap; the comprehensive `summarize` passes a higher budget.
+    func generate(prompt: String, instructions: String, maxTokens: Int = maxOutputTokens) async throws -> String {
         let container = try await loadContainer()
         var params = GenerateParameters()
-        params.maxTokens = Self.maxOutputTokens
+        params.maxTokens = maxTokens
         let session = ChatSession(container, instructions: instructions, generateParameters: params)
         return try await session.respond(to: prompt)
     }
@@ -256,6 +257,25 @@ struct MLXLLMService: LocalLLMService {
         guard var parsed = Self.parseInsights(from: raw) else { throw AIError.unavailable }
         parsed.backend = .mlx   // provenance: this insight was produced by MLX/Qwen (matters for the EN fallback)
         return parsed
+    }
+
+    /// Comprehensive free-form summary prompt (NOT the terse 1–3-sentence `instructions`) — for long-note map-reduce.
+    static let summaryInstructions = """
+    You write a thorough, well-structured summary of a long transcript or of a set of chapter summaries. Cover ALL the \
+    major topics, arguments and key points — be comprehensive, not terse (several sentences to a few short paragraphs, \
+    scaled to the content). Write in the SAME language as the input. Output ONLY the summary text — no preamble, no \
+    headings, no JSON.
+    """
+
+    /// Comprehensive free-form summary (long-note map-reduce) — a longer prompt + a higher output-token budget than
+    /// the terse `insights` summary. Returns the raw model text (no JSON parse).
+    func summarize(_ text: String, language: String) async throws -> String {
+        guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw AIError.unavailable }
+        let raw = try await MLXEngine.shared.generate(prompt: String(trimmed.prefix(Self.maxInputChars)),
+                                                      instructions: Self.summaryInstructions, maxTokens: 1500)
+        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: Tolerant JSON parse (MLX has no guided decoding → prompt-then-parse; pure + unit-tested)

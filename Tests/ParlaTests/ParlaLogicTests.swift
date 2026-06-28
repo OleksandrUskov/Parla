@@ -1451,6 +1451,38 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// The reduce's overall SUMMARY comes from the DETAILED `summarize` (not the terse `insights` summary), while
+    /// title/keywords still come from `insights`. This is the fix for "summary too short on long notes".
+    @MainActor func testReduceUsesDetailedSummarize() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: DetailedSummaryAIService(), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная", segments: [
+                Segment(start: 0, end: 5, text: "первая глава"),
+                Segment(start: 130, end: 135, text: "вторая глава"),
+            ], lang: "ru")
+            it.durationSec = 700
+            m.history = [it]
+            await m.generateChapterSummaries(for: it.id)
+            XCTAssertEqual(m.history.first?.summary, "DETAILED whole-recording summary")           // from summarize, NOT "BRIEF"
+            XCTAssertEqual(m.history.first?.chapterSummaries?.allSatisfy { $0.summary == "BRIEF" }, true)  // chapters: brief insights
+            XCTAssertEqual(m.history.first?.keywords, ["k"])                                        // title/keywords still from insights
+        }
+    }
+
+    /// Granular "regenerate summary" on a long note WITH chapter summaries uses the DETAILED reduce, not a brief pass.
+    @MainActor func testGranularSummaryUsesReduceForLongNote() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: DetailedSummaryAIService(), embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная", segments: [Segment(start: 0, end: 5, text: "глава")], lang: "ru")
+            it.durationSec = 700
+            it.chapterSummaries = [ChapterSummary(startSec: 0, endSec: 120, summary: "ch1"),
+                                   ChapterSummary(startSec: 120, endSec: 240, summary: "ch2")]
+            m.history = [it]
+            await m.regenerateInsight(for: it.id, field: .summary)
+            XCTAssertEqual(m.history.first?.summary, "DETAILED whole-recording summary")   // detailed reduce, not "BRIEF"
+        }
+    }
+
     /// The reduce respects a hand-edited title (never overwrites it) while still upgrading the summary.
     @MainActor func testGenerateChapterSummariesReduceKeepsHandTitle() async {
         await withTemporaryHistoryStoreAsync {
@@ -3786,6 +3818,16 @@ private struct ReduceAIService: LocalLLMService {
             ? AIInsights(title: "OverallТ", summary: "OVERALL", actions: [], keywords: ["ovk"])
             : AIInsights(title: "chT", summary: "chS", actions: [], keywords: [])
     }
+}
+
+/// AI double where the brief `insights` summary ("BRIEF") differs from the detailed `summarize` ("DETAILED…") —
+/// proves the long-note summary path uses `summarize`, not the terse `insights`.
+private struct DetailedSummaryAIService: LocalLLMService {
+    func availability(forLanguage language: String) -> AIAvailability { .ready }
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
+        AIInsights(title: "T", summary: "BRIEF", actions: [], keywords: ["k"])
+    }
+    func summarize(_ text: String, language: String) async throws -> String { "DETAILED whole-recording summary" }
 }
 
 /// Fake `TextEmbedder`: returns a canned vector (or nil) and counts calls. Single-flight in tests

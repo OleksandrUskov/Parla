@@ -193,6 +193,16 @@ extension AppModel {
         guard let item = history.first(where: { $0.id == id }) else { return }
         regeneratingIDs.insert(id)
         defer { regeneratingIDs.remove(id) }
+        // A long note's SUMMARY → the DETAILED reduce over its chapter summaries (whole-recording coverage + length),
+        // not a terse 1–3-sentence pass over the opening minutes. Falls through to the brief path if no chapters yet.
+        if field == .summary, let cs = item.chapterSummaries, !cs.isEmpty,
+           let rich = await reducedSummary(from: cs, language: item.language) {
+            guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
+            history[idx].summary = rich
+            HistoryStore.save(history)
+            await MLXEngine.shared.unload()
+            return
+        }
         guard let fresh = await freshInsights(for: item) else { return }
         guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
         switch field {
@@ -246,19 +256,24 @@ extension AppModel {
             }
         }
         // REDUCE: build a WHOLE-recording overall summary (+ title/keywords) from the chapter summaries. The first-pass
-        // enrich only saw ~maxInputChars (the opening minutes), so a long note's overall summary was skewed/thin;
-        // reducing the chapter summaries covers the entire recording. Best-effort. (If the joined summaries exceed the
-        // backend's input cap they're truncated — a hierarchical reduce for very long notes is a later refinement.)
+        // enrich only saw ~maxInputChars of the OPENING minutes AND asked for a terse 1–3-sentence summary, so a long
+        // note's overall summary was skewed AND thin. The DETAILED `summarize` (longer prompt + token budget) over the
+        // chapter summaries covers the entire recording at real length; `insights` still gives whole-recording
+        // title/keywords. Best-effort. (Very long notes whose joined summaries exceed the input cap are truncated —
+        // a hierarchical reduce is a later refinement.)
         var overall: AIInsights?
+        var richSummary: String?
         if !built.isEmpty {
-            overall = try? await ai.insights(forTranscript: built.map(\.summary).joined(separator: "\n"),
-                                             language: item.language)
+            let joined = built.map(\.summary).joined(separator: "\n")
+            overall = try? await ai.insights(forTranscript: joined, language: item.language)
+            richSummary = (try? await ai.summarize(joined, language: item.language))?.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         // TOCTOU (mirror enrichInsights): re-find after the awaits; an edit re-buckets chapters → drop the stale result.
         guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
         history[idx].chapterSummaries = built.isEmpty ? nil : built
+        if let richSummary, !richSummary.isEmpty { history[idx].summary = richSummary }       // DETAILED whole-recording summary
+        else if let s = overall?.summary, !s.isEmpty { history[idx].summary = s }             // fallback: the brief reduce
         if let overall {
-            if !overall.summary.isEmpty { history[idx].summary = overall.summary }                            // whole-recording summary
             if history[idx].titleEdited != true, !overall.title.isEmpty { history[idx].title = overall.title } // keep a hand title
             if !overall.keywords.isEmpty { history[idx].keywords = overall.keywords }
         }
@@ -294,6 +309,15 @@ extension AppModel {
     /// the chapter buttons disable on this so only one chapter-summary operation runs at a time per note.
     func chapterWorkInFlight(for id: TranscriptItem.ID) -> Bool {
         summarizingChaptersIDs.contains(id) || summarizingChapters.contains { $0.note == id }
+    }
+
+    /// DETAILED overall summary REDUCED from the chapter summaries — whole-recording coverage AND real length (the
+    /// per-note brief summary is 1–3 sentences over only the opening minutes). Best-effort; nil if unavailable/empty.
+    private func reducedSummary(from chapterSummaries: [ChapterSummary], language: String) async -> String? {
+        guard !chapterSummaries.isEmpty else { return nil }
+        let joined = chapterSummaries.map(\.summary).joined(separator: "\n")
+        let s = (try? await ai.summarize(joined, language: language))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (s?.isEmpty == false) ? s : nil
     }
 
     /// Summarize ONE chapter's text via the generative backend; nil on empty/silence or failure (best-effort).

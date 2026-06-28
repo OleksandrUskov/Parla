@@ -71,10 +71,20 @@ enum AIError: Error, Equatable {
     case unavailable           // called when `availability` isn't `.ready`
 }
 
-/// The seam. `availability` is a cheap synchronous, language-aware gate; `insights` does the work.
+/// The seam. `availability` is a cheap synchronous, language-aware gate; `insights` does the work; `summarize`
+/// produces a longer, free-form summary (for long-note map-reduce — the brief `insights` summary is 1–3 sentences).
 protocol LocalLLMService: Sendable {
     func availability(forLanguage language: String) -> AIAvailability
     func insights(forTranscript text: String, language: String) async throws -> AIInsights
+    func summarize(_ text: String, language: String) async throws -> String
+}
+
+extension LocalLLMService {
+    /// Default: fall back to the brief `insights` summary, so test doubles / Noop conform unchanged. Real backends
+    /// (MLX, FoundationModels) OVERRIDE this with a comprehensive-summary prompt + a higher output-token budget.
+    func summarize(_ text: String, language: String) async throws -> String {
+        try await insights(forTranscript: text, language: language).summary
+    }
 }
 
 // MARK: - Language helper
@@ -127,6 +137,16 @@ struct FoundationModelsService: LocalLLMService {
     static let maxInputChars = 8000
     /// Output cap so a title/summary can't run away (the @Guide prose steers length, this bounds it hard).
     static let maxResponseTokens = 500
+    /// Higher cap for the comprehensive `summarize` (long-note map-reduce) — it intentionally produces more.
+    static let maxSummaryTokens = 1500
+
+    /// Comprehensive free-form summary prompt (NOT the terse 1–3-sentence `instructions`) — for long-note map-reduce.
+    static let summaryInstructions = """
+    You write a thorough, well-structured summary of a long transcript or of a set of chapter summaries. Cover ALL the \
+    major topics, arguments and key points — be comprehensive, not terse (several sentences to a few short paragraphs, \
+    scaled to the content). Respond in the SAME language as the input. Output ONLY the summary text — no preamble, no \
+    headings, no JSON.
+    """
 
     static let instructions = """
     You extract a title, a short summary, topical keywords, and any action items from a voice-message transcript.
@@ -152,6 +172,22 @@ struct FoundationModelsService: LocalLLMService {
                 guard case .exceededContextWindowSize = error else { throw error }
                 return try await Self.generate(String(trimmed.prefix(Self.maxInputChars / 2)))
             }
+        }
+        #endif
+        throw AIError.unavailable
+    }
+
+    /// Comprehensive free-form summary (long-note map-reduce). Plain (non-guided) generation with a higher token cap.
+    func summarize(_ text: String, language: String) async throws -> String {
+        #if canImport(FoundationModels)
+        if #available(macOS 26, *) {
+            guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { throw AIError.unavailable }
+            let response = try await LanguageModelSession(instructions: Self.summaryInstructions)
+                .respond(to: String(trimmed.prefix(Self.maxInputChars)),
+                         options: GenerationOptions(maximumResponseTokens: Self.maxSummaryTokens))
+            return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         #endif
         throw AIError.unavailable
@@ -233,6 +269,16 @@ struct DefaultAIService: LocalLLMService {
         }
         if case .ready = mlx.availability(forLanguage: language) {
             return try await mlx.insights(forTranscript: text, language: language)
+        }
+        throw AIError.unavailable
+    }
+
+    func summarize(_ text: String, language: String) async throws -> String {
+        if case .ready = foundationModels.availability(forLanguage: language) {
+            return try await foundationModels.summarize(text, language: language)
+        }
+        if case .ready = mlx.availability(forLanguage: language) {
+            return try await mlx.summarize(text, language: language)
         }
         throw AIError.unavailable
     }
