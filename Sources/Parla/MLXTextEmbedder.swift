@@ -45,6 +45,8 @@ struct EmbeddingModelSpec: Sendable {
     /// XLM-R encoders (BGE-M3 / e5) need explicit position IDs offset by padding_idx+1; Qwen3 (RoPE) does not.
     /// Unused while embedding one text at a time (no padding), but kept so a swap to an XLM-R model is localized.
     let needsXLMPositionIds: Bool
+    /// What to fetch from the repo (weights + tokenizer/config), like `MLXModelSpec.downloadPatterns`.
+    let downloadPatterns: [String]
 
     /// Provenance tag stamped onto stored vectors. A change here ≠ the vectors' tag → `backfillEmbeddings` re-embeds.
     var tag: String { "emb:" + repoId }
@@ -55,7 +57,8 @@ struct EmbeddingModelSpec: Sendable {
         repoId: "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
         revision: "main",
         profile: .instruct(task: "Given a search query, retrieve notes relevant to the query"),
-        needsXLMPositionIds: false)
+        needsXLMPositionIds: false,
+        downloadPatterns: ["*.safetensors", "*.json", "*.txt"])
 
     /// Designated RU/UK FALLBACK (not active) — BGE-M3, the RU-champion, MIT, non-gated, prefix-free, multilingual.
     /// A drop-in swap target kept here so `active = .bgeM3Fallback` is the only change needed. (XLM-R → the embed
@@ -64,7 +67,8 @@ struct EmbeddingModelSpec: Sendable {
         repoId: "mlx-community/bge-m3-mlx-fp16",
         revision: "main",
         profile: .plain,
-        needsXLMPositionIds: true)
+        needsXLMPositionIds: true,
+        downloadPatterns: ["*.safetensors", "*.json", "*.txt"])
 
     /// HubApi download base under Parla's Application Support. A settable `var` so tests redirect it to a temp dir
     /// (mirror of `MLXModelSpec.downloadBase` / `HistoryStore.fileURL`) — else `isDownloaded()` reads the real model.
@@ -134,6 +138,14 @@ actor MLXTextEmbedder: TextEmbedder {
     func unload() {
         container = nil
         loadTask = nil
+    }
+
+    /// Download (or refresh from cache) the model files WITHOUT loading them into memory — the explicit "Download"
+    /// action. A later `embed()` loads lazily from this cache.
+    func downloadModel(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws {
+        _ = try await MLXHubDownloader(downloadBase: EmbeddingModelSpec.downloadBase)
+            .download(id: EmbeddingModelSpec.active.repoId, revision: EmbeddingModelSpec.active.revision,
+                      matching: EmbeddingModelSpec.active.downloadPatterns, useLatest: false, progressHandler: progressHandler)
     }
 
     func embed(_ text: String, language: String, kind: EmbedKind) async -> Embedding? {

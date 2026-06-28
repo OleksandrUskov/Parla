@@ -157,17 +157,20 @@ struct ModelManagerView: View {
                 Divider()
                 Text(L("mlx.section.title")).font(.system(.subheadline, design: .rounded).weight(.semibold))
                 MLXModelRow()
+                Divider()
+                Text(L("embed.section.title")).font(.system(.subheadline, design: .rounded).weight(.semibold))
+                EmbedModelRow()
             }
             Divider()
             HStack {
                 Text(L("model.disk.used")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Text(formatBytes(model.totalModelsBytes + model.mlxModelBytes)).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                Text(formatBytes(model.totalModelsBytes + model.mlxModelBytes + model.embedModelBytes)).font(.caption.weight(.medium)).foregroundStyle(.secondary)
             }
         }
         .padding(16)
         .frame(width: 440)
-        .task { model.refreshMLXModelState() }
+        .task { model.refreshMLXModelState(); model.refreshEmbedModelState() }
     }
 }
 
@@ -221,6 +224,67 @@ struct MLXModelRow: View {
             HStack(spacing: 8) {
                 Text(L("mlx.model.estimate")).font(.caption2).foregroundStyle(.secondary)
                 Button { Task { await model.downloadMLXModel() } } label: {
+                    Label(L("common.download"), systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(Brand.accent)
+                .disabled(model.isBusy)
+            }
+        }
+    }
+}
+
+/// The opt-in semantic-search embedding model (Qwen3-Embedding) row — mirrors `MLXModelRow` with its own
+/// download / progress / delete state (`AppModel+EmbedModel.swift`). Shown only on Apple Silicon.
+struct EmbedModelRow: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(model.embedModelDownloaded ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.tertiary))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L("embed.model.title")).font(.callout).lineLimit(1)
+                Text(L("embed.model.hint")).font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)   // wrap fully — don't truncate the hint
+                if let err = model.embedDownloadError, !model.embedDownloading {
+                    Text(err).font(.caption2).foregroundStyle(.red)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 8)
+            trailing
+        }
+        .padding(8)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder private var trailing: some View {
+        if model.embedDownloading {
+            HStack(spacing: 6) {
+                ProgressView(value: model.embedDownloadProgress).frame(width: 64)
+                Text("\(Int(model.embedDownloadProgress * 100))%").font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+            }
+        } else if model.embedModelDownloaded {
+            HStack(spacing: 8) {
+                if model.embedModelBytes > 0 {
+                    Text(formatBytes(model.embedModelBytes)).font(.caption2).foregroundStyle(.secondary)
+                }
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Button { Task { await model.deleteEmbedModel() } } label: {
+                    Image(systemName: "trash").font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .tint(.secondary)
+                .help(Text(L("model.delete.help")))
+                .accessibilityLabel(Text(L("model.delete.help")))
+                .disabled(model.isBusy)
+            }
+        } else {
+            HStack(spacing: 8) {
+                Text(L("embed.model.estimate")).font(.caption2).foregroundStyle(.secondary)
+                Button { Task { await model.downloadEmbedModel() } } label: {
                     Label(L("common.download"), systemImage: "arrow.down.circle")
                 }
                 .buttonStyle(.bordered)

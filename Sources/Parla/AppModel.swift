@@ -40,6 +40,12 @@ final class AppModel {
     var mlxDownloading: Bool = false           // single-flight + busy guard for the MLX download
     var mlxDownloadProgress: Double = 0
     var mlxDownloadError: String?              // last MLX download error — shown inline in the model row (cleared on retry/success)
+    // Embedding model (AI P3.5) — opt-in download for query→note semantic search; distinct from the MLX LLM above.
+    var embedModelDownloaded: Bool = false     // semantic-search model present on disk (reactive)
+    var embedModelBytes: Int64 = 0             // its on-disk size (for the "disk used" line)
+    var embedDownloading: Bool = false         // single-flight + busy guard for the embed-model download
+    var embedDownloadProgress: Double = 0
+    var embedDownloadError: String?            // last embed-model download error — shown inline in the row
 
     // Settings (mirrored into UserDefaults).
     var selectedModel: String { didSet { UserDefaults.standard.set(selectedModel, forKey: Keys.model) } }
@@ -211,6 +217,7 @@ final class AppModel {
         if recordingStartedAt != nil { return true }   // recording a dictation blocks other jobs (single-flight)
         if requestingMic { return true }                // mic-permission check in flight — hold the lane (no gap)
         if mlxDownloading { return true }               // downloading the ~2.3GB RU/UK model — hold the lane
+        if embedDownloading { return true }             // downloading the semantic-search model — hold the lane
         if !refiningDictations.isEmpty { return true }  // a hybrid refine is decoding — hold the lane (no concurrent
                                                         // job, and the edit pencil stays hidden so it can't clobber)
         switch phase { case .idle, .failed: return false; default: return true }

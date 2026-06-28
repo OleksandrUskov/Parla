@@ -55,6 +55,11 @@
 "mlx.model.hint"       = "On-device generative title, summary and action items for Russian & Ukrainian notes. Downloaded once, runs fully offline. Apple Silicon only.";
 "mlx.model.estimate"   = "~2.3 GB";
 "error.mlx.download"   = "Couldn't download the AI model: %@";
+"embed.section.title"  = "Semantic search model";
+"embed.model.title"    = "Qwen3-Embedding — multilingual search";
+"embed.model.hint"     = "Meaning-based search across your notes — Russian, Ukrainian and English, even across languages (an English query finds a Russian note). On-device, downloaded once, fully offline. Apple Silicon only.";
+"embed.model.estimate" = "~0.4 GB";
+"error.embed.download" = "Couldn't download the search model: %@";
 
 /* Model tiers */
 "model.tier.tiny.hint"  = "fastest, lowest quality · quick drafts";
