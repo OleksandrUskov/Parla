@@ -34,6 +34,30 @@ enum ExportFormat: String, CaseIterable, Identifiable {
         case .srt, .vtt:             return false
         }
     }
+
+    /// Whether this format is offered for "summary only" export — prose digests (Plain/Markdown). Subtitle formats
+    /// (SRT/VTT) and the full-record JSON have no meaning without the transcript body, so they're hidden in that mode.
+    var supportsInsightsOnly: Bool {
+        switch self {
+        case .txt, .markdown:     return true
+        case .srt, .vtt, .json:   return false
+        }
+    }
+}
+
+/// What an export includes (AI P4) — the 3-way "Content" picker in the export menu, remembered across launches.
+enum ExportContent: String, CaseIterable, Identifiable, Sendable {
+    case transcript      // the transcript only (the pre-P4 default)
+    case withInsights    // transcript + AI insights + per-chapter digest
+    case insightsOnly    // just the insights + per-chapter digest, NO transcript body
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .transcript:   return L("export.content.transcript")
+        case .withInsights: return L("export.content.withInsights")
+        case .insightsOnly: return L("export.content.insightsOnly")
+        }
+    }
 }
 
 // MARK: - Subtitle timecodes
@@ -164,10 +188,11 @@ func exportSRT(_ item: TranscriptItem) -> String {
 }
 
 /// WebVTT: `WEBVTT` header, dot-ms timecodes, no integer cue index. Always valid (header even if empty).
-/// With `includeInsights`, a `NOTE` comment block carrying the insights is inserted after the header.
-func exportVTT(_ item: TranscriptItem, includeInsights: Bool = false) -> String {
+/// `.withInsights` inserts a `NOTE` comment block after the header; `.insightsOnly` keeps just that NOTE (no cues).
+func exportVTT(_ item: TranscriptItem, content: ExportContent = .transcript) -> String {
     var out = "WEBVTT\n\n"
-    if includeInsights { out += insightNoteVTT(item) }   // "" when the note has no insights → byte-identical
+    if content != .transcript { out += insightNoteVTT(item) }   // "" when the note has no insights → byte-identical
+    guard content != .insightsOnly else { return out }
     for cue in subtitleCues(item) {
         out += "\(vttTimecode(cue.start)) --> \(vttTimecode(cue.end))\n"
         out += "\(cue.text)\n\n"
@@ -186,34 +211,36 @@ func exportJSON(_ item: TranscriptItem) throws -> Data {
 }
 
 /// Plain text — flat (`item.text`) or timestamped (`[mm:ss] line`), via the existing `display`.
-/// With `includeInsights`, a labelled insight header precedes the body.
-func exportPlainTXT(_ item: TranscriptItem, timestamps: Bool, includeInsights: Bool = false) -> String {
-    let block = includeInsights ? insightBlock(item, markdown: false) : ""   // "" → byte-identical to pre-P4
-    let chapters = includeInsights ? chapterDigest(item, markdown: false) : ""   // long notes only; "" otherwise
-    return block + chapters + item.display(timestamps: timestamps)
+/// `.withInsights` prepends a labelled insight header; `.insightsOnly` emits only that header (no body).
+func exportPlainTXT(_ item: TranscriptItem, timestamps: Bool, content: ExportContent = .transcript) -> String {
+    var out = ""
+    if content != .transcript { out += insightBlock(item, markdown: false) + chapterDigest(item, markdown: false) }
+    if content != .insightsOnly { out += item.display(timestamps: timestamps) }
+    return out
 }
 
 /// One transcript as a Markdown block — the same shape as a single `exportText` record, minus the
 /// archive title header and the trailing `---` separator (that divider sits between records).
-/// With `includeInsights`, the insight header sits between the meta line and the body.
-func exportMarkdown(_ item: TranscriptItem, includeInsights: Bool = false) -> String {
+/// `.withInsights` inserts the insight header before the body; `.insightsOnly` drops the body.
+func exportMarkdown(_ item: TranscriptItem, content: ExportContent = .transcript) -> String {
     let editedMark = item.isEdited ? " · " + L("transcript.edited") : ""
     let meta = "_\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(item.language.uppercased()) · \(friendlyModel(item.model))\(editedMark)_"
-    let block = includeInsights ? insightBlock(item, markdown: true) : ""   // "" → byte-identical to pre-P4
-    let chapters = includeInsights ? chapterDigest(item, markdown: true) : ""   // long notes only; "" otherwise
-    return "## \(item.sourceName)\n\(meta)\n\n\(block)\(chapters)\(item.text)\n"
+    var out = "## \(item.sourceName)\n\(meta)\n\n"
+    if content != .transcript { out += insightBlock(item, markdown: true) + chapterDigest(item, markdown: true) }
+    if content != .insightsOnly { out += "\(item.text)\n" }
+    return out
 }
 
 /// Render one item to a string for a given format (UI entry point). `.json` is handled separately
-/// (it returns `Data`); this returns its UTF-8 string form for share-sheet convenience. `includeInsights`
-/// (opt-in via the export menu) folds the AI insights into the human-readable formats; JSON already carries
-/// them as stored fields, and SRT deliberately omits them (no comment syntax).
-func exportString(_ item: TranscriptItem, as format: ExportFormat, timestamps: Bool = true, includeInsights: Bool = false) -> String {
+/// (it returns `Data`); this returns its UTF-8 string form for share-sheet convenience. `content` (the export-menu
+/// picker) folds insights into the human-readable formats / drops the body for "summary only"; JSON is always the
+/// full record, and SRT deliberately omits insights (no comment syntax) — both ignore the picker beyond cues.
+func exportString(_ item: TranscriptItem, as format: ExportFormat, timestamps: Bool = true, content: ExportContent = .transcript) -> String {
     switch format {
-    case .txt:      return exportPlainTXT(item, timestamps: timestamps, includeInsights: includeInsights)
-    case .markdown: return exportMarkdown(item, includeInsights: includeInsights)
-    case .srt:      return exportSRT(item)
-    case .vtt:      return exportVTT(item, includeInsights: includeInsights)
+    case .txt:      return exportPlainTXT(item, timestamps: timestamps, content: content)
+    case .markdown: return exportMarkdown(item, content: content)
+    case .srt:      return exportSRT(item)                       // subtitles: content modes don't apply
+    case .vtt:      return exportVTT(item, content: content)
     case .json:     return (try? exportJSON(item)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
     }
 }

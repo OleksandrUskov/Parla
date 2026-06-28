@@ -249,7 +249,10 @@
 
 /* Export + units */
 "export.menu.help" = "Export transcript";
-"export.includeInsights" = "Include insights";
+"export.content"               = "Content";
+"export.content.transcript"    = "Transcript";
+"export.content.withInsights"  = "+ summary";
+"export.content.insightsOnly"  = "Summary only";
 "export.title" = "# Parla — transcript history\n\n";
 "unit.gb.fmt"  = "%.1f GB";
 "unit.mb.fmt"  = "%.0f MB";

@@ -71,7 +71,7 @@ extension AppModel {
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try Data(exportText(history, includeInsights: exportIncludeInsights).utf8).write(to: url)
+            try Data(exportText(history, content: exportContent).utf8).write(to: url)
         } catch {
             phase = .failed(Lf("error.save.failed", error.localizedDescription))
         }
@@ -89,7 +89,7 @@ extension AppModel {
         do {
             let data = format == .json
                 ? try exportJSON(item)
-                : Data(exportString(item, as: format, timestamps: showTimestamps, includeInsights: exportIncludeInsights).utf8)
+                : Data(exportString(item, as: format, timestamps: showTimestamps, content: exportContent).utf8)
             try data.write(to: url)
         } catch {
             phase = .failed(Lf("error.save.failed", error.localizedDescription))

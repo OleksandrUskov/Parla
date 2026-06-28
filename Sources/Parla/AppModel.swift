@@ -75,9 +75,9 @@ final class AppModel {
     var showKeywords: Bool { didSet { UserDefaults.standard.set(showKeywords, forKey: Keys.showKeywords) } }
     var showSummaries: Bool { didSet { UserDefaults.standard.set(showSummaries, forKey: Keys.showSummaries) } }
     var showActions: Bool { didSet { UserDefaults.standard.set(showActions, forKey: Keys.showActions) } }
-    /// Fold the AI insights (title/summary/keywords/tasks) into exports — opt-in via the export menu, OFF by
-    /// default; remembered across launches (the export is a one-shot artifact, so the choice is per-export).
-    var exportIncludeInsights: Bool { didSet { UserDefaults.standard.set(exportIncludeInsights, forKey: Keys.exportIncludeInsights) } }
+    /// What an export includes — transcript / transcript+insights / insights-only. Chosen via the export menu,
+    /// remembered across launches (the export is a one-shot artifact, so the choice rides with the user, not the note).
+    var exportContent: ExportContent { didSet { UserDefaults.standard.set(exportContent.rawValue, forKey: Keys.exportContent) } }
     /// Auto-stop a dictation after a short run of silence (opt-in, off by default).
     var dictationVADEnabled: Bool { didSet { UserDefaults.standard.set(dictationVADEnabled, forKey: Keys.dictationVAD) } }
     /// Live segment-level streaming preview while dictating (opt-in, off by default). PREVIEW ONLY — the
@@ -165,7 +165,8 @@ final class AppModel {
         static let showKeywords = "aiShowKeywords"
         static let showSummaries = "aiShowSummaries"
         static let showActions = "aiShowActions"
-        static let exportIncludeInsights = "exportIncludeInsights"
+        static let exportIncludeInsights = "exportIncludeInsights"   // legacy boolean — migrated into exportContent
+        static let exportContent = "exportContent"
         static let dictationVAD = "dictationVADEnabled"
         static let dictationLiveStreaming = "dictationLiveStreaming"
         static let lastBookmark = "lastSourceBookmark"
@@ -210,7 +211,9 @@ final class AppModel {
         showKeywords = (d.object(forKey: Keys.showKeywords) as? Bool) ?? true    // …each independently disableable
         showSummaries = (d.object(forKey: Keys.showSummaries) as? Bool) ?? true
         showActions = (d.object(forKey: Keys.showActions) as? Bool) ?? true
-        exportIncludeInsights = d.bool(forKey: Keys.exportIncludeInsights)   // opt-in, OFF by default
+        // Export content mode (default: transcript). Migrate the legacy boolean (true → transcript+insights).
+        if let raw = d.string(forKey: Keys.exportContent), let c = ExportContent(rawValue: raw) { exportContent = c }
+        else { exportContent = d.bool(forKey: Keys.exportIncludeInsights) ? .withInsights : .transcript }
         dictationVADEnabled = d.bool(forKey: Keys.dictationVAD)   // opt-in, off by default
         dictationLiveStreaming = (d.object(forKey: Keys.dictationLiveStreaming) as? Bool) ?? true   // ON by default (safe + measured; preview-only)
         uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)

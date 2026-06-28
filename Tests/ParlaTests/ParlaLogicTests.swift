@@ -2640,7 +2640,7 @@ final class ParlaLogicTests: XCTestCase {
         var it = makeItem(name: "talk.ogg", text: "body text", lang: "ru", model: "openai_whisper-large-v3")
         it.title = "Мой заголовок"; it.summary = "Краткая сводка"; it.keywords = ["один", "два"]
         it.actions = [ActionItem(text: "Позвонить"), ActionItem(text: "Готово", done: true)]
-        let md = exportMarkdown(it, includeInsights: true)
+        let md = exportMarkdown(it, content: .withInsights)
         XCTAssertTrue(md.contains("Мой заголовок"))
         XCTAssertTrue(md.contains("> Краткая сводка"))     // markdown blockquote summary
         XCTAssertTrue(md.contains("один, два"))            // keywords joined
@@ -2648,7 +2648,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(md.contains("- [x] Готово"))         // GFM checkbox (done)
         XCTAssertTrue(md.hasSuffix("body text\n"))         // body still last
         // Optional-gate: without the flag the output is the pre-P4 shape (no insight values).
-        let off = exportMarkdown(it, includeInsights: false)
+        let off = exportMarkdown(it, content: .transcript)
         XCTAssertFalse(off.contains("Краткая сводка"))
         XCTAssertFalse(off.contains("- [ ]"))
         XCTAssertTrue(off.hasPrefix("## talk.ogg\n"))
@@ -2658,23 +2658,23 @@ final class ParlaLogicTests: XCTestCase {
     func testExportPlainTXTIncludesInsights() {
         var it = makeItem(text: "body text", lang: "ru")
         it.title = "Заголовок"; it.summary = "Сводка"; it.actions = [ActionItem(text: "Готово", done: true)]
-        let txt = exportPlainTXT(it, timestamps: false, includeInsights: true)
+        let txt = exportPlainTXT(it, timestamps: false, content: .withInsights)
         XCTAssertTrue(txt.contains("Сводка"))
         XCTAssertTrue(txt.contains("- [x] Готово"))
         XCTAssertTrue(txt.hasSuffix("body text"))   // block precedes the body
         // Optional-gate: false → byte-identical to the plain transcript.
-        XCTAssertEqual(exportPlainTXT(it, timestamps: false, includeInsights: false), "body text")
+        XCTAssertEqual(exportPlainTXT(it, timestamps: false, content: .transcript), "body text")
     }
 
     func testExportVTTHasNoteBlock() {
         var v = makeItem(name: "talk.ogg", text: "full", segments: [Segment(start: 0, end: 2, text: "привет")], lang: "ru")
         v.title = "Тайтл"; v.summary = "Сводка"
-        let vtt = exportVTT(v, includeInsights: true)
+        let vtt = exportVTT(v, content: .withInsights)
         XCTAssertTrue(vtt.hasPrefix("WEBVTT\n\nNOTE\n"))                      // spec-valid comment block
         XCTAssertTrue(vtt.contains("Сводка"))
         XCTAssertTrue(vtt.contains("00:00:00.000 --> 00:00:02.000\nпривет"))  // cues still parse after the NOTE
         // Optional-gate: false → byte-identical to the plain WebVTT (no NOTE).
-        let off = exportVTT(v, includeInsights: false)
+        let off = exportVTT(v, content: .transcript)
         XCTAssertFalse(off.contains("NOTE"))
         XCTAssertTrue(off.hasPrefix("WEBVTT\n\n00:00:00.000"))
         XCTAssertEqual(off, exportVTT(v))   // default is false
@@ -2684,9 +2684,9 @@ final class ParlaLogicTests: XCTestCase {
         var s = makeItem(text: "full", segments: [Segment(start: 0, end: 1, text: "x")], lang: "ru")
         s.title = "Тайтл"; s.summary = "Сводкатекст"; s.actions = [ActionItem(text: "Задача")]
         // SubRip has no comment syntax → insights are deliberately never injected (a header would break players).
-        XCTAssertEqual(exportString(s, as: .srt, includeInsights: true),
-                       exportString(s, as: .srt, includeInsights: false))
-        XCTAssertFalse(exportString(s, as: .srt, includeInsights: true).contains("Сводкатекст"))
+        XCTAssertEqual(exportString(s, as: .srt, content: .withInsights),
+                       exportString(s, as: .srt, content: .transcript))
+        XCTAssertFalse(exportString(s, as: .srt, content: .withInsights).contains("Сводкатекст"))
     }
 
     func testExportJSONCarriesInsights() throws {
@@ -2703,7 +2703,7 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     /// A long note with per-chapter summaries exports a chapter digest ABOVE the full transcript (chapters ADD,
-    /// never replace). Gated by includeInsights; absent for short / summary-less notes.
+    /// never replace). Gated by the content mode; absent for short / summary-less notes.
     func testExportLongNoteHasChapterDigest() {
         var it = makeItem(name: "talk.ogg", text: "полный текст записи", segments: [
             Segment(start: 0, end: 5, text: "первая"),
@@ -2712,15 +2712,37 @@ final class ParlaLogicTests: XCTestCase {
         it.durationSec = 700
         it.chapterSummaries = [ChapterSummary(startSec: 0, endSec: 120, summary: "сум один"),
                                ChapterSummary(startSec: 120, endSec: 240, summary: "сум два")]
-        let md = exportMarkdown(it, includeInsights: true)
+        let md = exportMarkdown(it, content: .withInsights)
         XCTAssertTrue(md.contains("### [00:00"))               // chapter heading (range label)
         XCTAssertTrue(md.contains("> сум один"))
         XCTAssertTrue(md.contains("> сум два"))
         XCTAssertTrue(md.contains("полный текст записи"))      // full transcript still present (ADD, not replace)
-        XCTAssertFalse(exportMarkdown(it, includeInsights: false).contains("### ["))   // gated by the flag
+        XCTAssertFalse(exportMarkdown(it, content: .transcript).contains("### ["))   // gated by the flag
         // A note without chapter summaries → no chapter sections even with the flag.
         let bare = makeItem(text: "коротыш", lang: "ru")
-        XCTAssertFalse(exportMarkdown(bare, includeInsights: true).contains("### ["))
+        XCTAssertFalse(exportMarkdown(bare, content: .withInsights).contains("### ["))
+    }
+
+    /// "Summary only" export (P4 punch-list 7): emits the insight header (and chapter digest) WITHOUT the
+    /// transcript body. ".withInsights" keeps both.
+    func testExportInsightsOnlyDropsBody() {
+        var it = makeItem(name: "talk.ogg", text: "полный текст записи здесь", lang: "ru")
+        it.summary = "Сводка тут"; it.keywords = ["к1"]
+        let md = exportMarkdown(it, content: .insightsOnly)
+        XCTAssertTrue(md.contains("Сводка тут"))
+        XCTAssertFalse(md.contains("полный текст записи здесь"))   // body dropped
+        let txt = exportPlainTXT(it, timestamps: false, content: .insightsOnly)
+        XCTAssertTrue(txt.contains("Сводка тут"))
+        XCTAssertFalse(txt.contains("полный текст записи здесь"))
+        XCTAssertTrue(exportMarkdown(it, content: .withInsights).contains("полный текст записи здесь"))   // both kept
+    }
+
+    func testExportFormatSupportsInsightsOnly() {
+        XCTAssertTrue(ExportFormat.txt.supportsInsightsOnly)
+        XCTAssertTrue(ExportFormat.markdown.supportsInsightsOnly)
+        XCTAssertFalse(ExportFormat.srt.supportsInsightsOnly)     // subtitles need the body
+        XCTAssertFalse(ExportFormat.vtt.supportsInsightsOnly)
+        XCTAssertFalse(ExportFormat.json.supportsInsightsOnly)    // JSON = full record
     }
 
     func testExportEditedRecordDegrades() {

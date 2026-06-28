@@ -249,7 +249,10 @@
 
 /* Export + units */
 "export.menu.help" = "Экспортировать запись";
-"export.includeInsights" = "Включить сводку";
+"export.content"               = "Содержимое";
+"export.content.transcript"    = "Транскрипт";
+"export.content.withInsights"  = "+ сводка";
+"export.content.insightsOnly"  = "Только сводка";
 "export.title" = "# Parla — история расшифровок\n\n";
 "unit.gb.fmt"  = "%.1f ГБ";
 "unit.mb.fmt"  = "%.0f МБ";

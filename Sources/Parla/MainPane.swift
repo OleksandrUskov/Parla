@@ -810,15 +810,18 @@ struct TranscriptCard: View {
                 .accessibilityLabel(Text(L("transcript.regenerate")))
             }
             Menu {
-                // Opt-in (remembered): fold the AI insights into the exported file. Per-export choice, right here,
-                // so it fits "not always" without a trip to Settings.
-                Toggle(isOn: Binding(get: { model.exportIncludeInsights },
-                                     set: { model.exportIncludeInsights = $0 })) {
-                    Text(L("export.includeInsights"))
+                // What goes in the file (remembered): transcript / +insights / insights-only. A per-export choice,
+                // right here, so it fits "not always" without a trip to Settings.
+                Picker(L("export.content"), selection: Binding(get: { model.exportContent },
+                                                               set: { model.exportContent = $0 })) {
+                    ForEach(ExportContent.allCases) { Text($0.label).tag($0) }
                 }
                 Divider()
                 ForEach(ExportFormat.allCases) { fmt in
-                    Button(fmt.displayName) { model.export(item, as: fmt) }
+                    // In "summary only" mode, hide the formats that need the transcript body (subtitles / full JSON).
+                    if model.exportContent != .insightsOnly || fmt.supportsInsightsOnly {
+                        Button(fmt.displayName) { model.export(item, as: fmt) }
+                    }
                 }
             } label: {
                 Image(systemName: "square.and.arrow.up").font(.body)
