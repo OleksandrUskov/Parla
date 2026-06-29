@@ -263,9 +263,8 @@ struct MLXLLMService: LocalLLMService {
     static let summaryInstructions = """
     You write a thorough, well-structured summary of a long transcript or of a set of chapter summaries. Cover ALL the \
     major topics, arguments and key points — be comprehensive, not terse (several sentences to a few short paragraphs, \
-    scaled to the content). ATTRIBUTE claims and opinions to the speaker ("the speaker argues…", "in their view…") \
-    rather than stating contested or one-sided assertions as fact; stay neutral and do not endorse. Write in the SAME \
-    language as the input. Output ONLY the summary text — no preamble, no headings, no JSON.
+    scaled to the content). Write in the SAME language as the input. Output ONLY the summary text — no preamble, no \
+    headings, no JSON.
     """
 
     /// Comprehensive free-form summary (long-note map-reduce) — a longer prompt + a higher output-token budget than
