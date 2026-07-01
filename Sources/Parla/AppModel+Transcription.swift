@@ -32,10 +32,22 @@ extension AppModel {
         guard !isBusy, downloadingModel == nil, !transcriptionQueue.isEmpty else { return }
         let job = transcriptionQueue.removeFirst()
         phase = .preparing("…")   // claim the phase synchronously — closes the double-start race
-        Task {
+        currentTranscriptionTask = Task {
             await transcribe(urls: job.urls)
+            currentTranscriptionTask = nil
             pumpQueues()          // lane freed → pull the next job
         }
+    }
+
+    /// Stop the running MANUAL transcription + drop everything queued behind it. The in-flight file/chunk
+    /// can't be aborted mid-decode (WhisperKit has no early-stop), so it finishes the current unit and then
+    /// its result is DISCARDED — nothing partial is saved. Already-completed files in the batch stay. The
+    /// folder-watcher is untouched (it has no `currentTranscriptionTask`); only the user's manual run stops.
+    func cancelTranscription() {
+        transcriptionQueue.removeAll()
+        guard let task = currentTranscriptionTask else { return }
+        cancelling = true          // "Stopping…" until the current file/chunk finishes and the loop breaks
+        task.cancel()
     }
 
     /// One pump for BOTH lanes whenever the lane may have freed (job finished, dictation ended, …).
@@ -79,10 +91,12 @@ extension AppModel {
         var failures: [String] = []
         var succeeded = 0
         for (i, url) in files.enumerated() {
+            if Task.isCancelled { break }   // cancelled → stop pulling more files (already-saved ones stay)
             // Show the queue position only for a batch (>1 file); a single drop looks like before.
             let batch = total > 1 ? BatchProgress(index: i + 1, total: total, done: i) : nil
             do {
                 let r = try await transcribeOne(url: url, model: selectedModel, batch: batch)
+                if Task.isCancelled { break }   // decode finished but user cancelled → DISCARD this result, don't save
                 let item = TranscriptItem(
                     sourceName: url.lastPathComponent,
                     language: r.language,
@@ -113,6 +127,12 @@ extension AppModel {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 failures.append("\(url.lastPathComponent) (\(msg))")
             }
+        }
+        if Task.isCancelled {                 // user hit Cancel: don't beep / notify / toast, just settle idle
+            cancelling = false
+            quickModeRun = false
+            phase = .idle
+            return
         }
         refreshDownloaded()
         phase = failures.isEmpty ? .idle : .failed(Lf("error.transcribe.failed", failures.joined(separator: "; ")))
@@ -213,6 +233,7 @@ extension AppModel {
         var texts: [String] = []
         var langs: [String] = []
         for (k, chunk) in chunks.enumerated() {
+            if Task.isCancelled { break }   // cancelled → stop decoding more chunks (the partial is discarded upstream)
             phase = .transcribing(Lf("chunk.label", k + 1, total),
                                   batch: BatchProgress(index: k + 1, total: total, done: k))
             do {

@@ -81,6 +81,7 @@
 "status.transcribing" = "Розпізнаю %@…";
 "status.downloading"  = "Завантажую модель (один раз)… %lld%%";
 "queue.pending"       = "+%lld у черзі";
+"transcribe.cancelling" = "Зупиняю…";
 
 /* Empty state */
 "empty.title"    = "Готовий до роботи";

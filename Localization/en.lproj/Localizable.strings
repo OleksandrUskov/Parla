@@ -81,6 +81,7 @@
 "status.transcribing" = "Transcribing %@…";
 "status.downloading"  = "Downloading the model (one-time)… %lld%%";
 "queue.pending"       = "+%lld queued";
+"transcribe.cancelling" = "Stopping…";
 
 /* Empty state */
 "empty.title"    = "Ready to go";

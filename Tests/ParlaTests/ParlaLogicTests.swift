@@ -2264,6 +2264,41 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: Transcription cancel (stop + discard the in-flight result)
+
+    @MainActor func testCancelTranscriptionClearsQueue() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine())
+            m.history = []
+            m.transcriptionQueue = [TranscriptionJob(urls: [makeTempSource()]),
+                                    TranscriptionJob(urls: [makeTempSource()])]
+            m.cancelTranscription()                          // no running task → just clears what's queued
+            XCTAssertTrue(m.transcriptionQueue.isEmpty)
+            XCTAssertFalse(m.cancelling)                     // nothing in flight → nothing to "stop"
+        }
+    }
+
+    @MainActor func testCancelledRunDiscardsResultAndEndsIdle() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "should-not-save", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            let src = makeTempSource()
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            let task = Task { @MainActor in await m.transcribe(urls: [src]) }
+            task.cancel()                                    // cancelled → the loop's Task.isCancelled guard trips
+            await task.value
+
+            XCTAssertTrue(m.history.isEmpty)                 // nothing partial saved
+            XCTAssertEqual(fake.transcribeCalls, 0)          // never decoded (cancelled at the loop top)
+            XCTAssertFalse(m.cancelling)
+            if case .idle = m.phase {} else { XCTFail("a cancelled run ends idle") }
+        }
+    }
+
     // MARK: Dictation orchestration (MIC_DICTATION P1)
 
     @MainActor func testDictationInsertsHistoryRecord() async {

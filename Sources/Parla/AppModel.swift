@@ -122,6 +122,8 @@ final class AppModel {
                                                        // (per-chapter "regenerate" button) — drives each chapter's spinner.
     var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
     var transcriptionQueue: [TranscriptionJob] = []    // manual drops waiting for the lane — stack "5, then 5 more"; shares the isBusy lane with watchQueue
+    var currentTranscriptionTask: Task<Void, Never>?   // the running MANUAL job — for Cancel (mirrors streamingTask); nil for watch/dictation runs
+    var cancelling = false                             // a cancel was requested; the in-flight file/chunk finishes before it stops ("Stopping…")
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys
     var processedSet: Set<String> = []                 // = Set(processedKeys), for O(1) lookups

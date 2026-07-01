@@ -476,7 +476,15 @@ struct StatusBar: View {
     /// Chip + (for a batch) a bottom determinate bar showing «how many of how many».
     private func progressChip(_ text: String, _ b: BatchProgress?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            chip(text, busy: true)
+            chip(text, busy: true) {
+                if model.cancelling {
+                    Text(L("transcribe.cancelling")).font(.caption).foregroundStyle(.secondary)
+                } else if model.currentTranscriptionTask != nil {
+                    Button(L("common.cancel")) { model.cancelTranscription() }
+                        .buttonStyle(.plain).font(.callout.weight(.medium)).foregroundStyle(Brand.accent)
+                        .accessibilityLabel(Text(L("common.cancel")))
+                }
+            }
             if model.queuedCount > 0 {
                 Text(Lf("queue.pending", model.queuedCount))
                     .font(.caption2).foregroundStyle(.secondary)
@@ -489,7 +497,8 @@ struct StatusBar: View {
         }
     }
 
-    private func chip(_ text: String, busy: Bool, error: Bool = false) -> some View {
+    private func chip<Trailing: View>(_ text: String, busy: Bool, error: Bool = false,
+                                      @ViewBuilder trailing: () -> Trailing = { EmptyView() }) -> some View {
         HStack(spacing: 10) {
             if busy {
                 ProgressView().controlSize(.small)
@@ -500,6 +509,7 @@ struct StatusBar: View {
                 .font(.callout)
                 .foregroundStyle(error ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
             Spacer()
+            trailing()
         }
         .padding(.horizontal, 14).padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
