@@ -2299,6 +2299,35 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testCancelMidBatchKeepsCompletedDiscardsInFlight() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [
+                EngineResult(text: "file-A-kept", language: "en", segments: [], duration: 1),
+                EngineResult(text: "file-B-discarded", language: "en", segments: [], duration: 1),
+            ])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.autoCopy = false
+            m.history = []
+            let a = makeTempSource("a.m4a"), b = makeTempSource("b.m4a")
+            defer { [a, b].forEach { try? FileManager.default.removeItem(at: $0) } }
+
+            // Cancel DURING file B's decode → file A is already inserted (kept), B's decoded result is discarded.
+            let box = TaskBox()
+            fake.onTranscribe = { call in if call == 2 { box.task?.cancel() } }
+            let task = Task { @MainActor in await m.transcribe(urls: [a, b]) }
+            box.task = task
+            await task.value
+
+            XCTAssertEqual(m.history.count, 1)                    // file A completed → KEPT
+            XCTAssertEqual(m.history.first?.text, "file-A-kept")
+            XCTAssertEqual(fake.transcribeCalls, 2)               // file B decoded, but its result was DISCARDED (not saved)
+            XCTAssertFalse(m.cancelling)                          // flag cleared on the cancelled exit
+            if case .idle = m.phase {} else { XCTFail("a cancelled run ends idle") }
+        }
+    }
+
     // MARK: Dictation orchestration (MIC_DICTATION P1)
 
     @MainActor func testDictationInsertsHistoryRecord() async {
@@ -3856,6 +3885,9 @@ final class ParlaLogicTests: XCTestCase {
 
 /// Fake `TranscribingEngine`: returns canned results (or throws), counting calls. Single-flight in
 /// tests (each engine call is awaited in turn), so the unchecked Sendable is safe.
+/// Test helper: a Sendable box so a Task can be handed its own handle (for a self-cancelling test).
+private final class TaskBox: @unchecked Sendable { var task: Task<Void, Never>? }
+
 private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     private let results: [EngineResult]
     private let throwOnTranscribe: Bool
@@ -3865,6 +3897,7 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     private(set) var transcribedPaths: [String] = []   // the decode path handed to each transcribe call
     private(set) var transcribedSampleCounts: [Int] = []   // buffer sizes handed to the streaming seam
     private(set) var deletedModels: [String] = []
+    var onTranscribe: (@Sendable (Int) -> Void)? = nil   // test hook: fired with the 1-based transcribe-call count (mid-decode)
 
     init(results: [EngineResult] = [], throwOnTranscribe: Bool = false) {
         self.results = results
@@ -3878,6 +3911,7 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult {
         transcribeCalls += 1
         transcribedPaths.append(wavPath)
+        onTranscribe?(transcribeCalls)   // let a test cancel the enclosing task mid-decode
         if throwOnTranscribe { throw EngineError.notLoaded }
         let r = results.isEmpty ? EngineResult(text: "", language: "", segments: [], duration: 0)
                                 : results[min(idx, results.count - 1)]

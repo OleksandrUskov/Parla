@@ -104,11 +104,11 @@ extension AppModel {
         stopStreamingLoop()   // end the live-preview loop
         // Stop pressed before capture began (e.g. during the first-run mic-permission prompt → the recorder
         // isn't created yet): silently cancel. Don't show a "didn't catch anything" error for a non-recording.
-        guard let rec = recorder else { recordingStartedAt = nil; return }
+        guard let rec = recorder else { recordingStartedAt = nil; pumpQueues(); return }   // lane freed → pump a drop queued during recording
         let wav = rec.stop()
         recorder = nil
         recordingStartedAt = nil
-        guard let wav else { QuickToast.shared.show(L("error.dictation.empty")); return }
+        guard let wav else { QuickToast.shared.show(L("error.dictation.empty")); pumpQueues(); return }   // lane freed → pump a drop queued during recording
         if streamed.isEmpty {
             // No streamed preview (streaming off, or it produced nothing) → the plain record-then-transcribe path.
             phase = .preparing(L("dictation.label"))    // claim the phase synchronously (like handleDrop)

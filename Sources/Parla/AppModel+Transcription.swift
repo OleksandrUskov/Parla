@@ -35,6 +35,7 @@ extension AppModel {
         currentTranscriptionTask = Task {
             await transcribe(urls: job.urls)
             currentTranscriptionTask = nil
+            cancelling = false    // robustness: clear "Stopping…" however transcribe exited (belt-and-suspenders vs the in-loop reset)
             pumpQueues()          // lane freed → pull the next job
         }
     }
@@ -128,16 +129,19 @@ extension AppModel {
                 failures.append("\(url.lastPathComponent) (\(msg))")
             }
         }
-        if Task.isCancelled {                 // user hit Cancel: don't beep / notify / toast, just settle idle
+        if Task.isCancelled {                 // user hit Cancel: don't beep / notify / show a "done" toast
+            if quickModeRun { QuickToast.shared.hide() }   // clear the sticky "Recognizing…" toast of a cancelled quick run
             cancelling = false
             quickModeRun = false
             phase = .idle
+            refreshDownloaded()
+            await pruneAudioCache()            // keep the audio cache bounded even on a cancelled batch
             return
         }
         refreshDownloaded()
         phase = failures.isEmpty ? .idle : .failed(Lf("error.transcribe.failed", failures.joined(separator: "; ")))
         if Self.shouldPlayCompletionSound(soundEnabled: soundOnComplete, isWatcherRun: isWatcherRun,
-                                          watchQueueEmpty: watchQueue.isEmpty) {
+                                          watchQueueEmpty: watchQueue.isEmpty && transcriptionQueue.isEmpty) {  // coalesce across BOTH lanes: a watch run stays silent if a manual job is queued behind it (it beeps instead)
             failures.isEmpty ? CompletionSound.success() : CompletionSound.failure()
         }
 
@@ -338,5 +342,6 @@ extension AppModel {
             }
         }
         refreshDownloaded()   // the target model may have just been downloaded
+        pumpQueues()          // lane freed → start any file queued during this re-transcribe
     }
 }

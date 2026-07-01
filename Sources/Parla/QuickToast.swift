@@ -28,6 +28,12 @@ final class QuickToast {
         }
     }
 
+    /// Dismiss any visible toast immediately — e.g. a sticky "Recognizing…" left over from a cancelled quick run.
+    func hide() {
+        hideTask?.cancel()
+        panel?.orderOut(nil)
+    }
+
     private func makePanel() -> NSPanel {
         let p = NSPanel(contentRect: .zero,
                         styleMask: [.borderless, .nonactivatingPanel],

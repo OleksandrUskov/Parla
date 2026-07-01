@@ -52,6 +52,7 @@ extension AppModel {
         }
         downloadingModel = nil
         refreshDownloaded()
+        pumpQueues()   // lane freed → a file dropped during the download was queued, not rejected; start it now
     }
 
     func deleteModel(_ name: String) async {
