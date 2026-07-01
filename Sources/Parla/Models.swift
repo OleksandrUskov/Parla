@@ -507,16 +507,30 @@ enum AudioStore {
         } catch { return nil }
     }
 
-    /// Makes an m4a rendition of the source for playback. Returns the name or nil. Best-effort.
+    /// Makes a playback rendition of the source. Prefers a compact AAC .m4a; if the AAC encoder can't handle the
+    /// source (seen on some webm), logs why and falls back to a plain PCM .wav (bigger, but AVAudioPlayer always
+    /// opens it). Returns the rendition's file name, or nil if both fail. Best-effort — never touches the transcript.
     static func makePlayable(from src: URL, id: UUID) -> String? {
         ensureFolder()
-        let name = "\(id.uuidString).m4a"
-        let dest = folder.appendingPathComponent(name)
+        let m4a = "\(id.uuidString).m4a"
+        let m4aDest = folder.appendingPathComponent(m4a)
         do {
-            if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
-            try AudioConverter.toM4a(src, to: dest)
-            return name
-        } catch { return nil }
+            if FileManager.default.fileExists(atPath: m4aDest.path) { try FileManager.default.removeItem(at: m4aDest) }
+            try AudioConverter.toM4a(src, to: m4aDest)
+            return m4a
+        } catch {
+            NSLog("Parla: AAC playback render failed for %@ — %@; trying a PCM WAV fallback", src.lastPathComponent, error.localizedDescription)
+        }
+        let wav = "\(id.uuidString).playable.wav"
+        let wavDest = folder.appendingPathComponent(wav)
+        do {
+            if FileManager.default.fileExists(atPath: wavDest.path) { try FileManager.default.removeItem(at: wavDest) }
+            try AudioConverter.toPlayableWav(src, to: wavDest)
+            return wav
+        } catch {
+            NSLog("Parla: PCM WAV playback render also failed for %@ — %@", src.lastPathComponent, error.localizedDescription)
+            return nil
+        }
     }
 
     /// Delete a record's audio (the copy and the rendition).

@@ -86,6 +86,14 @@ enum AudioConverter {
          "-y", "-i", src, "-vn", "-c:a", "aac", "-b:a", "96k", dest]
     }
 
+    /// ffmpeg args for a plain PCM .wav playback rendition — the FALLBACK when the AAC encoder can't handle a
+    /// source (seen on some webm/exotic inputs). `pcm_s16le` + the `wav` muxer are in the vendored LGPL build,
+    /// and AVAudioPlayer always opens a PCM WAV. Keeps the source rate/channels (no `-ar`/`-ac`) for quality.
+    static func playableWavArgs(src: String, dest: String) -> [String] {
+        ["-hide_banner", "-loglevel", "error", "-nostats",
+         "-y", "-i", src, "-vn", "-c:a", "pcm_s16le", dest]
+    }
+
     static func toWav16k(_ src: URL) throws -> URL {
         guard let ffmpeg = ffmpegURL() else { throw Failure.ffmpegNotFound }
 
@@ -114,6 +122,21 @@ enum AudioConverter {
         let (status, tail) = try runCapturingStderr(proc)
         guard status == 0 else {
             try? FileManager.default.removeItem(at: dest)   // drop a partial rendition so it can't masquerade as playable
+            throw Failure.conversionFailed(tail)
+        }
+    }
+
+    /// Fallback playback render: any source → a plain PCM .wav (see `playableWavArgs`). Used only when
+    /// `toM4a` fails, so a source the AAC encoder rejects still gets a rendition AVAudioPlayer can open.
+    static func toPlayableWav(_ src: URL, to dest: URL) throws {
+        guard let ffmpeg = ffmpegURL() else { throw Failure.ffmpegNotFound }
+
+        let proc = Process()
+        proc.executableURL = ffmpeg
+        proc.arguments = playableWavArgs(src: src.path, dest: dest.path)
+        let (status, tail) = try runCapturingStderr(proc)
+        guard status == 0 else {
+            try? FileManager.default.removeItem(at: dest)
             throw Failure.conversionFailed(tail)
         }
     }

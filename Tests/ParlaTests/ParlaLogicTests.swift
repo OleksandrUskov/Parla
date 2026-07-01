@@ -2717,12 +2717,17 @@ final class ParlaLogicTests: XCTestCase {
     func testFfmpegArgsAreQuiet() {
         // The Tier-0 deadlock guard: without these flags ffmpeg floods stderr on a long file and hangs.
         for args in [AudioConverter.wavArgs(src: "/in", out: "/out"),
-                     AudioConverter.m4aArgs(src: "/in", dest: "/out")] {
+                     AudioConverter.m4aArgs(src: "/in", dest: "/out"),
+                     AudioConverter.playableWavArgs(src: "/in", dest: "/out")] {
             XCTAssertTrue(args.contains("-hide_banner"))
             XCTAssertTrue(args.contains("-nostats"))
             guard let i = args.firstIndex(of: "-loglevel") else { return XCTFail("-loglevel missing") }
             XCTAssertEqual(args[i + 1], "error")
         }
+        // The WAV fallback must use the bundled-ffmpeg-supported PCM encoder + drop video.
+        let wavFallback = AudioConverter.playableWavArgs(src: "/in", dest: "/out")
+        XCTAssertTrue(wavFallback.contains("pcm_s16le"))
+        XCTAssertTrue(wavFallback.contains("-vn"))
     }
 
     /// An AVFoundation format (.m4a) must NOT spawn ffmpeg — the source path goes straight to the engine.
