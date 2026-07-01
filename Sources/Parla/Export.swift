@@ -35,6 +35,9 @@ enum ExportFormat: String, CaseIterable, Identifiable {
         }
     }
 
+    /// A subtitle format (SubRip/WebVTT) — grouped + labelled together in the export menu (the video→subtitles win).
+    var isSubtitle: Bool { self == .srt || self == .vtt }
+
     /// Whether this format is offered for "summary only" export — prose digests (Plain/Markdown). Subtitle formats
     /// (SRT/VTT) and the full-record JSON have no meaning without the transcript body, so they're hidden in that mode.
     var supportsInsightsOnly: Bool {

@@ -841,10 +841,19 @@ struct TranscriptCard: View {
                     ForEach(ExportContent.allCases) { Text($0.label).tag($0) }
                 }
                 Divider()
-                ForEach(ExportFormat.allCases) { fmt in
-                    // In "summary only" mode, hide the formats that need the transcript body (subtitles / full JSON).
+                ForEach(ExportFormat.allCases.filter { !$0.isSubtitle }) { fmt in
+                    // In "summary only" mode, hide the formats that need the transcript body (full JSON).
                     if model.exportContent != .insightsOnly || fmt.supportsInsightsOnly {
                         Button(fmt.displayName) { model.export(item, as: fmt) }
+                    }
+                }
+                // Subtitles grouped + labelled — the video→subtitles "killer" use case, made obvious.
+                // They need the transcript body (cues), so hidden in "summary only" mode.
+                if model.exportContent != .insightsOnly {
+                    Section(L("export.subtitles")) {
+                        ForEach(ExportFormat.allCases.filter { $0.isSubtitle }) { fmt in
+                            Button(fmt.displayName) { model.export(item, as: fmt) }
+                        }
                     }
                 }
             } label: {
