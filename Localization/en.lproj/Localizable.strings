@@ -80,6 +80,7 @@
 "status.loadingmodel" = "Loading the model into memory…";
 "status.transcribing" = "Transcribing %@…";
 "status.downloading"  = "Downloading the model (one-time)… %lld%%";
+"queue.pending"       = "+%lld queued";
 
 /* Empty state */
 "empty.title"    = "Ready to go";

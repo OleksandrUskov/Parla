@@ -121,6 +121,7 @@ final class AppModel {
     var summarizingChapters: Set<ChapterRef> = []      // +Semantic: individual chapters being re-generated on demand
                                                        // (per-chapter "regenerate" button) — drives each chapter's spinner.
     var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
+    var transcriptionQueue: [TranscriptionJob] = []    // manual drops waiting for the lane — stack "5, then 5 more"; shares the isBusy lane with watchQueue
     var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     var processedKeys: [String] = []                   // FIFO order of processed dedupKeys
     var processedSet: Set<String> = []                 // = Set(processedKeys), for O(1) lookups

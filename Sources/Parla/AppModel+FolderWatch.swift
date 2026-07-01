@@ -68,7 +68,7 @@ extension AppModel {
             markProcessed(stat.dedupKey)     // mark RIGHT on enqueue → no duplicates and no endless retry
         }
         watchQueueCount = watchQueue.count
-        drainQueue()
+        pumpQueues()
     }
 
     /// Single-flight: run one at a time, only when the engine is free. Manual drop and watching
@@ -82,7 +82,7 @@ extension AppModel {
         Task {
             await transcribe(urls: [next], isWatcherRun: true)   // THE SAME path as manual drop; coalesce the beep
             if watchWriteSidecar { writeSidecar(for: next) }
-            drainQueue()                             // pull the next one once we're free again
+            pumpQueues()                             // pull the next one (manual first, then watch) once free
         }
     }
 

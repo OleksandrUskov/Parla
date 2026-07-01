@@ -73,7 +73,7 @@ extension AppModel {
         Task {
             // Clear the claim + re-pump the watch lane if the dictation aborts before a recorder is committed
             // (mic denied, start throws, or a newer start won).
-            defer { requestingMic = false; if recorder == nil { drainQueue() } }
+            defer { requestingMic = false; if recorder == nil { pumpQueues() } }
             // Ask for mic permission BEFORE any recording UI appears. On first use the system prompt shows with
             // NOTHING claiming to record yet — the chip / timer / "Listening…" only start once capture actually
             // does (below). Avoids the "it's already recording while asking permission" feeling + a timer that
@@ -140,8 +140,8 @@ extension AppModel {
     /// + copy + the completion signal all fire on the instant insert, so Stop feels instantaneous.
     func refineDictation(wav: URL, streamed: String, id: UUID) async {
         defer { try? FileManager.default.removeItem(at: wav) }   // throwaway temp; keepAudio copies what it needs
-        // Release the lane FIRST at exit (drainQueue, declared earlier, then sees isBusy false and can pump).
-        defer { drainQueue() }
+        // Release the lane FIRST at exit (pumpQueues then sees isBusy false and can start a queued job).
+        defer { pumpQueues() }
         defer { refiningDictations.remove(id) }
         let model = selectedModel
 
@@ -197,7 +197,7 @@ extension AppModel {
     /// (the WAV is already 16 kHz mono). Best-effort + always toasts (dictation has no in-window chip flow).
     func finishDictation(wav: URL) async {
         defer { try? FileManager.default.removeItem(at: wav) }   // throwaway temp; keepAudio copies what it needs
-        defer { drainQueue() }   // resume the shared lane: a watched file may have queued during the dictation
+        defer { pumpQueues() }   // resume the shared lane: a manual drop or watched file may have queued during the dictation
         let model = selectedModel
 
         // Drop a near-silent / too-short clip before spinning up the model. (A real WAV opens via

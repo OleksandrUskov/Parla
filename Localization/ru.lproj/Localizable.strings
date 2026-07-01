@@ -80,6 +80,7 @@
 "status.loadingmodel" = "Загружаю модель в память…";
 "status.transcribing" = "Распознаю %@…";
 "status.downloading"  = "Скачиваю модель (один раз)… %lld%%";
+"queue.pending"       = "+%lld в очереди";
 
 /* Empty state */
 "empty.title"    = "Готов к работе";

@@ -1,13 +1,48 @@
 import SwiftUI
 import AppKit
 
+/// One queued manual-drop job: a batch of URLs waiting for the transcription lane. A drop while the lane
+/// is busy is APPENDED here (not discarded), so the user can stack "5 files, then 5 more".
+struct TranscriptionJob: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+}
+
 /// Transcription pipeline: drop → (conversion → model load → recognition) → history,
 /// plus «re-transcribe» (feature 01), which reuses the same `transcribeOne`.
 extension AppModel {
+    /// A dropped batch. Instead of REJECTING a drop while busy (old behavior), we QUEUE it and pump the
+    /// lane — so stacked drops run one after another. Shares the isBusy lane with folder-watch.
     func handleDrop(urls: [URL]) {
-        guard !isBusy, downloadingModel == nil else { return }
-        phase = .preparing("…")   // claim the phase synchronously — closes the double-drop race
-        Task { await transcribe(urls: urls) }
+        enqueueManual(urls)
+    }
+
+    /// Append a manual-drop batch to the queue and pump the lane.
+    func enqueueManual(_ urls: [URL]) {
+        transcriptionQueue.append(TranscriptionJob(urls: urls))
+        pumpQueues()
+    }
+
+    /// Total transcription jobs waiting (manual drops + watched files) — drives the "+N queued" badge.
+    var queuedCount: Int { transcriptionQueue.count + watchQueue.count }
+
+    /// Start the next MANUAL job if the lane is free (mirrors folder-watch `drainQueue`). Claims the phase
+    /// synchronously so a second drop in the same tick can't double-start — it just queues behind this one.
+    func drainManualQueue() {
+        guard !isBusy, downloadingModel == nil, !transcriptionQueue.isEmpty else { return }
+        let job = transcriptionQueue.removeFirst()
+        phase = .preparing("…")   // claim the phase synchronously — closes the double-start race
+        Task {
+            await transcribe(urls: job.urls)
+            pumpQueues()          // lane freed → pull the next job
+        }
+    }
+
+    /// One pump for BOTH lanes whenever the lane may have freed (job finished, dictation ended, …).
+    /// Manual (user-initiated) drains first; if it claims the lane, the watch drain then no-ops on isBusy.
+    func pumpQueues() {
+        drainManualQueue()
+        drainQueue()
     }
 
     /// Clear a stuck error chip (.failed → .idle). No-op otherwise.

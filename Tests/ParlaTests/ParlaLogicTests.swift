@@ -2218,6 +2218,52 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: Transcription queue (stack drops instead of dropping them)
+
+    @MainActor func testDropWhileBusyQueuesInsteadOfRejecting() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine()
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.phase = .transcribing("busy")          // lane occupied → a drop must QUEUE, not run and not vanish
+            let src = makeTempSource()
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            m.handleDrop(urls: [src])
+            XCTAssertEqual(m.transcriptionQueue.count, 1)   // queued (the old guard silently dropped it)
+            XCTAssertEqual(fake.transcribeCalls, 0)         // and NOT started while the lane is busy
+
+            m.handleDrop(urls: [src])
+            XCTAssertEqual(m.transcriptionQueue.count, 2)   // a second drop stacks behind the first
+            XCTAssertEqual(m.queuedCount, 2)                // watchQueue empty → total == manual
+        }
+    }
+
+    @MainActor func testDrainManualQueueBailsWhileBusyDequeuesWhenFree() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "x", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            let src = makeTempSource()
+            defer { try? FileManager.default.removeItem(at: src) }
+            m.transcriptionQueue = [TranscriptionJob(urls: [src])]
+
+            m.phase = .transcribing("busy")
+            m.drainManualQueue()                             // busy → must not dequeue or start
+            XCTAssertEqual(m.transcriptionQueue.count, 1)
+            XCTAssertEqual(fake.transcribeCalls, 0)
+
+            m.phase = .idle
+            m.drainManualQueue()                             // free → synchronous dequeue + phase claim (the Task runs async)
+            XCTAssertEqual(m.transcriptionQueue.count, 0)
+            if case .preparing = m.phase {} else { XCTFail("drain should claim the lane synchronously") }
+        }
+    }
+
     // MARK: Dictation orchestration (MIC_DICTATION P1)
 
     @MainActor func testDictationInsertsHistoryRecord() async {

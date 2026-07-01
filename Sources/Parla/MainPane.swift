@@ -477,6 +477,11 @@ struct StatusBar: View {
     private func progressChip(_ text: String, _ b: BatchProgress?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             chip(text, busy: true)
+            if model.queuedCount > 0 {
+                Text(Lf("queue.pending", model.queuedCount))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+            }
             if let b, b.total > 1 {
                 ProgressView(value: Double(b.done), total: Double(b.total))
                     .tint(Brand.accent)
