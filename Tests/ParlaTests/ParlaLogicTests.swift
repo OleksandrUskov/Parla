@@ -2328,6 +2328,34 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    @MainActor func testCancelRetranscribeKeepsOldTranscript() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "NEW-should-not-apply", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.autoCopy = false
+            let src = makeTempSource("orig.m4a")
+            defer { try? FileManager.default.removeItem(at: src) }
+            let item = TranscriptItem(sourceName: "orig.m4a", language: "en", durationSec: 1,
+                                      model: "old-model", text: "OLD-keep-me", segments: [], sourcePath: src.path)
+            m.history = [item]
+
+            // Cancel DURING the re-transcribe decode → the in-place replace must be skipped (old transcript kept).
+            let box = TaskBox()
+            fake.onTranscribe = { _ in box.task?.cancel() }
+            m.retranscribe(item, with: "new-model")
+            let t = m.currentTranscriptionTask
+            box.task = t
+            await t?.value
+
+            XCTAssertEqual(m.history.first?.text, "OLD-keep-me")   // untouched
+            XCTAssertEqual(m.history.first?.model, "old-model")    // not replaced with the new model
+            XCTAssertFalse(m.cancelling)
+            if case .idle = m.phase {} else { XCTFail("a cancelled re-transcribe ends idle") }
+        }
+    }
+
     // MARK: Dictation orchestration (MIC_DICTATION P1)
 
     @MainActor func testDictationInsertsHistoryRecord() async {

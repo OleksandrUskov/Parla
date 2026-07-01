@@ -294,7 +294,12 @@ extension AppModel {
         // lastAttemptedURLs) can't fire the wrong file/model if this re-transcribe fails.
         lastAttemptedURLs = []
         phase = .preparing(item.sourceName)                   // claim the phase synchronously — closes the race (like handleDrop)
-        Task { await runRetranscribe(item, with: model) }
+        currentTranscriptionTask = Task {                     // stored → the chip's Cancel button works for a re-transcribe too
+            await runRetranscribe(item, with: model)
+            currentTranscriptionTask = nil
+            cancelling = false    // clear "Stopping…" however runRetranscribe exited
+            pumpQueues()          // lane freed → start any file queued during this re-transcribe (nil FIRST so a new job's handle isn't clobbered)
+        }
     }
 
     private func runRetranscribe(_ item: TranscriptItem, with model: String) async {
@@ -306,6 +311,7 @@ extension AppModel {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
                 let r = try await transcribeOne(url: url, model: model)
+                if Task.isCancelled { phase = .idle; return }   // cancelled during the decode → KEEP the old transcript, apply nothing
                 // If the audio was evicted by the cache and the source is in hand now — restore the copy
                 // for the player (otherwise the freshly re-transcribed entry would be left without a player). BEFORE the mutation.
                 var restored: (file: String?, playable: String?)?
@@ -341,7 +347,6 @@ extension AppModel {
                 phase = .failed(Lf("error.retranscribe.failed", msg))
             }
         }
-        refreshDownloaded()   // the target model may have just been downloaded
-        pumpQueues()          // lane freed → start any file queued during this re-transcribe
+        refreshDownloaded()   // the target model may have just been downloaded (pump happens in the retranscribe wrapper)
     }
 }
