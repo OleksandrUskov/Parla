@@ -19,7 +19,7 @@ import WhisperKit
 
 let args = CommandLine.arguments
 guard args.count >= 4 else {
-    FileHandle.standardError.write(Data("usage: ParlaStreamEval <samples-dir> <reference-md> <model> [lang=ru]\n".utf8))
+    FileHandle.standardError.write(Data("usage: ParlaStreamEval <samples-dir> <reference-md> <model> [lang=ru] [thresholds] [offlineonly]\n".utf8))
     exit(2)
 }
 let samplesDir = args[1]
@@ -28,7 +28,10 @@ let model = args[3]
 let language = args.count >= 5 ? args[4] : "ru"
 // [thresholds] (6th arg): apply Whisper's anti-hallucination decoding thresholds (noSpeech / logProb /
 // compressionRatio) — suppresses the "Спасибо"-on-silence garbage. Off by default to measure the baseline.
-let useThresholds = args.count >= 6 && (args[5] == "thresholds" || args[5] == "1")
+let useThresholds = args.contains("thresholds") || (args.count >= 6 && args[5] == "1")
+// [offlineonly]: skip the streaming simulation → a fast model-vs-model OFFLINE WER A/B (the transcription-quality
+// epic's model-tier gate). Streaming re-decodes ~26 windows/file, far too slow to compare two models on a set.
+let offlineOnly = args.contains("offlineonly")
 
 /// Decoding options, optionally with the anti-hallucination thresholds applied (the same knobs the app would set).
 func decodeOpts() -> DecodingOptions {
@@ -222,7 +225,7 @@ let files = ((try? FileManager.default.contentsOfDirectory(atPath: samplesDir)) 
     .filter { $0.hasSuffix(".ogg") || $0.hasSuffix(".wav") || $0.hasSuffix(".m4a") || $0.hasSuffix(".mp3") }
     .sorted()
 
-print("model=\(model)  lang=\(language)  thresholds=\(useThresholds ? "ON" : "off")  files=\(files.count)\n")
+print("model=\(model)  lang=\(language)  thresholds=\(useThresholds ? "ON" : "off")\(offlineOnly ? "  OFFLINE-ONLY" : "")  files=\(files.count)\n")
 
 let kit = try await loadModel()
 
@@ -238,14 +241,17 @@ for file in files {
         let offStart = Date()
         let offline = try await offlineText(floats, kit: kit)
         let offTime = Date().timeIntervalSince(offStart)
-        let strStart = Date()
-        let streamed = try await simulateStream(floats, kit: kit)
-        let strTime = Date().timeIntervalSince(strStart)
+        var streamed = "", strTime = 0.0
+        if !offlineOnly {
+            let strStart = Date()
+            streamed = try await simulateStream(floats, kit: kit)
+            strTime = Date().timeIntervalSince(strStart)
+        }
         let ref = refs[file] ?? ""
 
         let offWER = ref.isEmpty ? Double.nan : wer(hyp: offline, ref: ref)
-        let strWER = ref.isEmpty ? Double.nan : wer(hyp: streamed, ref: ref)
-        if !offWER.isNaN { offSum += offWER; strSum += strWER; n += 1 }
+        let strWER = (ref.isEmpty || offlineOnly) ? Double.nan : wer(hyp: streamed, ref: ref)
+        if !offWER.isNaN { offSum += offWER; strSum += strWER.isNaN ? 0 : strWER; n += 1 }
         offTimeSum += offTime; strTimeSum += strTime; durSum += dur
 
         func pct(_ x: Double) -> String { x.isNaN ? "  n/a" : String(format: "%5.1f%%", x * 100) }
@@ -253,8 +259,12 @@ for file in files {
         // so its total compute is higher (that's the "RU is slow" cost we're quantifying).
         print("── \(file)  (\(String(format: "%.1f", dur))s)")
         print("   offline  WER \(pct(offWER))   \(String(format: "%.1fs (%.2f× RT)", offTime, offTime / dur))")
-        print("   streamed WER \(pct(strWER))   Δ \(offWER.isNaN ? "n/a" : String(format: "%+.1f pts", (strWER - offWER) * 100))   \(String(format: "%.1fs (%.2f× RT)", strTime, strTime / dur))")
-        print("   [streamed] \(streamed)")
+        if offlineOnly {
+            print("   [offline] \(offline)")
+        } else {
+            print("   streamed WER \(pct(strWER))   Δ \(offWER.isNaN ? "n/a" : String(format: "%+.1f pts", (strWER - offWER) * 100))   \(String(format: "%.1fs (%.2f× RT)", strTime, strTime / dur))")
+            print("   [streamed] \(streamed)")
+        }
         print("")
     } catch {
         print("── \(file)  ERROR: \(error)\n")
@@ -264,5 +274,7 @@ for file in files {
 if n > 0 {
     print("════ AVERAGE over \(n) files (model=\(model), thresholds=\(useThresholds ? "ON" : "off")) ════")
     print(String(format: "   offline  WER %5.1f%%   %.2f× RT", offSum / Double(n) * 100, offTimeSum / durSum))
-    print(String(format: "   streamed WER %5.1f%%   Δ %+.1f pts   %.2f× RT", strSum / Double(n) * 100, (strSum - offSum) / Double(n) * 100, strTimeSum / durSum))
+    if !offlineOnly {
+        print(String(format: "   streamed WER %5.1f%%   Δ %+.1f pts   %.2f× RT", strSum / Double(n) * 100, (strSum - offSum) / Double(n) * 100, strTimeSum / durSum))
+    }
 }
