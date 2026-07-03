@@ -580,6 +580,8 @@ struct TranscriptCard: View {
     @State private var draft = ""
     @FocusState private var editorFocused: Bool
     @State private var player = PlaybackController()
+    @State private var ttsPlayer = PlaybackController()   // read-aloud (TTS) — a separate player from the note's source audio
+    @State private var synthesizingTTS = false            // brief spinner while the voice synthesizes the transcript
     @State private var isEditingTitle = false
     @State private var titleDraft = ""
     @FocusState private var titleFocused: Bool
@@ -617,9 +619,10 @@ struct TranscriptCard: View {
             summaryExpanded = false          // each record opens with the transcript primary; expand the summary on demand
             showDigest = false               // ...and on the Transcript view, not the Digest
             player.load(audioURL)
+            ttsPlayer.stop()                 // switching notes stops any in-progress read-aloud
             model.refreshRelatedNotes()      // the open note changed → recompute its doc↔doc "Related"
         }
-        .onDisappear { player.stop() }
+        .onDisappear { player.stop(); ttsPlayer.stop() }
     }
 
     // MARK: Header — meta + actions (different in read vs edit mode)
@@ -801,6 +804,19 @@ struct TranscriptCard: View {
                     .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
+            // Read-aloud (TTS P1a): speak the transcript with a system voice, play via its own PlaybackController.
+            // Best-effort + additive — off the isBusy lane; a synth spinner then a stop toggle while it plays.
+            Button { readAloud() } label: {
+                Group {
+                    if synthesizingTTS { ProgressView().controlSize(.small) }
+                    else { Image(systemName: ttsPlayer.isPlaying ? "stop.fill" : "speaker.wave.2.fill").font(.body) }
+                }
+                .padding(9).background(.ultraThinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(synthesizingTTS)
+            .help(Text(L("transcript.readaloud.help")))
+            .accessibilityLabel(Text(L("transcript.readaloud")))
             RetranscribeMenu(item: item)
             if !model.isBusy {
                 // Regenerate insights on demand — a small menu so the user can redo EVERYTHING or just one field.
@@ -866,6 +882,29 @@ struct TranscriptCard: View {
             .fixedSize()
             .help(Text(L("export.menu.help")))
             .accessibilityLabel(Text(L("export.menu.help")))
+        }
+    }
+
+    /// Speak the raw transcript aloud with a system voice (TTS P1a). Best-effort — TTS never disrupts the note:
+    /// any failure silently no-ops. Toggles play↔stop; picks a voice for the note's language, falling back to any
+    /// system voice. Runs off the isBusy lane (additive), so it works even mid-transcription.
+    private func readAloud() {
+        if ttsPlayer.isPlaying { ttsPlayer.stop(); return }
+        let speech = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !speech.isEmpty,
+              let voice = model.tts.voices(forLanguage: item.language).first
+                       ?? model.tts.voices(forLanguage: "").first else { return }
+        player.stop()               // one audio at a time — pause the note's source player
+        synthesizingTTS = true
+        Task {
+            defer { synthesizingTTS = false }
+            do {
+                let url = try await model.tts.synthesize(speech, voice: voice)
+                ttsPlayer.load(url)
+                ttsPlayer.togglePlay()
+            } catch {
+                // best-effort: a TTS failure never disrupts the transcript UI
+            }
         }
     }
 

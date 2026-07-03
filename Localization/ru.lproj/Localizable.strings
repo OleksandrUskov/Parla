@@ -95,6 +95,8 @@
 "transcript.edited.manually"   = "Текст изменён вручную";
 "transcript.edit.help"         = "Редактировать текст";
 "transcript.retranscribe.help" = "Перераспознать другой моделью";
+"transcript.readaloud"         = "Озвучить";
+"transcript.readaloud.help"    = "Озвучить транскрипт (системный голос)";
 "transcript.regenerate"        = "Пересоздать сводку";
 "transcript.regenerate.help"   = "Заново создать заголовок, краткое содержание, ключевые слова и задачи";
 "regenerate.all"               = "Пересоздать всё";

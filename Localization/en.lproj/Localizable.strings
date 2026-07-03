@@ -95,6 +95,8 @@
 "transcript.edited.manually"  = "Text edited manually";
 "transcript.edit.help"        = "Edit text";
 "transcript.retranscribe.help"= "Re-transcribe with another model";
+"transcript.readaloud"        = "Read aloud";
+"transcript.readaloud.help"   = "Read the transcript aloud (system voice)";
 "transcript.regenerate"       = "Regenerate insights";
 "transcript.regenerate.help"  = "Regenerate the AI title, summary, keywords and tasks";
 "regenerate.all"              = "Regenerate all";

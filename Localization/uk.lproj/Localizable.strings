@@ -95,6 +95,8 @@
 "transcript.edited.manually"   = "Текст змінено вручну";
 "transcript.edit.help"         = "Редагувати текст";
 "transcript.retranscribe.help" = "Перерозпізнати іншою моделлю";
+"transcript.readaloud"         = "Озвучити";
+"transcript.readaloud.help"    = "Озвучити транскрипт (системний голос)";
 "transcript.regenerate"        = "Перестворити зведення";
 "transcript.regenerate.help"   = "Заново створити заголовок, короткий зміст, ключові слова та завдання";
 "regenerate.all"               = "Перестворити все";
