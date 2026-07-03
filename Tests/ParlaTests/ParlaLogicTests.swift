@@ -2770,6 +2770,45 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: TTS — voice synthesis P1a (seam + system voice)
+
+    /// Pure voice-language filter: 2-letter-prefix match, empty → all, no-match → empty.
+    func testVoiceSelectionFilter() {
+        let voices = [
+            VoiceDescriptor(id: "a", name: "Milena", language: "ru-RU", isSystem: true),
+            VoiceDescriptor(id: "b", name: "Lesya",  language: "uk-UA", isSystem: true),
+            VoiceDescriptor(id: "c", name: "Samantha", language: "en-US", isSystem: true),
+            VoiceDescriptor(id: "d", name: "Daniel", language: "en-GB", isSystem: true),
+        ]
+        XCTAssertEqual(VoiceSelection.filter(voices, language: "ru").map(\.id), ["a"])          // ru → ru-RU
+        XCTAssertEqual(VoiceSelection.filter(voices, language: "ru-RU").map(\.id), ["a"])       // full tag → prefix
+        XCTAssertEqual(VoiceSelection.filter(voices, language: "en").map(\.id), ["c", "d"])     // both en variants
+        XCTAssertEqual(VoiceSelection.filter(voices, language: "").count, 4)                    // empty → all
+        XCTAssertTrue(VoiceSelection.filter(voices, language: "de").isEmpty)                    // no match → none
+    }
+
+    /// The system backend exposes real voices structurally (every returned voice matches the language + isSystem).
+    /// EN always exists on macOS, so it's a safe non-empty probe without pinning a specific voice name.
+    func testSystemTTSVoices() {
+        let en = SystemTTSService().voices(forLanguage: "en")
+        XCTAssertFalse(en.isEmpty, "macOS always ships EN system voices")
+        XCTAssertTrue(en.allSatisfy { $0.language.lowercased().hasPrefix("en") && $0.isSystem })
+        XCTAssertEqual(SystemTTSService().availability(forLanguage: "en"), .ready)
+        // A bogus language has no system voice → unsupported (drives the availability gate).
+        XCTAssertEqual(SystemTTSService().availability(forLanguage: "zz"), .unsupported)
+    }
+
+    /// The test double filters its canned voices + reports the configured availability (no real synthesis).
+    func testNoopTTS() async {
+        let noop = NoopTTSService(availabilityToReturn: .ready,
+                                  cannedVoices: [VoiceDescriptor(id: "x", name: "X", language: "ru-RU", isSystem: false)])
+        XCTAssertEqual(noop.voices(forLanguage: "ru").map(\.id), ["x"])
+        XCTAssertTrue(noop.voices(forLanguage: "en").isEmpty)
+        XCTAssertEqual(noop.availability(forLanguage: "ru"), .ready)
+        do { _ = try await noop.synthesize("hi", voice: VoiceDescriptor(id: "x", name: "X", language: "ru-RU", isSystem: false)); XCTFail("noop must not synthesize") }
+        catch {}
+    }
+
     // MARK: Export formats — SRT / VTT / JSON / TXT / MD (EXPORT_FORMATS P1)
 
     func testSRTTimecode() {

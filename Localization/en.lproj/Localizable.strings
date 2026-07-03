@@ -223,6 +223,8 @@
 "error.ffmpeg.missing"      = "ffmpeg not found. Install it with:  brew install ffmpeg";
 "error.decode.failed"       = "Couldn't decode the audio.\n%@";
 "error.model.notloaded"     = "The model didn't load";
+"error.tts.novoice"         = "No voice available for this language";
+"error.tts.failed"          = "Couldn't synthesize the audio";
 
 /* Folder picker */
 "folder.choose" = "Choose";

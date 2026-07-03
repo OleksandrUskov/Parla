@@ -223,6 +223,8 @@
 "error.ffmpeg.missing"      = "Не найден ffmpeg. Установи его командой:  brew install ffmpeg";
 "error.decode.failed"       = "Не удалось декодировать аудио.\n%@";
 "error.model.notloaded"     = "Модель не загрузилась";
+"error.tts.novoice"         = "Нет голоса для этого языка";
+"error.tts.failed"          = "Не удалось синтезировать аудио";
 
 /* Folder picker */
 "folder.choose" = "Выбрать";
