@@ -4045,9 +4045,12 @@ private struct ClosureAudioDecoder: AudioDecoding {
     var decode: @Sendable (URL) throws -> URL = { $0 }
     var split: @Sendable (URL, Double) throws -> [URL] = { _, _ in [] }
     var chunkingAvailable = false
+    var render: @Sendable (URL, URL) throws -> Void = { _, _ in throw AudioDecodingError.noDecoderAvailable }
     func decodeToWav16k(_ src: URL) throws -> URL { try decode(src) }
     func splitIntoChunks(_ src: URL, chunkLength: Double) throws -> [URL] { try split(src, chunkLength) }
     var isChunkingAvailable: Bool { chunkingAvailable }
+    func renderPlayableM4a(from src: URL, to dest: URL) throws { try render(src, dest) }
+    func renderPlayableWav(from src: URL, to dest: URL) throws { try render(src, dest) }
 }
 
 // MARK: - Test double for the Local-AI seam (P0)

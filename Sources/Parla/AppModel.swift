@@ -138,9 +138,10 @@ final class AppModel {
     let embedder: any TextEmbedder                      // semantic-embedding seam (P1) — injectable; NLContextualEmbedding default
     let tts: any TTSService                              // TTS seam (voice synthesis P1a) — injectable; SystemTTSService default (system voice)
 
-    /// Audio decoding (platform + test seam): real ffmpeg via `FFmpegAudioDecoder` by default; iOS injects an
-    /// in-process decoder (IOS_PORT.md §2), tests inject a stub to skip the subprocess.
-    var decoder: any AudioDecoding = FFmpegAudioDecoder()
+    /// Audio decoding (platform + test seam): the inert Core default has no ffmpeg dependency; the macOS app
+    /// wires `FFmpegAudioDecoder` via `AppModel.mac()` and iOS an in-process decoder (IOS_PORT.md §2). Tests
+    /// inject a stub to script the decode.
+    var decoder: any AudioDecoding = UnavailableAudioDecoder()
 
     /// Completion-notification dispatch (test seam): real UNUserNotificationCenter in production;
     /// tests inject a no-op so they don't touch the notification center (no bundle proxy under XCTest).
@@ -148,9 +149,10 @@ final class AppModel {
         await BatchNotifier.post(succeeded: $0, failed: $1)
     }
 
-    /// Paste-into-frontmost (test seam): real CGEvent ⌘V in production; tests inject a recorder.
-    /// Returns whether a synthetic paste was actually performed (false → not Accessibility-trusted).
-    var attemptPaste: @MainActor () -> Bool = { PasteService.pasteIntoFrontmost() }
+    /// Paste-into-frontmost (platform + test seam): macOS wires the real CGEvent ⌘V (`PasteService`) via
+    /// `AppModel.mac()`; the inert Core/test default reports "not pasted". Returns whether a synthetic paste
+    /// was actually performed (false → not Accessibility-trusted).
+    var attemptPaste: @MainActor () -> Bool = { false }
 
     // MARK: Platform seams (iOS-port P0.1)
     // AppModel is Core-bound — it must stay AppKit-free so it ports to iOS. Each platform behavior below is an
@@ -171,6 +173,16 @@ final class AppModel {
     /// Present a save dialog and return the chosen destination (or nil if cancelled): macOS wires `NSSavePanel`.
     /// The data production + write + error handling stay in Core — only the file-picker UI is platform-specific.
     var presentSavePanel: @MainActor (_ suggestedName: String, _ extensions: [String]) -> URL? = { _, _ in nil }
+
+    /// Show a transient toast (macOS: `QuickToast` floating panel; iOS: its own overlay). `sticky` keeps it up
+    /// until `hideToast`. Inert default is a no-op — the transcription result path stays platform-agnostic.
+    var showToast: @MainActor (_ text: String, _ sticky: Bool) -> Void = { _, _ in }
+
+    /// Dismiss a sticky toast (macOS: `QuickToast.hide`). Inert default is a no-op.
+    var hideToast: @MainActor () -> Void = { }
+
+    /// Play the batch-completion sound (macOS: `NSSound` Glass/Basso via `CompletionSound`). Inert default no-op.
+    var playCompletionSound: @MainActor (_ success: Bool) -> Void = { _ in }
 
     enum Keys {
         static let model = "model"

@@ -278,7 +278,7 @@ extension AppModel {
 
     /// Copy the kept dictation audio into the item (shared by the plain and hybrid-refine save paths).
     private func keepDictationAudioFor(_ id: UUID, wav: URL) async {
-        let kept = await Self.keepAudio(from: wav, id: id)
+        let kept = await Self.keepAudio(from: wav, id: id, using: decoder)
         if (kept.file != nil || kept.playable != nil),
            let idx = history.firstIndex(where: { $0.id == id }) {
             history[idx].audioFile = kept.file

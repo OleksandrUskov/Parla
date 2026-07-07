@@ -12,6 +12,9 @@ extension AppModel {
     @MainActor static func mac() -> AppModel {
         let m = AppModel()
 
+        // Audio decode / playback rendition → vendored ffmpeg (Process). macOS-only; iOS injects its own.
+        m.decoder = FFmpegAudioDecoder()
+
         m.copyToClipboard = { text in
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -28,6 +31,12 @@ extension AppModel {
             panel.canCreateDirectories = true
             return panel.runModal() == .OK ? panel.url : nil
         }
+
+        // Transient UX: floating toast panel, completion sound, synthetic ⌘V paste.
+        m.showToast = { text, sticky in QuickToast.shared.show(text, sticky: sticky) }
+        m.hideToast = { QuickToast.shared.hide() }
+        m.playCompletionSound = { success in success ? CompletionSound.success() : CompletionSound.failure() }
+        m.attemptPaste = { PasteService.pasteIntoFrontmost() }
 
         return m
     }

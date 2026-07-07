@@ -11,4 +11,8 @@ struct FFmpegAudioDecoder: AudioDecoding {
     }
 
     var isChunkingAvailable: Bool { AudioConverter.isFFmpegAvailable }
+
+    func renderPlayableM4a(from src: URL, to dest: URL) throws { try AudioConverter.toM4a(src, to: dest) }
+
+    func renderPlayableWav(from src: URL, to dest: URL) throws { try AudioConverter.toPlayableWav(src, to: dest) }
 }

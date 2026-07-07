@@ -116,7 +116,7 @@ extension AppModel {
                 succeeded += 1
                 rememberSource(url)            // for «repeat last file»
                 // Prepare the player audio AFTER the text is shown; patch the entry by id (the player shows up a bit later).
-                let kept = await Self.keepAudio(from: url, id: item.id)
+                let kept = await Self.keepAudio(from: url, id: item.id, using: decoder)
                 if (kept.file != nil || kept.playable != nil),
                    let idx = history.firstIndex(where: { $0.id == item.id }) {
                     history[idx].audioFile = kept.file
@@ -129,7 +129,7 @@ extension AppModel {
             }
         }
         if Task.isCancelled {                 // user hit Cancel: don't beep / notify / show a "done" toast
-            if quickModeRun { QuickToast.shared.hide() }   // clear the sticky "Recognizing…" toast of a cancelled quick run
+            if quickModeRun { hideToast() }   // clear the sticky "Recognizing…" toast of a cancelled quick run
             cancelling = false
             quickModeRun = false
             phase = .idle
@@ -141,7 +141,7 @@ extension AppModel {
         phase = failures.isEmpty ? .idle : .failed(Lf("error.transcribe.failed", failures.joined(separator: "; ")))
         if Self.shouldPlayCompletionSound(soundEnabled: soundOnComplete, isWatcherRun: isWatcherRun,
                                           watchQueueEmpty: watchQueue.isEmpty && transcriptionQueue.isEmpty) {  // coalesce across BOTH lanes: a watch run stays silent if a manual job is queued behind it (it beeps instead)
-            failures.isEmpty ? CompletionSound.success() : CompletionSound.failure()
+            playCompletionSound(failures.isEmpty)
         }
 
         // Notification: only if the job «was worth the wait» and the window isn't frontmost.
@@ -157,9 +157,9 @@ extension AppModel {
         if quickModeRun {
             quickModeRun = false
             if !failures.isEmpty {
-                QuickToast.shared.show(L("toast.failed"))
+                showToast(L("toast.failed"), false)
             } else {
-                QuickToast.shared.show(autoCopy ? L("toast.done.copied") : L("toast.done"))
+                showToast(autoCopy ? L("toast.done.copied") : L("toast.done"), false)
             }
         }
 
@@ -318,7 +318,7 @@ extension AppModel {
                 var restored: (file: String?, playable: String?)?
                 if let cur = history.first(where: { $0.id == item.id }),
                    cur.audioFile == nil, cur.audioPlayable == nil {
-                    restored = await Self.keepAudio(from: url, id: item.id)
+                    restored = await Self.keepAudio(from: url, id: item.id, using: decoder)
                 }
                 // Resolve the index AFTER all awaits — history could have shifted (background transcription).
                 if let idx = history.firstIndex(where: { $0.id == item.id }) {
