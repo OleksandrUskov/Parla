@@ -1,0 +1,39 @@
+# XcodeGen spec for the Parla iOS app (iOS-port P1.4).
+#
+# ADDITIVE: the macOS app stays a pure SwiftPM build (`build_app.sh`); this only stands up the NEW iOS app
+# target on top of the same cross-platform `ParlaCore` package (referenced as a local package at `../..`).
+#
+# The generated `Parla-iOS.xcodeproj` is a BUILD ARTIFACT (gitignored) — regenerate anytime with:
+#     cd apps/ios && xcodegen generate
+# `project.yml` (this file) is the checked-in source of truth for the project structure. Nothing here is
+# "throwaway": the Swift sources under `Sources/` + the linked `ParlaCore` are the real, permanent app.
+name: Parla-iOS
+options:
+  bundleIdPrefix: com.parla
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  ParlaCore:
+    path: ../..
+targets:
+  Parla-iOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources
+    dependencies:
+      - package: ParlaCore
+        product: ParlaCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.parla.ios
+        TARGETED_DEVICE_FAMILY: "1,2"          # iPhone + iPad
+        SWIFT_VERSION: "5.0"                     # spike: app-target sources in Swift-5 mode (ParlaCore stays .v6)
+        GENERATE_INFOPLIST_FILE: YES
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Parla uses the microphone for on-device voice dictation."
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
