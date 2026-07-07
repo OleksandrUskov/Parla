@@ -1,25 +1,28 @@
 import XCTest
-@testable import Parla_iOS
+import AVFoundation
+import ParlaCore
 
-// iOS-port P1.3 runtime proof: decode a REAL Ogg/Opus (Telegram voice) fixture on the iOS simulator via the
-// Opusfile-backed `OpusAudioDecoder` and assert the PCM is sane — link ≠ works ([[run-manual-verify-paths]]).
-// The fixture is gitignored (voice never in git); when it's absent (CI / a fresh clone) the test XCTSkips, so
-// it is never a false red. Run: xcodebuild test -scheme Parla-iOS -destination 'platform=iOS Simulator,name=iPhone 15'.
+// iOS-port P1.3 runtime proof: exercise the REAL `AudioDecoding` seam (`OpusAudioDecoder` in ParlaCore) on a
+// real Telegram Ogg/Opus fixture on the iOS simulator, and assert it yields a WAV WhisperKit can read — link ≠
+// works ([[run-manual-verify-paths]]). The fixture is gitignored (voice never in git); when it's absent (CI / a
+// fresh clone) the test XCTSkips, so it is never a false red.
+// Run: xcodebuild test -scheme Parla-iOS -destination 'platform=iOS Simulator,id=<iPhone-15/iOS-17>'.
 final class OpusDecodeTests: XCTestCase {
 
-    func testDecodeRealOggOpusFixtureOnSimulator() throws {
+    func testDecodeRealOggOpusFixtureViaSeam() throws {
         guard let url = Bundle(for: Self.self).url(forResource: "sample", withExtension: "ogg") else {
             throw XCTSkip("no local Ogg/Opus fixture bundled (gitignored) — skipping the runtime decode proof")
         }
-        let data = try Data(contentsOf: url)
-        XCTAssertGreaterThan(data.count, 0, "fixture is empty")
 
-        let pcm = try XCTUnwrap(OpusAudioDecoder.decodeToMono48k(data), "Opusfile failed to decode the fixture")
+        let wav = try OpusAudioDecoder().decodeToWav16k(url)
+        defer { try? FileManager.default.removeItem(at: wav) }
 
-        XCTAssertGreaterThan(pcm.count, 48_000, "expected > 1 s of 48 kHz PCM from a real voice note")
-        XCTAssertTrue(pcm.prefix(48_000).allSatisfy { $0.isFinite && abs($0) <= 1.5 },
-                      "decoded samples should be finite, in a plausible audio range")
-        let seconds = Double(pcm.count) / 48_000
-        print("✅ P1.3 decode proof: \(pcm.count) mono samples ≈ \(String(format: "%.1f", seconds)) s @ 48 kHz")
+        // The seam's contract: a WAV the engine (WhisperKit via AVAudioFile) can open. Verify it opens + is mono + non-trivial.
+        let file = try AVAudioFile(forReading: wav)
+        XCTAssertEqual(file.fileFormat.channelCount, 1, "decoder must yield mono")
+        let seconds = Double(file.length) / file.fileFormat.sampleRate
+        XCTAssertGreaterThan(seconds, 1, "expected > 1 s of audio from a real voice note")
+        print("✅ P1.3 seam decode: \(file.length) frames @ \(Int(file.fileFormat.sampleRate)) Hz "
+              + "≈ \(String(format: "%.1f", seconds)) s, ch=\(file.fileFormat.channelCount)")
     }
 }

@@ -1,5 +1,5 @@
 {
-  "originHash" : "929fa94c76f84e9484212507718c243b6ef15241e06ae94d52a9fa15e8be8bdb",
+  "originHash" : "f538a3ecf1bcfd69533abaea4e89d49266805074ce65d00be5b84a344ac085ae",
   "pins" : [
     {
       "identity" : "keyboardshortcuts",
@@ -26,6 +26,24 @@
       "state" : {
         "revision" : "1c05248bb0899e2a7a4962b84d319cf12f4e12aa",
         "version" : "3.31.3"
+      }
+    },
+    {
+      "identity" : "ogg-binary-xcframework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sbooth/ogg-binary-xcframework",
+      "state" : {
+        "revision" : "48cbf24e7fb5d329b1f5e24cd2e5b048585ff770",
+        "version" : "0.1.3"
+      }
+    },
+    {
+      "identity" : "opus-binary-xcframework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sbooth/opus-binary-xcframework",
+      "state" : {
+        "revision" : "8e23828b9d88f0ff1ff2d7c4bcb65739a4bdeff8",
+        "version" : "0.3.0"
       }
     },
     {
