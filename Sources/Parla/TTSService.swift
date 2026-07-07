@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 // @preconcurrency: AVSpeechSynthesizer's `write(_:toBufferCallback:)` takes a NON-@Sendable escaping callback
 // that fires off-actor on its own queue (same class of hazard as the MicRecorder tap / WhisperKit progress).
 // The import downgrades that Sendable-mismatch so v6 only flags OUR genuine isolation issues; we serialize the

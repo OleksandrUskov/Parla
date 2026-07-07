@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import AVFoundation
 
 /// Seam over audio decoding/transcoding for the transcription pipeline. macOS drives the vendored LGPL

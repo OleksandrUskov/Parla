@@ -1,4 +1,5 @@
 import AppKit
+import ParlaCore
 import UniformTypeIdentifiers
 
 /// Pulls file URLs out of the clipboard. Pure logic (`parse`/`audioOnly`) is decoupled from

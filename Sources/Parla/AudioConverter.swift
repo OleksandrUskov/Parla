@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Converts any audio/video to 16 kHz mono WAV via ffmpeg.
 /// Needed because Telegram serves .ogg/Opus, which AVFoundation (used by

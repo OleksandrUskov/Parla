@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Audio cache management for the player (feature 06): source copy, auto-cleanup (LRU + orphans),
 /// manual clear. TRANSCRIPT TEXT IS NEVER TOUCHED — only audio copies.

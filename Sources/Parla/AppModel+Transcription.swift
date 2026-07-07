@@ -1,4 +1,5 @@
 import SwiftUI
+import ParlaCore
 
 /// One queued manual-drop job: a batch of URLs waiting for the transcription lane. A drop while the lane
 /// is busy is APPENDED here (not discarded), so the user can stack "5 files, then 5 more".

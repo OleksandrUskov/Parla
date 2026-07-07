@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// A single recognized fragment with a timecode.
 struct Segment: Codable, Hashable {
@@ -281,14 +282,6 @@ func batchLabel(_ name: String, _ b: BatchProgress?) -> String {
     return Lf("batch.label.multi", name, b.index, b.total)
 }
 
-/// Russian pluralization (1 файл / 2 файла / 5 файлов).
-func pluralRu(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
-    let a = abs(n) % 100, b = a % 10
-    if a > 10 && a < 20 { return many }
-    if b == 1 { return one }
-    if b >= 2 && b <= 4 { return few }
-    return many
-}
 
 /// History store in ~/Library/Application Support/Parla/history.json
 /// Decodes T, or holds nil if that one element is corrupt — so a single bad record can't abort the

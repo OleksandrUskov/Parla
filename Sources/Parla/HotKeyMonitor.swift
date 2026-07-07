@@ -1,4 +1,5 @@
 import KeyboardShortcuts
+import ParlaCore
 
 /// The hot-key «seam» for quick transcription.
 ///

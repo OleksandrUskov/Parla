@@ -1,4 +1,5 @@
 import AppIntents
+import ParlaCore
 import AppKit
 
 /// In-process locator for the live `@MainActor AppModel` so app-bound intents reach it without

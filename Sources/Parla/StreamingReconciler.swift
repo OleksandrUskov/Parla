@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Pure segment-level streaming reconciliation (MIC_DICTATION P3).
 ///

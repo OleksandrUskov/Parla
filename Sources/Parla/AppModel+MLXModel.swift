@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// MLX RU/UK generative model (AI P3): opt-in download / delete / on-disk state — parallel to, and independent
 /// of, the WhisperKit transcription catalog (`AppModel+Models.swift`). Downloading the model IS the opt-in:

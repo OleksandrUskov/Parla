@@ -1,4 +1,5 @@
 import SwiftUI
+import ParlaCore
 
 struct MainPane: View {
     @Environment(AppModel.self) private var model

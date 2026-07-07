@@ -11,7 +11,7 @@ import Foundation
 // content NOUNS were deliberately kept OUT (ranked, not banned — incl. tech homonyms like «данные»).
 // Single-token, lowercased, deduped, ≥3 chars. ~1949 entries. Regenerate via workflow + generator.
 
-let keywordStopwords: Set<String> = [
+public let keywordStopwords: Set<String> = [
     "able", "about", "above", "across", "actually", "after", "afterwards", "again", "against", "ago",
     "aha", "ahead", "ain't", "aint", "albeit", "all", "almost", "alone", "along", "alongside",
     "already", "also", "although", "always", "amid", "amidst", "among", "amongst", "amount", "and",

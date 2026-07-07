@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import MLX
 import MLXEmbedders
 import MLXLMCommon

@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// History: copy, inline edit (feature 02), delete, export to Markdown.
 extension AppModel {

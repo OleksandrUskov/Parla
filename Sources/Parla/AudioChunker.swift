@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Pure planning + stitching for the chunked long-audio pipeline. **No I/O** — the actual ffmpeg
 /// split and per-chunk transcription live in the caller; this computes the chunk count, decides when

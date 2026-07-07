@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 @preconcurrency import WhisperKit   // not Sendable-annotated yet — see TranscriptionEngine.swift
 
 /// Model catalog: download status / on-disk size, download/delete, tiers for the manager.

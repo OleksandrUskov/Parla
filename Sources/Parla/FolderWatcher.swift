@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import CoreServices   // FSEvents — system framework, no new dependencies
 
 /// Folder watcher via FSEvents (recursive). It makes no decisions itself — it debounces

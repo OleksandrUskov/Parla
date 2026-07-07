@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Live mic dictation (MIC_DICTATION v1): record the microphone → 16 kHz mono WAV (`MicRecorder`) →
 /// transcribe it locally, reusing the same result handling as a file drop but **bypassing the `decoder` seam**

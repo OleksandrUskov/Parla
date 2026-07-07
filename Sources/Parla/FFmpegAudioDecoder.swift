@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// macOS `AudioDecoding`: forwards to the vendored LGPL ffmpeg via `AudioConverter`. Stays in the macOS app
 /// target (ffmpeg is a spawned subprocess, unavailable on iOS) — iOS ships its own in-process decoder that

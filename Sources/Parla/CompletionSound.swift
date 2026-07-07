@@ -1,4 +1,5 @@
 import AppKit
+import ParlaCore
 
 /// A subtle built-in system sound when a transcription finishes — so background flows (hotkey,
 /// folder-watch, menu-bar) feel finished even when the window isn't in focus. Best-effort:

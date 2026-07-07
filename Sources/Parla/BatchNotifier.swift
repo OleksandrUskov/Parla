@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import UserNotifications
 
 /// Thin wrapper over UNUserNotificationCenter + a pure (testable) "should we notify" decision.

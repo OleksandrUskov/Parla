@@ -11,7 +11,7 @@ import NaturalLanguage
 /// directly — far more reliable on SHORT search queries than NLLanguageRecognizer (which mislabels e.g.
 /// "проект"→Bulgarian). NLContextualEmbedding is script-based, so this is what actually decides which model
 /// (and thus which vector space) a query is embedded in — RU and UK both map to the Cyrillic space.
-func dominantScript(_ text: String) -> String {
+public func dominantScript(_ text: String) -> String {
     var cyrillic = 0, latin = 0
     for scalar in text.unicodeScalars {
         if (0x0400...0x04FF).contains(scalar.value) { cyrillic += 1 }
@@ -22,7 +22,7 @@ func dominantScript(_ text: String) -> String {
 }
 
 /// Split text into sentences (NLTokenizer). Empty/blank → []. Each sentence trimmed; blanks dropped.
-func sentences(in text: String) -> [String] {
+public func sentences(in text: String) -> [String] {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return [] }
     let tokenizer = NLTokenizer(unit: .sentence)
@@ -43,7 +43,7 @@ func sentences(in text: String) -> [String] {
 /// the note's stored language but the query by script silently breaks UK/DE/FR: e.g. a UK note indexed as
 /// "uk" vs a query forced to "ru" would never match — the round-2 review caught exactly this.) Cyrillic→ru,
 /// Latin→en, else unset. RU/UK can't be told apart from a short query, so both ride the "ru" lemmatizer.
-func searchLemmaSet(of text: String) -> Set<String> {
+public func searchLemmaSet(of text: String) -> Set<String> {
     // Lemmatize ONLY Cyrillic (RU/UK — Parla's languages). Latin/other fall back to substring search: NLTagger's
     // EN lemma is inconsistent (verified — «meeting»→«meet» conflates the verb, while «meeting»/«meetings» split
     // to different lemmas), producing wrong/missed matches not worth it for a secondary language. UK has no
@@ -58,7 +58,7 @@ func searchLemmaSet(of text: String) -> Set<String> {
 /// tantum) → obliques «деньга» but nom stays «деньги»; «мать»/«дочь» → obliques «матерь»/«дочерь» but nom stays
 /// «мать»/«дочь». A small CLOSED exceptions table (standard NLP practice — unlike the open-class stopword list);
 /// extend only as real, verified misses surface. (время/имя/путь/люди/дети are self-consistent — no entry needed.)
-let lemmaOverrides: [String: String] = ["деньги": "деньга", "матерь": "мать", "дочерь": "дочь"]
+public let lemmaOverrides: [String: String] = ["деньги": "деньга", "матерь": "мать", "дочерь": "дочь"]
 
 /// Lemmatized content tokens of `text` as a lowercased set — the morphology primitive behind `searchLemmaSet`.
 /// «работа» reduces to the same lemma as «работе»/«работу», so a base-form query finds inflected notes. Uses
@@ -68,7 +68,7 @@ let lemmaOverrides: [String: String] = ["деньги": "деньга", "мат�
 /// those are corrected via the closed `lemmaOverrides` table applied below (e.g. «деньги»→«деньга»,
 /// «матерь»→«мать») so all forms collapse and match. NOT semantic search: matches word FORMS literally present,
 /// not meaning (that's the download-tier; LOCAL_AI_LAYER.md §5).
-func lemmaSet(of text: String, language: String = "") -> Set<String> {
+public func lemmaSet(of text: String, language: String = "") -> Set<String> {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return [] }
     let range = trimmed.startIndex..<trimmed.endIndex
@@ -99,7 +99,7 @@ private let softSignNouns: Set<String> = ["сеть", "путь"]
 /// -ться/-тися/-чь/-ти; feminine soft-sign nouns end in consonant+ть («часть», «власть») and are kept.
 /// (NLTagger's `.lexicalClass` mislabels conjugated Russian verbs as nouns, but `.lemma` is reliable —
 /// it returns the infinitive — so this suffix rule is the deterministic discriminator. Validated by research.)
-func looksLikeVerbLemma(_ lemma: String) -> Bool {
+public func looksLikeVerbLemma(_ lemma: String) -> Bool {
     let w = lemma.lowercased()
     guard w.count > 3, !softSignNouns.contains(w) else { return false }
     if w.hasSuffix("ться") || w.hasSuffix("тися") || w.hasSuffix("чь") || w.hasSuffix("ти") { return true }
@@ -111,7 +111,7 @@ func looksLikeVerbLemma(_ lemma: String) -> Bool {
 }
 
 /// True if a lemma is a RU/UK adjective/participle by its ending. The len≥5 guard protects short nouns.
-func looksLikeAdjectiveLemma(_ lemma: String) -> Bool {
+public func looksLikeAdjectiveLemma(_ lemma: String) -> Bool {
     let w = lemma.lowercased()
     guard w.count >= 5 else { return false }
     let adjective = ["ый", "ий", "ой", "ая", "яя", "ое", "ее", "ого", "его", "ому", "ему", "ых", "их", "ыми", "ими"]
@@ -130,7 +130,7 @@ private let rejectedClasses: Set<NLTag> = [.verb, .particle, .conjunction, .prep
 /// `AppModel.rankedKeywords`, which pools each candidate's IN-CONTEXT token vectors using these ranges.
 /// **Ranges index `text` as given** (caller passes the same clean string it embeds). Verbs/adjectives are
 /// dropped by morphology, not the unreliable POS tag; the lemma merges inflections («биржу»/«бирж» → «биржа»).
-func keywordCandidatesWithRanges(from text: String, language: String = "", max: Int = 16)
+public func keywordCandidatesWithRanges(from text: String, language: String = "", max: Int = 16)
     -> [(term: String, ranges: [Range<String.Index>])] {
     guard !text.isEmpty else { return [] }
     let range = text.startIndex..<text.endIndex
@@ -162,7 +162,7 @@ func keywordCandidatesWithRanges(from text: String, language: String = "", max: 
 }
 
 /// Convenience: candidate terms only (no ranges). Used where context-pooling isn't needed.
-func keywordCandidates(from text: String, language: String = "", max: Int = 16) -> [String] {
+public func keywordCandidates(from text: String, language: String = "", max: Int = 16) -> [String] {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     return keywordCandidatesWithRanges(from: trimmed, language: language, max: max).map(\.term)
 }

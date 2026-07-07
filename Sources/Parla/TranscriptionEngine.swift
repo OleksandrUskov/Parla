@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 // @preconcurrency: WhisperKit isn't Sendable-annotated yet. Treating its API as pre-concurrency
 // suppresses the dependency's missing-Sendable noise so v6 only flags OUR genuine isolation issues.
 @preconcurrency import WhisperKit

@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import Hub          // swift-transformers (WhisperKit's 1.1.x): HubApi — backs our Downloader
 import Tokenizers   // swift-transformers: AutoTokenizer + Tokenizer — backs our TokenizerLoader/bridge
 import MLXLMCommon  // loadModelContainer / ChatSession / Downloader / TokenizerLoader / Tokenizer / ModelContainer / GenerateParameters

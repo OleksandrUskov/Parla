@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Quick transcription without an open window (feature 03): from the clipboard, replaying the last file.
 /// Remembering the «last source» is also triggered from the main `transcribe`.

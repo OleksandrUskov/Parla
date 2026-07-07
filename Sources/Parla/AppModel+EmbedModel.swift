@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Embedding model (AI P3.5): opt-in download / delete / on-disk state for query→note SEMANTIC SEARCH — parallel
 /// to the MLX generative model (`AppModel+MLXModel.swift`) and the WhisperKit catalog. Downloading it switches the

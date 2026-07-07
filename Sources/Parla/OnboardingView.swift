@@ -1,4 +1,5 @@
 import SwiftUI
+import ParlaCore
 
 /// One-time first-run sheet: what Parla does, privacy, pick a model (defaulting to the recommended
 /// turbo tier so the first download isn't the heaviest), and the bundled-ffmpeg reassurance.

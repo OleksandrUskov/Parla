@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import NaturalLanguage
 
 // MARK: - Text embedder (Local-AI Layer P1b)

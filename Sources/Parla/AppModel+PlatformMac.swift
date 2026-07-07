@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import ParlaCore
 import UniformTypeIdentifiers
 
 /// macOS wiring for `AppModel`'s platform seams. The Core declares these behaviors as injectable closures with

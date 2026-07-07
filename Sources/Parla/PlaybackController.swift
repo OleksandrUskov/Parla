@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import AVFoundation
 
 /// Player for the recording's source audio (feature 06). A wrapper over AVAudioPlayer + a 0.1s ticker for progress.

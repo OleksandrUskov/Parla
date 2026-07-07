@@ -1,4 +1,5 @@
 import SwiftUI
+import ParlaCore
 import KeyboardShortcuts
 
 struct SettingsView: View {

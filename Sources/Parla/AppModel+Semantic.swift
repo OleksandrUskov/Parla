@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// One regenerable insight field — drives the granular "Regenerate ▾" menu (regenerate just one field).
 enum InsightField: Sendable { case title, summary, keywords, actions }

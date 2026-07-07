@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -89,11 +90,6 @@ extension LocalLLMService {
 
 // MARK: - Language helper
 
-/// Primary BCP-47 subtag, lowercased: `"en-US"`/`"EN_us"` → `"en"`, `""` → `""`. Pure + testable —
-/// used to match a transcript's language code against a backend's supported-language set.
-func languagePrimarySubtag(_ code: String) -> String {
-    code.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? ""
-}
 
 /// If a generated summary looks truncated (doesn't end on sentence-final punctuation — a token-cap cutoff), trim
 /// it back to the last COMPLETE sentence so it never dangles mid-word ("…Трамп призвал Зелен"). No-op when it

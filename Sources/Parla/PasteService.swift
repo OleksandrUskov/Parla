@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import AppKit
 import ApplicationServices
 import CoreGraphics

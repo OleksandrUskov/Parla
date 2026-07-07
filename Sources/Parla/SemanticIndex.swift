@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 // MARK: - Semantic core (Local-AI Layer P1a)
 //

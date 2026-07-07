@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Pure, testable voice-activity gate for dictation auto-stop. Fed each audio buffer's loudness (RMS),
 /// it decides when a run of silence — AFTER the user has actually spoken — should end the recording, so

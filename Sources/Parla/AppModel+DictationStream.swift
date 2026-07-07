@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Live segment-level streaming preview (MIC_DICTATION P3).
 ///

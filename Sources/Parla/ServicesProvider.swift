@@ -1,4 +1,5 @@
 import AppKit
+import ParlaCore
 
 /// macOS Services provider (OS_INTEGRATION): "Transcribe with Parla" in Finder right-click and every
 /// app's Services menu for audio-file selections. Collects the selected file URLs and routes them into

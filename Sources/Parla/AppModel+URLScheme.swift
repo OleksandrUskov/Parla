@@ -1,4 +1,5 @@
 import AppKit
+import ParlaCore
 
 /// `parla://` URL scheme (OS_INTEGRATION). Lets Raycast/Alfred/terminal/Stream Deck/Shortcuts drive
 /// Parla. Every verb funnels into the existing race-safe `handleDrop` / quick-action entry points —

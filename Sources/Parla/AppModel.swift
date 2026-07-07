@@ -1,4 +1,5 @@
 import SwiftUI
+import ParlaCore
 import Foundation
 import UniformTypeIdentifiers
 import WhisperKit

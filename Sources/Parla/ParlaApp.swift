@@ -1,4 +1,5 @@
 import SwiftUI
+import ParlaCore
 import AppKit
 import UserNotifications
 import KeyboardShortcuts

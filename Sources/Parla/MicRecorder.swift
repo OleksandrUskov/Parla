@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import os
 // AVFAudio's AVAudioConverterInputBlock is @Sendable but is called synchronously on the audio thread
 // (no real concurrency) — @preconcurrency relaxes the spurious Sendable-capture diagnostics for AVFAudio

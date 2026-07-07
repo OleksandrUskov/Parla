@@ -2,6 +2,7 @@ import XCTest
 import os
 import AVFoundation
 import AppKit
+@testable import ParlaCore
 @testable import Parla
 
 /// Unit tests for pure logic (no WhisperKit/audio/UI):

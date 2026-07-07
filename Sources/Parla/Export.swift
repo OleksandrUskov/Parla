@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Export formats for a transcript — the single source of truth for extension + display name.
 /// SRT/VTT are inherently per-recording (cue indices/timecodes can't concatenate across the archive),

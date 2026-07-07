@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 import AppKit
 
 /// Folder watching (feature 04): FSEvents → pick out settled new files → single-flight

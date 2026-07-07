@@ -1,4 +1,5 @@
 import SwiftUI
+import ParlaCore
 
 enum Brand {
     static let name = "Parla"

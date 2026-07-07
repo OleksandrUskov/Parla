@@ -1,4 +1,5 @@
 import AppKit
+import ParlaCore
 import SwiftUI
 
 /// Small, unobtrusive toast window near the menu bar (for hotkeys/quick actions).

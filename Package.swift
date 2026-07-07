@@ -25,9 +25,19 @@ let package = Package(
         .package(url: "https://github.com/huggingface/swift-transformers.git", "1.1.6" ..< "1.2.0"),
     ],
     targets: [
+        // Cross-platform CORE library (iOS-port P0.2b): the platform-agnostic engine room, extracted so it
+        // ports to an iOS target unchanged (IOS_PORT.md §1). This first slice is the pure
+        // localization + language + text foundation (Foundation + NaturalLanguage only, no external deps); the
+        // heavier logic/models/engines migrate in follow-up steps. The macOS app + tests depend on it.
+        .target(
+            name: "ParlaCore",
+            path: "Sources/ParlaCore",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         .executableTarget(
             name: "Parla",
             dependencies: [
+                "ParlaCore",
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
                 // MLX generative backend (AI P3). MLXLLM registers the Qwen3 architecture; MLXLMCommon
@@ -65,7 +75,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ParlaTests",
-            dependencies: ["Parla"],
+            dependencies: ["ParlaCore", "Parla"],
             path: "Tests/ParlaTests",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

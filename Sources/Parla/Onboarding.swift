@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore
 
 /// Pure decision logic for first-run onboarding + the first-compile reassurance. View code reads these;
 /// keeping them free of `@AppStorage`/`AppModel` makes them unit-testable in the pure-logic suite
