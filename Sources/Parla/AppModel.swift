@@ -62,8 +62,8 @@ final class AppModel {
     var soundOnComplete: Bool { didSet { UserDefaults.standard.set(soundOnComplete, forKey: Keys.sound) } }
 
     // Folder watching (feature 04) — same didSet pattern for mirroring into UserDefaults.
-    var watchEnabled: Bool      { didSet { UserDefaults.standard.set(watchEnabled, forKey: Keys.watchEnabled); applyWatchToggle() } }
-    var watchRecursive: Bool    { didSet { UserDefaults.standard.set(watchRecursive, forKey: Keys.watchRecursive); if watchEnabled { restartWatching() } } }
+    var watchEnabled: Bool      { didSet { UserDefaults.standard.set(watchEnabled, forKey: Keys.watchEnabled); syncWatch() } }
+    var watchRecursive: Bool    { didSet { UserDefaults.standard.set(watchRecursive, forKey: Keys.watchRecursive); syncWatch() } }
     var watchWriteSidecar: Bool { didSet { UserDefaults.standard.set(watchWriteSidecar, forKey: Keys.watchSidecar) } }
     var globalHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(globalHotkeyEnabled, forKey: Keys.hotkey) } }
 
@@ -184,6 +184,13 @@ final class AppModel {
 
     /// Play the batch-completion sound (macOS: `NSSound` Glass/Basso via `CompletionSound`). Inert default no-op.
     var playCompletionSound: @MainActor (_ success: Bool) -> Void = { _ in }
+
+    /// Drain the folder-watch queue (macOS-only feature; the impl lives in the app's +FolderWatch). Inert no-op so
+    /// `pumpQueues` in Core stays platform-agnostic — an iOS build simply has no folder watching.
+    var drainWatchQueue: @MainActor () -> Void = { }
+
+    /// Re-apply the folder-watch config after a settings change (start/stop/restart the FSEvents watcher). macOS wires it.
+    var syncWatch: @MainActor () -> Void = { }
 
     enum Keys {
         static let model = "model"

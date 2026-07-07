@@ -55,7 +55,15 @@ extension AppModel {
     /// Manual (user-initiated) drains first; if it claims the lane, the watch drain then no-ops on isBusy.
     func pumpQueues() {
         drainManualQueue()
-        drainQueue()
+        drainWatchQueue()
+    }
+
+    /// Remember the last successfully transcribed source (for «replay the last file»). Pure bookmark write —
+    /// lives in Core because the transcription loop calls it (the macOS quick-actions extension reads it back).
+    func rememberSource(_ url: URL) {
+        if let data = try? url.bookmarkData() {   // plain bookmark (the app is not sandboxed)
+            UserDefaults.standard.set(data, forKey: Keys.lastBookmark)
+        }
     }
 
     /// Clear a stuck error chip (.failed → .idle). No-op otherwise.
