@@ -1,6 +1,11 @@
 import Foundation
 
-#if canImport(FoundationModels)
+// FoundationModels = macOS-only for Parla (Backend A, EN, macOS 26). The `&& os(macOS)` is LOAD-BEARING
+// for the iOS build: the iOS-26 SDK satisfies `canImport(FoundationModels)`, so without it the `@Generable`
+// macro on `GeneratedInsights` expands into iOS-26-only symbols (`GenerationSchema`/`GeneratedContent`/…)
+// under the iOS-17 deployment floor → "only available in iOS 26.0 or newer" (iOS-port P1.0). iOS has no
+// generative Apple-Intelligence backend in v1; it degrades to `.unsupportedOS` + the extractive path.
+#if canImport(FoundationModels) && os(macOS)
 import FoundationModels
 #endif
 
@@ -121,7 +126,7 @@ public struct FoundationModelsService: LocalLLMService {
     }
 
     public func availability(forLanguage language: String) -> AIAvailability {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && os(macOS)
         if #available(macOS 26, *) {
             let subtag = languagePrimarySubtag(language)
             guard Self.maySupport(language: language) else { return .languageUnsupported }
@@ -168,7 +173,7 @@ public struct FoundationModelsService: LocalLLMService {
     """
 
     public func insights(forTranscript text: String, language: String) async throws -> AIInsights {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && os(macOS)
         if #available(macOS 26, *) {
             guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -189,7 +194,7 @@ public struct FoundationModelsService: LocalLLMService {
 
     /// Comprehensive free-form summary (long-note map-reduce). Plain (non-guided) generation with a higher token cap.
     public func summarize(_ text: String, language: String) async throws -> String {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && os(macOS)
         if #available(macOS 26, *) {
             guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -203,7 +208,7 @@ public struct FoundationModelsService: LocalLLMService {
         throw AIError.unavailable
     }
 
-    #if canImport(FoundationModels)
+    #if canImport(FoundationModels) && os(macOS)
     @available(macOS 26, *)
     private static func generate(_ text: String) async throws -> AIInsights {
         let response = try await LanguageModelSession(instructions: instructions)
@@ -213,7 +218,7 @@ public struct FoundationModelsService: LocalLLMService {
     #endif
 }
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && os(macOS)
 /// Guided-decoding output type: the framework generates DIRECTLY into this struct (no parsing/regex), which is
 /// FoundationModels' headline feature. `@Guide` steers each field. Mapped to the backend-neutral `AIInsights`.
 @available(macOS 26, *)

@@ -5,7 +5,15 @@ let package = Package(
     name: "Parla",
     // Пол = macOS 14: его требует WhisperKit (on-device CoreML). Дизайн НЕ поднимает
     // эту планку — только API, доступные с 14 (материалы, градиенты), без Liquid Glass.
-    platforms: [.macOS(.v14)],
+    // iOS 17 (iOS-port P1.0): ParlaCore компилится под iOS (acid-test P0). WhisperKit/NaturalLanguage
+    // iOS-совместимы; MLX-бэкенды гейтятся под macOS (см. ParlaCore deps ниже + #if os(macOS) в источниках).
+    platforms: [.macOS(.v14), .iOS(.v17)],
+    // ParlaCore — переиспользуемая кросс-платформенная библиотека (движок), которую линкует и
+    // macOS-app, и (будущий) iOS-app. Объявлена продуктом → появляется xcodebuild-схема для
+    // iOS-компайл-чека (iOS-port P1.0). macOS-таргеты/тесты зависят от target'а по имени — не затронуты.
+    products: [
+        .library(name: "ParlaCore", targets: ["ParlaCore"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
         // Глобальный хоткей через Carbon (RegisterEventHotKey) — БЕЗ «Универсального доступа»,
