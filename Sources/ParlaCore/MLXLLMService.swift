@@ -1,3 +1,4 @@
+#if os(macOS)  // MLX generative backend = macOS-only (iOS-port P1). iOS gets an inert stub in MLXStubs.swift.
 import Foundation
 import Hub          // swift-transformers (WhisperKit's 1.1.x): HubApi — backs our Downloader
 import Tokenizers   // swift-transformers: AutoTokenizer + Tokenizer — backs our TokenizerLoader/bridge
@@ -348,3 +349,4 @@ public struct MLXLLMService: LocalLLMService {
     /// First top-level balanced `{…}` (kept for simple callers + the unit tests).
     static func firstJSONObject(in text: String) -> String? { balancedJSONObjects(in: text).first }
 }
+#endif  // os(macOS) — MLX generative backend

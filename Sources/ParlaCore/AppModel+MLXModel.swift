@@ -1,3 +1,4 @@
+#if os(macOS)  // MLX generative-model management = macOS-only (iOS-port P1); no Core caller on iOS.
 import Foundation
 
 /// MLX RU/UK generative model (AI P3): opt-in download / delete / on-disk state — parallel to, and independent
@@ -51,3 +52,4 @@ extension AppModel {
         refreshMLXModelState()
     }
 }
+#endif  // os(macOS) — MLX generative-model management

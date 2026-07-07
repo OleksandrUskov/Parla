@@ -1,3 +1,4 @@
+#if os(macOS)  // MLX download-tier embedder = macOS-only (iOS-port P1). iOS gets an inert stub in MLXStubs.swift.
 import Foundation
 import MLX
 import MLXEmbedders
@@ -171,3 +172,4 @@ public actor MLXTextEmbedder: TextEmbedder {
     /// Not used by retrieval — the per-token (extractive/keyword) path stays on `NLEmbedder`. nil here.
     public func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? { nil }
 }
+#endif  // os(macOS) — MLX download-tier embedder

@@ -41,10 +41,14 @@ let package = Package(
             name: "ParlaCore",
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
-                .product(name: "MLXLLM", package: "mlx-swift-lm"),
-                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
-                .product(name: "MLXEmbedders", package: "mlx-swift-lm"),
-                .product(name: "MLX", package: "mlx-swift"),
+                // MLX = macOS-only (iOS-port P1): the generative/embedding backend is gated OUT of the iOS build
+                // (binary size / RAM; IOS_PORT §4). `.when(platforms:)` stops SwiftPM linking the Metal packages for
+                // iOS; the sources are `#if os(macOS)` with inert iOS stubs (MLXStubs.swift), so the extractive AI
+                // path stays live. iOS keeps WhisperKit + NaturalLanguage.
+                .product(name: "MLXLLM", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "MLXEmbedders", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "MLX", package: "mlx-swift", condition: .when(platforms: [.macOS])),
                 .product(name: "Tokenizers", package: "swift-transformers"),
                 .product(name: "Hub", package: "swift-transformers"),
             ],
@@ -57,14 +61,15 @@ let package = Package(
                 "ParlaCore",
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
-                // MLX generative backend (AI P3). MLXLLM registers the Qwen3 architecture; MLXLMCommon
-                // has loadModelContainer/ChatSession + the Downloader/TokenizerLoader protocols we implement.
-                .product(name: "MLXLLM", package: "mlx-swift-lm"),
-                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                // MLX generative backend (AI P3), macOS-only (iOS-port P1 — `.when(platforms:)` mirrors ParlaCore).
+                // MLXLLM registers the Qwen3 architecture; MLXLMCommon has loadModelContainer/ChatSession + the
+                // Downloader/TokenizerLoader protocols we implement.
+                .product(name: "MLXLLM", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
                 // P3.5: on-device sentence-embedding retrieval (Qwen3-Embedding) for query→note semantic search.
                 // Same pinned package, NO new dependency, no swift-transformers conflict (MLXEmbedders deps = MLX/MLXNN/MLXLMCommon only).
-                .product(name: "MLXEmbedders", package: "mlx-swift-lm"),
-                .product(name: "MLX", package: "mlx-swift"),   // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cache
+                .product(name: "MLXEmbedders", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "MLX", package: "mlx-swift", condition: .when(platforms: [.macOS])),   // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cache
 
                 // swift-transformers (WhisperKit's 1.1.x) backs our Downloader (Hub.HubApi) + TokenizerLoader (AutoTokenizer).
                 .product(name: "Tokenizers", package: "swift-transformers"),

@@ -1,3 +1,4 @@
+#if os(macOS)  // Embedding-model management = macOS-only (iOS-port P1); no Core caller on iOS.
 import Foundation
 
 /// Embedding model (AI P3.5): opt-in download / delete / on-disk state for query→note SEMANTIC SEARCH — parallel
@@ -52,3 +53,4 @@ extension AppModel {
         Task { await refreshSemanticIndex() }   // model gone → re-embed back into the NL space
     }
 }
+#endif  // os(macOS) — embedding-model management
