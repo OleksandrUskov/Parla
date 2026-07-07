@@ -1,11 +1,10 @@
 import Foundation
-import ParlaCore
 
 /// History: copy, inline edit (feature 02), delete, export to Markdown.
 extension AppModel {
-    func copy(_ text: String) { copyToClipboard(text) }
+    public func copy(_ text: String) { copyToClipboard(text) }
 
-    func copyItem(_ item: TranscriptItem) {
+    public func copyItem(_ item: TranscriptItem) {
         copy(item.display(timestamps: showTimestamps))
         lastCopiedID = item.id
         // «Copied» — brief highlight, then reset.
@@ -20,7 +19,7 @@ extension AppModel {
     /// Resolves the entry by `id` (not by a copy), stamps `edited`/`editedAt`, writes to disk.
     /// Returns true if the text actually changed (for UI feedback); a no-op edit → false.
     @discardableResult
-    func saveEdit(_ rawText: String, for id: TranscriptItem.ID) -> Bool {
+    public func saveEdit(_ rawText: String, for id: TranscriptItem.ID) -> Bool {
         guard let idx = history.firstIndex(where: { $0.id == id }) else { return false }
         let (newText, changed) = normalizedEdit(rawText, from: history[idx].text)
         guard changed else { return false }   // nothing meaningfully changed → don't write or stamp
@@ -36,7 +35,7 @@ extension AppModel {
         return true
     }
 
-    func delete(_ item: TranscriptItem) {
+    public func delete(_ item: TranscriptItem) {
         AudioStore.remove(item)                 // drop the audio copy along with the entry
         EmbeddingStore.remove([item.id])        // …and its semantic vector (no orphan in embeddings.json)
         embeddingIndex[item.id] = nil           // keep the in-memory mirrors in sync (doc↔doc related + search)
@@ -47,7 +46,7 @@ extension AppModel {
         refreshRelatedNotes()                   // the open note's "Related" may have referenced the deleted item
     }
 
-    func clearHistory() {
+    public func clearHistory() {
         history.forEach(AudioStore.remove)
         EmbeddingStore.pruneOrphans(keeping: [])   // wipe all vectors along with the history
         embeddingIndex.removeAll()
@@ -60,7 +59,7 @@ extension AppModel {
 
     /// Export the entire history to a markdown file (save dialog). The picker is the `presentSavePanel`
     /// platform seam (macOS: NSSavePanel); the render + write + error handling stay here in Core.
-    func exportHistory() {
+    public func exportHistory() {
         guard !history.isEmpty else { return }
         guard let url = presentSavePanel("parla-history.md", ["md"]) else { return }
         do {
@@ -72,7 +71,7 @@ extension AppModel {
 
     /// Export ONE transcript in the chosen format (save dialog). The format rendering is the pure
     /// `Export.swift` layer; this just runs the picker seam + writes, reusing `exportHistory`'s error path.
-    func export(_ item: TranscriptItem, as format: ExportFormat) {
+    public func export(_ item: TranscriptItem, as format: ExportFormat) {
         let base = (item.sourceName as NSString).deletingPathExtension
         guard let url = presentSavePanel("\(base).\(format.fileExtension)", [format.fileExtension]) else { return }
         do {

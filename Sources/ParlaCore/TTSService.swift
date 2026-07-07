@@ -1,5 +1,4 @@
 import Foundation
-import ParlaCore
 // @preconcurrency: AVSpeechSynthesizer's `write(_:toBufferCallback:)` takes a NON-@Sendable escaping callback
 // that fires off-actor on its own queue (same class of hazard as the MicRecorder tap / WhisperKit progress).
 // The import downgrades that Sendable-mismatch so v6 only flags OUR genuine isolation issues; we serialize the
@@ -7,23 +6,23 @@ import ParlaCore
 @preconcurrency import AVFoundation
 
 /// Availability of TTS for a given language (mirrors `AIAvailability` — the capability-gated seam pattern).
-enum TTSAvailability: Equatable, Sendable {
+public enum TTSAvailability: Equatable, Sendable {
     case ready          // ≥1 voice available for the language
     case unsupported    // no voice for this language
 }
 
 /// A synthesizable voice: a system `AVSpeechSynthesizer` voice today; (P1b) a downloaded preset later.
-struct VoiceDescriptor: Identifiable, Hashable, Sendable {
-    let id: String        // stable id — system: `AVSpeechSynthesisVoice.identifier`; (P1b) preset: catalogue id
-    let name: String      // display name
-    let language: String  // BCP-47, e.g. "ru-RU", "uk-UA", "en-US"
-    let isSystem: Bool     // true for AVSpeechSynthesizer system voices (the zero-download floor)
+public struct VoiceDescriptor: Identifiable, Hashable, Sendable {
+    public let id: String        // stable id — system: `AVSpeechSynthesisVoice.identifier`; (P1b) preset: catalogue id
+    public let name: String      // display name
+    public let language: String  // BCP-47, e.g. "ru-RU", "uk-UA", "en-US"
+    public let isSystem: Bool     // true for AVSpeechSynthesizer system voices (the zero-download floor)
 }
 
-enum TTSError: LocalizedError {
+public enum TTSError: LocalizedError {
     case noVoice
     case synthesisFailed
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .noVoice: return L("error.tts.novoice")
         case .synthesisFailed: return L("error.tts.failed")
@@ -34,7 +33,7 @@ enum TTSError: LocalizedError {
 /// One capability-gated seam over on-device TTS backends, mirroring `LocalLLMService` / `TranscribingEngine`:
 /// a `Sendable` protocol with an injectable default on `AppModel`, a test double, and (P1b) a backend selector.
 /// **TTS is ADDITIVE** — it never touches the transcript / `history.json` pipeline.
-protocol TTSService: Sendable {
+public protocol TTSService: Sendable {
     func availability(forLanguage language: String) -> TTSAvailability
     func voices(forLanguage language: String) -> [VoiceDescriptor]
     /// Synthesize `text` in `voice` → a playable audio file on disk. The caller owns the file (plays + deletes).
@@ -42,9 +41,9 @@ protocol TTSService: Sendable {
 }
 
 /// Pure voice-filtering, split out so the language-matching logic is unit-testable without live system voices.
-enum VoiceSelection {
+public enum VoiceSelection {
     /// Voices whose language matches `language` by its 2-letter prefix ("ru" matches "ru-RU"). Empty → all.
-    static func filter(_ voices: [VoiceDescriptor], language: String) -> [VoiceDescriptor] {
+    public static func filter(_ voices: [VoiceDescriptor], language: String) -> [VoiceDescriptor] {
         let want = String(language.prefix(2)).lowercased()
         return want.isEmpty ? voices : voices.filter { $0.language.lowercased().hasPrefix(want) }
     }
@@ -54,23 +53,23 @@ enum VoiceSelection {
 
 /// TTS over `AVSpeechSynthesizer`. Always ready (RU=Milena, UK=Lesya, many EN on stock macOS). Runs synthesis
 /// in an `actor` (only `Sendable` URLs cross back). This is the zero-download floor; P1b adds sherpa-onnx/Piper.
-actor SystemTTSService: TTSService {
+public actor SystemTTSService: TTSService {
     /// All system voices as descriptors (thin adapter; the filtering itself is the pure `VoiceSelection`).
-    nonisolated static func allVoices() -> [VoiceDescriptor] {
+    public nonisolated static func allVoices() -> [VoiceDescriptor] {
         AVSpeechSynthesisVoice.speechVoices().map {
             VoiceDescriptor(id: $0.identifier, name: $0.name, language: $0.language, isSystem: true)
         }
     }
 
-    nonisolated func voices(forLanguage language: String) -> [VoiceDescriptor] {
+    public nonisolated func voices(forLanguage language: String) -> [VoiceDescriptor] {
         VoiceSelection.filter(Self.allVoices(), language: language)
     }
 
-    nonisolated func availability(forLanguage language: String) -> TTSAvailability {
+    public nonisolated func availability(forLanguage language: String) -> TTSAvailability {
         voices(forLanguage: language).isEmpty ? .unsupported : .ready
     }
 
-    func synthesize(_ text: String, voice: VoiceDescriptor) async throws -> URL {
+    public func synthesize(_ text: String, voice: VoiceDescriptor) async throws -> URL {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TTSError.synthesisFailed }
         guard let avVoice = AVSpeechSynthesisVoice(identifier: voice.id) else { throw TTSError.noVoice }
 
@@ -85,11 +84,11 @@ actor SystemTTSService: TTSService {
         // single continuation resume. It's @unchecked Sendable because access is inherently serial (one buffer
         // at a time) — matches the FolderWatcher / test TaskBox pattern.
         final class Sink: @unchecked Sendable {
-            let url: URL
-            let synth: AVSpeechSynthesizer
-            var file: AVAudioFile?
-            var resumed = false
-            init(url: URL, synth: AVSpeechSynthesizer) { self.url = url; self.synth = synth }
+            public let url: URL
+            public let synth: AVSpeechSynthesizer
+            public var file: AVAudioFile?
+            public var resumed = false
+            public init(url: URL, synth: AVSpeechSynthesizer) { self.url = url; self.synth = synth }
         }
         let sink = Sink(url: url, synth: synth)
 
@@ -127,10 +126,10 @@ actor SystemTTSService: TTSService {
 // MARK: - Test double
 
 /// No-op TTS for unit tests: reports a fixed availability + canned voices, never actually synthesizes.
-struct NoopTTSService: TTSService {
-    var availabilityToReturn: TTSAvailability = .unsupported
-    var cannedVoices: [VoiceDescriptor] = []
-    func availability(forLanguage language: String) -> TTSAvailability { availabilityToReturn }
-    func voices(forLanguage language: String) -> [VoiceDescriptor] { VoiceSelection.filter(cannedVoices, language: language) }
-    func synthesize(_ text: String, voice: VoiceDescriptor) async throws -> URL { throw TTSError.synthesisFailed }
+public struct NoopTTSService: TTSService {
+    public var availabilityToReturn: TTSAvailability = .unsupported
+    public var cannedVoices: [VoiceDescriptor] = []
+    public func availability(forLanguage language: String) -> TTSAvailability { availabilityToReturn }
+    public func voices(forLanguage language: String) -> [VoiceDescriptor] { VoiceSelection.filter(cannedVoices, language: language) }
+    public func synthesize(_ text: String, voice: VoiceDescriptor) async throws -> URL { throw TTSError.synthesisFailed }
 }

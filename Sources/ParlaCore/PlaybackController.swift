@@ -1,22 +1,22 @@
 import Foundation
-import ParlaCore
 import AVFoundation
 
 /// Player for the recording's source audio (feature 06). A wrapper over AVAudioPlayer + a 0.1s ticker for progress.
 /// This is ephemeral UI state — it lives in the card's @State, NOT in AppModel.
 @MainActor
 @Observable
-final class PlaybackController {
-    private(set) var isPlaying = false
-    private(set) var currentTime: Double = 0
-    private(set) var duration: Double = 0
-    private(set) var loadedURL: URL?
+public final class PlaybackController {
+    public init() {}
+    public private(set) var isPlaying = false
+    public private(set) var currentTime: Double = 0
+    public private(set) var duration: Double = 0
+    public private(set) var loadedURL: URL?
 
     private var player: AVAudioPlayer?
     private var ticker: Timer?
 
     /// Loads the recording's audio. A nil URL → unload. Idempotent by URL.
-    func load(_ url: URL?) {
+    public func load(_ url: URL?) {
         guard loadedURL != url else { return }
         stop()
         player = nil; duration = 0; currentTime = 0; loadedURL = url
@@ -28,16 +28,16 @@ final class PlaybackController {
         duration = p.duration
     }
 
-    var canPlay: Bool { player != nil && duration > 0 }
+    public var canPlay: Bool { player != nil && duration > 0 }
 
-    func togglePlay() {
+    public func togglePlay() {
         guard let p = player else { return }
         if p.isPlaying { p.pause(); isPlaying = false; stopTicker() }
         else { p.play(); isPlaying = true; startTicker() }
     }
 
     /// Seek with auto-start playback (clicking a segment = «play from here»).
-    func seek(to t: Double) {
+    public func seek(to t: Double) {
         guard let p = player else { return }
         p.currentTime = min(max(0, t), max(0, duration - 0.05))
         currentTime = p.currentTime
@@ -45,13 +45,13 @@ final class PlaybackController {
     }
 
     /// Dragging the scrubber: seek without auto-start.
-    func scrub(to t: Double) {
+    public func scrub(to t: Double) {
         guard let p = player else { return }
         p.currentTime = min(max(0, t), max(0, duration - 0.05))
         currentTime = p.currentTime
     }
 
-    func stop() {
+    public func stop() {
         player?.stop(); player?.currentTime = 0
         isPlaying = false; currentTime = 0; stopTicker()
     }

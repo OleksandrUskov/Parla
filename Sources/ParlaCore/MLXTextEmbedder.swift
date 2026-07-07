@@ -1,5 +1,4 @@
 import Foundation
-import ParlaCore
 import MLX
 import MLXEmbedders
 import MLXLMCommon
@@ -21,7 +20,7 @@ import MLXLMCommon
 // mirrors `NLEmbedder`); the model + container stay actor-internal. MLX → the .app must be built via xcodebuild.
 
 /// How a model decorates query vs document text, and whether it's an XLM-R encoder (needs explicit positionIds).
-enum EmbedderProfile: Sendable {
+public enum EmbedderProfile: Sendable {
     /// Qwen3-Embedding: an instruction prefix on the QUERY only; documents are bare. (Decoder + RoPE → no positionIds fix.)
     case instruct(task: String)
     /// multilingual-e5: `query: ` on queries, `passage: ` on documents. (XLM-R → needs positionIds when batching.)
@@ -29,7 +28,7 @@ enum EmbedderProfile: Sendable {
     /// BGE-M3 etc.: no prefixes. (XLM-R → needs positionIds when batching.)
     case plain
 
-    func decorate(_ text: String, kind: EmbedKind) -> String {
+    public func decorate(_ text: String, kind: EmbedKind) -> String {
         switch self {
         case .instruct(let task): return kind == .query ? "Instruct: \(task)\nQuery: \(text)" : text
         case .e5:                 return (kind == .query ? "query: " : "passage: ") + text
@@ -39,22 +38,22 @@ enum EmbedderProfile: Sendable {
 }
 
 /// The active download-tier model + its on-disk location (cache under Application Support, like `MLXModelSpec`).
-struct EmbeddingModelSpec: Sendable {
-    let repoId: String
-    let revision: String
-    let profile: EmbedderProfile
+public struct EmbeddingModelSpec: Sendable {
+    public let repoId: String
+    public let revision: String
+    public let profile: EmbedderProfile
     /// XLM-R encoders (BGE-M3 / e5) need explicit position IDs offset by padding_idx+1; Qwen3 (RoPE) does not.
     /// Unused while embedding one text at a time (no padding), but kept so a swap to an XLM-R model is localized.
-    let needsXLMPositionIds: Bool
+    public let needsXLMPositionIds: Bool
     /// What to fetch from the repo (weights + tokenizer/config), like `MLXModelSpec.downloadPatterns`.
-    let downloadPatterns: [String]
+    public let downloadPatterns: [String]
 
     /// Provenance tag stamped onto stored vectors. A change here ≠ the vectors' tag → `backfillEmbeddings` re-embeds.
-    var tag: String { "emb:" + repoId }
+    public var tag: String { "emb:" + repoId }
 
     /// ACTIVE model — Qwen3-Embedding-0.6B (4-bit), Apache-2.0, non-gated, SOTA RU/UK/EN, validated by the probe.
     /// To swap (e.g. RU/UK underperforms): set `active = .bgeM3Fallback`. That's the whole change — history re-embeds.
-    static let active = EmbeddingModelSpec(
+    public static let active = EmbeddingModelSpec(
         repoId: "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
         revision: "main",
         profile: .instruct(task: "Given a search query, retrieve notes relevant to the query"),
@@ -64,7 +63,7 @@ struct EmbeddingModelSpec: Sendable {
     /// Designated RU/UK FALLBACK (not active) — BGE-M3, the RU-champion, MIT, non-gated, prefix-free, multilingual.
     /// A drop-in swap target kept here so `active = .bgeM3Fallback` is the only change needed. (XLM-R → the embed
     /// forward's positionIds branch must be wired + probe-validated when this becomes active; tracked in STATE.)
-    static let bgeM3Fallback = EmbeddingModelSpec(
+    public static let bgeM3Fallback = EmbeddingModelSpec(
         repoId: "mlx-community/bge-m3-mlx-fp16",
         revision: "main",
         profile: .plain,
@@ -81,13 +80,13 @@ struct EmbeddingModelSpec: Sendable {
     }
 
     /// Where `HubApi.snapshot` materializes the active model.
-    static func modelDirectory() -> URL {
+    public static func modelDirectory() -> URL {
         downloadBase.appendingPathComponent("models/\(active.repoId)", isDirectory: true)
     }
 
     /// "Downloaded" = a COMPLETE-enough snapshot (config + tokenizer files + a weight shard), so an interrupted
     /// download isn't reported ready. Cheap, synchronous — drives availability + the embed gate. Mirrors `MLXModelSpec`.
-    static func isDownloaded() -> Bool {
+    public static func isDownloaded() -> Bool {
         let dir = modelDirectory()
         let fm = FileManager.default
         func has(_ name: String) -> Bool { fm.fileExists(atPath: dir.appendingPathComponent(name).path) }
@@ -98,7 +97,7 @@ struct EmbeddingModelSpec: Sendable {
     }
 
     /// Bytes on disk for the "disk used" line / delete recompute. 0 if absent.
-    static func bytesOnDisk() -> Int64 {
+    public static func bytesOnDisk() -> Int64 {
         let dir = modelDirectory()
         guard let e = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         var total: Int64 = 0
@@ -111,8 +110,8 @@ struct EmbeddingModelSpec: Sendable {
 
 /// Loads the active embedding model (actor-internal, single-flight) and produces pooled, L2-normalized vectors.
 /// Returns nil until the model is downloaded (graceful — callers degrade to lexical search / NL "Related").
-actor MLXTextEmbedder: TextEmbedder {
-    static let shared = MLXTextEmbedder()
+public actor MLXTextEmbedder: TextEmbedder {
+    public static let shared = MLXTextEmbedder()
 
     private var container: EmbedderModelContainer?
     private var loadTask: Task<EmbedderModelContainer?, Never>?
@@ -136,20 +135,20 @@ actor MLXTextEmbedder: TextEmbedder {
     }
 
     /// Drop the model from RAM (after a re-embed batch, or on delete). The next embed re-loads on demand.
-    func unload() {
+    public func unload() {
         container = nil
         loadTask = nil
     }
 
     /// Download (or refresh from cache) the model files WITHOUT loading them into memory — the explicit "Download"
     /// action. A later `embed()` loads lazily from this cache.
-    func downloadModel(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws {
+    public func downloadModel(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws {
         _ = try await MLXHubDownloader(downloadBase: EmbeddingModelSpec.downloadBase)
             .download(id: EmbeddingModelSpec.active.repoId, revision: EmbeddingModelSpec.active.revision,
                       matching: EmbeddingModelSpec.active.downloadPatterns, useLatest: false, progressHandler: progressHandler)
     }
 
-    func embed(_ text: String, language: String, kind: EmbedKind) async -> Embedding? {
+    public func embed(_ text: String, language: String, kind: EmbedKind) async -> Embedding? {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, let c = await loaded() else { return nil }
         let input = EmbeddingModelSpec.active.profile.decorate(clean, kind: kind)
@@ -170,5 +169,5 @@ actor MLXTextEmbedder: TextEmbedder {
     }
 
     /// Not used by retrieval — the per-token (extractive/keyword) path stays on `NLEmbedder`. nil here.
-    func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? { nil }
+    public func tokenVectors(_ text: String, language: String) async -> [(range: Range<String.Index>, vector: Embedding)]? { nil }
 }

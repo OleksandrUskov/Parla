@@ -1,12 +1,11 @@
 import Foundation
-import ParlaCore
 
 /// MLX RU/UK generative model (AI P3): opt-in download / delete / on-disk state — parallel to, and independent
 /// of, the WhisperKit transcription catalog (`AppModel+Models.swift`). Downloading the model IS the opt-in:
 /// once present, `MLXLLMService` reports `.ready` for ru/uk and `enrichInsights` upgrades those notes.
 extension AppModel {
     /// Refresh the cached on-disk state (presence + size). Cheap presence check on main; size walk off-main.
-    func refreshMLXModelState() {
+    public func refreshMLXModelState() {
         mlxModelDownloaded = MLXModelSpec.isDownloaded()
         let present = mlxModelDownloaded
         Task {   // @MainActor task; heavy size walk detached, assigned back on main
@@ -21,7 +20,7 @@ extension AppModel {
     /// must not freeze the UI (the progress bar) or block transcription for minutes while it loads the model and
     /// generates per note. Memory is bounded by the engine's GPU-cache cap + the post-batch model unload. A failure
     /// surfaces inline (mlxDownloadError) + as a transient chip, and keeps everything extractive.
-    func downloadMLXModel() async {
+    public func downloadMLXModel() async {
         guard !isBusy, downloadingModel == nil, !mlxDownloading, !mlxModelDownloaded else { return }
         mlxDownloading = true
         mlxDownloadProgress = 0
@@ -45,7 +44,7 @@ extension AppModel {
     }
 
     /// Delete the downloaded RU/UK model + drop it from memory (frees the disk + RAM). Recomputes the size line.
-    func deleteMLXModel() async {
+    public func deleteMLXModel() async {
         guard !isBusy, downloadingModel == nil, !mlxDownloading else { return }
         try? FileManager.default.removeItem(at: MLXModelSpec.modelDirectory())
         await MLXEngine.shared.unload()

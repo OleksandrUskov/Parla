@@ -1,15 +1,14 @@
 import Foundation
-import ParlaCore
 
 /// One regenerable insight field — drives the granular "Regenerate ▾" menu (regenerate just one field).
-enum InsightField: Sendable { case title, summary, keywords, actions }
+public enum InsightField: Sendable { case title, summary, keywords, actions }
 
 // MARK: - Semantic index orchestration (Local-AI Layer P1c/P1d)
 
 extension AppModel {
     /// The sidebar label for an item: the title (AI/extractive or hand-edited, falling back to sourceName)
     /// when titles are on, else the raw file name (the feature fully off).
-    func sidebarTitle(for item: TranscriptItem) -> String {
+    public func sidebarTitle(for item: TranscriptItem) -> String {
         showTitles ? item.displayTitle : item.sourceName
     }
 
@@ -17,7 +16,7 @@ extension AppModel {
     /// regeneration never overwrites it; an empty title reverts to the generated/sourceName fallback.
     /// Returns whether anything changed.
     @discardableResult
-    func setTitle(_ raw: String, for id: TranscriptItem.ID) -> Bool {
+    public func setTitle(_ raw: String, for id: TranscriptItem.ID) -> Bool {
         guard let idx = history.firstIndex(where: { $0.id == id }) else { return false }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let newTitle: String? = trimmed.isEmpty ? nil : trimmed
@@ -34,7 +33,7 @@ extension AppModel {
     }
 
     /// Toggle a generated action item's done state (the card checklist). Persists. Out-of-range → no-op.
-    func toggleAction(_ index: Int, for id: TranscriptItem.ID) {
+    public func toggleAction(_ index: Int, for id: TranscriptItem.ID) {
         guard let idx = history.firstIndex(where: { $0.id == id }),
               var actions = history[idx].actions, actions.indices.contains(index) else { return }
         actions[index].done.toggle()
@@ -44,7 +43,7 @@ extension AppModel {
 
     /// "Related notes" to the currently open item, in relevance order — shown in its card. These are whole
     /// notes close BY MEANING to the open one (doc↔doc), NOT search results.
-    var relatedHistory: [TranscriptItem] {
+    public var relatedHistory: [TranscriptItem] {
         relatedIDs.compactMap { id in history.first { $0.id == id } }
     }
 
@@ -58,7 +57,7 @@ extension AppModel {
     ///
     /// Robust to the embedding's anisotropy by mean-centering on the same-script corpus (cross-script vectors
     /// live in a different space). Pure in-memory (`embeddingIndex`); best-effort — no vector / no peers → none.
-    func refreshRelatedNotes() {
+    public func refreshRelatedNotes() {
         guard let item = selectedItem, let selfVec = embeddingIndex[item.id] else { relatedIDs = []; return }
         // Download-tier (Qwen) vectors are isotropic + cross-lingual → raw cosine, NO mean-centering and NO
         // same-script restriction (an English note CAN relate to a Russian one). The NL path below needs centering.
@@ -97,7 +96,7 @@ extension AppModel {
 
     /// Min centered doc↔doc cosine to count as "related". Calibrated on real data (LOCAL_AI_LAYER.md §5):
     /// true topic pairs land ≈0.4–0.7, unrelated/noise notes go negative; 0.30 keeps the former, drops the latter.
-    static var relatedFloor: Double { 0.30 }
+    public static var relatedFloor: Double { 0.30 }
 
     // MARK: Semantic search (P3.5) — real query→note retrieval via the download-tier model
 
@@ -105,15 +104,15 @@ extension AppModel {
     /// 0.23–0.31, but REAL queries are shorter / more abstract than a note and score lower, so 0.40 missed genuine
     /// paraphrases («свой бизнес» → a crypto-startup note). 0.33 sits just above the off-topic ceiling (0.31) to
     /// favour RECALL for search; the lexical layer already guarantees exact-keyword hits, so this is purely additive.
-    static var semanticSearchFloor: Double { 0.33 }
+    public static var semanticSearchFloor: Double { 0.33 }
 
     /// Min raw Qwen doc↔doc cosine for "Related" — kept higher than the search floor: Related is a PRECISE
     /// suggestion (both sides are full notes → higher scores), whereas search favours recall.
-    static var semanticRelatedFloor: Double { 0.42 }
+    public static var semanticRelatedFloor: Double { 0.42 }
 
     /// Debounced kick for semantic search on each keystroke. Clears stale hits immediately (the list shows pure
     /// lexical during the debounce), then re-ranks once typing settles. No-op without a download-tier model.
-    func onSearchQueryChanged() {
+    public func onSearchQueryChanged() {
         searchDebounce?.cancel()
         semanticHitIDs = []
         guard EmbeddingModelSpec.isDownloaded() else { return }
@@ -127,7 +126,7 @@ extension AppModel {
     /// Rank history by MEANING for the current query — the download-tier query→note retrieval NL can't do. Embeds
     /// the query, cosine-ranks the active-space note vectors, keeps those above the floor (cross-lingual included).
     /// Best-effort; gated on the model being present AND the corpus re-embedded into its space (store tag matches).
-    func refreshSemanticSearch() async {
+    public func refreshSemanticSearch() async {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= 2,
               EmbeddingModelSpec.isDownloaded(),
@@ -145,7 +144,7 @@ extension AppModel {
     /// it from the CURRENT text: search lemmas, the "Related" doc-vector, and the extractive insights
     /// (title/summary/keywords). A hand-edited title is preserved (`titleEdited`). Synchronous; mutates
     /// `history[idx]`, so call it BEFORE the caller's `HistoryStore.save`, and the caller kicks the recompute.
-    func invalidateDerivedData(for id: TranscriptItem.ID) {
+    public func invalidateDerivedData(for id: TranscriptItem.ID) {
         embeddingIndex[id] = nil
         EmbeddingStore.remove([id])
         lemmaIndex[id] = nil
@@ -171,7 +170,7 @@ extension AppModel {
     /// title is preserved (`titleEdited`). UNLIKE `invalidateDerivedData`, the doc-vector + lemmas are NOT dropped —
     /// the TEXT didn't change, so those are still valid. Best-effort: a generative failure leaves the extractive
     /// fallback and never touches the transcript. Drives a transient per-note spinner via `regeneratingIDs`.
-    func regenerateInsights(for id: TranscriptItem.ID) async {
+    public func regenerateInsights(for id: TranscriptItem.ID) async {
         guard let idx = history.firstIndex(where: { $0.id == id }) else { return }
         history[idx].aiModel = nil                                          // re-eligible for BOTH passes (the force)
         history[idx].summary = nil
@@ -190,7 +189,7 @@ extension AppModel {
     /// preferred, extractive fallback) and applies ONLY the chosen field. Best-effort: a total failure leaves everything
     /// untouched; the transcript is never touched. Provenance (`aiModel`) is left as-is — the note is already at its
     /// current tag, so the next refresh won't clobber this manual override. Reuses the `regeneratingIDs` spinner.
-    func regenerateInsight(for id: TranscriptItem.ID, field: InsightField) async {
+    public func regenerateInsight(for id: TranscriptItem.ID, field: InsightField) async {
         guard let item = history.first(where: { $0.id == id }) else { return }
         regeneratingIDs.insert(id)
         defer { regeneratingIDs.remove(id) }
@@ -242,7 +241,7 @@ extension AppModel {
     /// kept, keyed by the chapter's stable `(startSec,endSec)` window. Best-effort PER CHAPTER: a chapter that fails
     /// (or is empty/silence) is skipped, the rest still land, and the transcript is NEVER touched. Generative-only:
     /// a no-op when the language has no ready backend (the button is hidden then). Re-running replaces the set.
-    func generateChapterSummaries(for id: TranscriptItem.ID) async {
+    public func generateChapterSummaries(for id: TranscriptItem.ID) async {
         guard let item = history.first(where: { $0.id == id }),
               AudioChunker.isLong(durationSec: item.durationSec),
               ai.availability(forLanguage: item.language) == .ready else { return }
@@ -286,7 +285,7 @@ extension AppModel {
     /// Regenerate (or first-generate) the summary for ONE chapter — so a single failed/poor chapter in a long
     /// recording can be redone without re-running the whole thing. Upserts into `chapterSummaries` by the stable
     /// window key. Best-effort: a failure/empty leaves the existing summaries untouched; the transcript is never touched.
-    func regenerateChapterSummary(for id: TranscriptItem.ID, startSec: Double) async {
+    public func regenerateChapterSummary(for id: TranscriptItem.ID, startSec: Double) async {
         guard let item = history.first(where: { $0.id == id }),
               AudioChunker.isLong(durationSec: item.durationSec),
               ai.availability(forLanguage: item.language) == .ready,
@@ -308,7 +307,7 @@ extension AppModel {
 
     /// Whether any chapter-summary work (the whole-note batch or a single-chapter regen) is in flight for a note —
     /// the chapter buttons disable on this so only one chapter-summary operation runs at a time per note.
-    func chapterWorkInFlight(for id: TranscriptItem.ID) -> Bool {
+    public func chapterWorkInFlight(for id: TranscriptItem.ID) -> Bool {
         summarizingChaptersIDs.contains(id) || summarizingChapters.contains { $0.note == id }
     }
 
@@ -324,7 +323,7 @@ extension AppModel {
     /// on those — so a 10-hour recording (hundreds of chapters) is covered in stages instead of truncating to the
     /// first ~8000 chars. Each pass is bounded (token cap + `completeSentences`), and the FINAL summary stays a
     /// readable bounded length (a summary shouldn't be infinite) while COVERAGE spans everything. Depth-bounded backstop.
-    func hierarchicalSummary(of summaries: [String], language: String) async -> String? {
+    public func hierarchicalSummary(of summaries: [String], language: String) async -> String? {
         var level = summaries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         guard !level.isEmpty else { return nil }
         let budget = Self.summaryReduceCharBudget
@@ -351,7 +350,7 @@ extension AppModel {
 
     /// Greedy-pack strings into batches whose joined length stays within `maxChars` (an item bigger than the budget
     /// goes alone — never split). Pure + testable.
-    nonisolated static func batched(_ items: [String], maxChars: Int) -> [[String]] {
+    public nonisolated static func batched(_ items: [String], maxChars: Int) -> [[String]] {
         var batches: [[String]] = [], current: [String] = [], currentLen = 0
         for item in items {
             let add = item.count + 1   // +1 for the "\n" separator
@@ -363,7 +362,7 @@ extension AppModel {
     }
 
     /// Char budget per reduce pass — kept under the backends' `maxInputChars` (8000) so a batch is never truncated.
-    static var summaryReduceCharBudget: Int { 7000 }
+    public static var summaryReduceCharBudget: Int { 7000 }
 
     /// Summarize ONE chapter's text via the generative backend; nil on empty/silence or failure (best-effort).
     private func chapterSummaryText(_ chapter: Chapter, language: String) async -> String? {
@@ -380,7 +379,7 @@ extension AppModel {
     /// without overlapping writes to history.json / embeddings.json). Safe to call from launch and after
     /// every transcription. All compute is best-effort and off the main actor; it never blocks the UI or
     /// the transcript pipeline.
-    func refreshSemanticIndex() async {
+    public func refreshSemanticIndex() async {
         if semanticRefreshInFlight { semanticRefreshPending = true; return }
         semanticRefreshInFlight = true
         defer { semanticRefreshInFlight = false }
@@ -401,7 +400,7 @@ extension AppModel {
     /// Build/refresh the per-item lemma index used by morphology-aware search — for items missing from it,
     /// and pruning orphans (mirrors `backfillEmbeddings`). NLTagger lemmas need no asset download and are
     /// cheap, so this is synchronous. Kept in memory only (rebuilt on launch; trivial for a real history).
-    func backfillLemmas() {
+    public func backfillLemmas() {
         let live = Set(history.map(\.id))
         var index = lemmaIndex.filter { live.contains($0.key) }   // prune orphans (deleted items)
         for item in history where index[item.id] == nil {
@@ -416,7 +415,7 @@ extension AppModel {
     /// pre-keyword records once. All embeddable languages, best-effort, patched by id (history may shift
     /// across the awaits). A user-edited title is never overwritten; assets-missing items are left unmarked
     /// so they retry on a later pass.
-    func backfillInsights() async {
+    public func backfillInsights() async {
         // Skip items already at the extractive tag AND items a generative pass owns (foundation OR mlx) — so
         // extractive never clobbers a model-generated insight on a later pass.
         let targets = history.filter { $0.aiModel != Self.extractiveModelTag && !Self.isGenerativeTag($0.aiModel) }
@@ -448,35 +447,35 @@ extension AppModel {
     /// Provenance tag for the current extractive pipeline; bumped when the pipeline gains a capability so
     /// older records reprocess once (v2 = embedding-ranked keywords; v3 = morphology filter + dynamic count
     /// + MMR; v4 = in-context candidate vectors; v5 = min-3 keyword count + isolated fallback).
-    static var extractiveModelTag: String { "extractive-v5" }
+    public static var extractiveModelTag: String { "extractive-v5" }
 
     /// Generative provenance tags + their FAMILY prefixes. Bump the version suffix on any prompt/output change so
     /// older records reprocess ONCE. The split (prefix vs exact tag) is load-bearing: the extractive pass skips ANY
     /// generative version by PREFIX (never downgrades a v1 note while enrich is about to regenerate it to v2), while
     /// enrich targets notes NOT at the CURRENT exact tag (so a version bump re-runs them). FoundationModels = Backend A.
-    static let foundationTagPrefix = "foundation-"
+    public static let foundationTagPrefix = "foundation-"
     /// MLX (Qwen3) generative — the RU/UK backend (P3).
-    static let mlxTagPrefix = "mlx-qwen3-"
-    static var foundationModelTag: String { foundationTagPrefix + "v2" }   // v2: + generative keywords, stricter+cased actions
-    static var mlxModelTag: String { mlxTagPrefix + "v2" }                  // v2: + generative keywords, stricter+cased actions
+    public static let mlxTagPrefix = "mlx-qwen3-"
+    public static var foundationModelTag: String { foundationTagPrefix + "v2" }   // v2: + generative keywords, stricter+cased actions
+    public static var mlxModelTag: String { mlxTagPrefix + "v2" }                  // v2: + generative keywords, stricter+cased actions
 
     /// True for ANY generative provenance of ANY version (matched by family prefix). The extractive pass uses this to
     /// NEVER clobber a model-generated insight — even an older version that enrich will regenerate to the current one.
-    static func isGenerativeTag(_ tag: String?) -> Bool {
+    public static func isGenerativeTag(_ tag: String?) -> Bool {
         guard let tag else { return false }
         return tag.hasPrefix(foundationTagPrefix) || tag.hasPrefix(mlxTagPrefix)
     }
 
     /// Which generative backend owns a language. FoundationModels (English & co.) and MLX (RU/UK) cover DISJOINT
     /// language sets, so the language alone determines the correct provenance tag for enrich output.
-    func generativeTag(forLanguage language: String) -> String {
+    public func generativeTag(forLanguage language: String) -> String {
         FoundationModelsService.maySupport(language: language) ? Self.foundationModelTag : Self.mlxModelTag
     }
 
     /// Provenance tag for the backend that ACTUALLY produced an insight — used over the language-based default when
     /// the service reports its backend (the EN→MLX fallback: an English note generated by MLX must be tagged `mlx`,
     /// not `foundation`, or it would look perpetually outdated to the language-based check below).
-    static func tag(for backend: AIBackend) -> String {
+    public static func tag(for backend: AIBackend) -> String {
         backend == .mlx ? mlxModelTag : foundationModelTag
     }
 
@@ -484,7 +483,7 @@ extension AppModel {
     /// a note carrying a current `foundation-` OR `mlx-` tag is done (so an English note generated by the MLX fallback
     /// isn't re-enriched forever just because its language's DEFAULT backend is FoundationModels). An OUTDATED version
     /// (e.g. `mlx-qwen3-v1`) is NOT current → it reprocesses; extractive/legacy/nil → reprocesses.
-    static func isAtCurrentGenerativeVersion(_ tag: String?) -> Bool {
+    public static func isAtCurrentGenerativeVersion(_ tag: String?) -> Bool {
         tag == foundationModelTag || tag == mlxModelTag
     }
 
@@ -493,16 +492,16 @@ extension AppModel {
     /// Active RETRIEVAL embedder: the download-tier `MLXTextEmbedder` once its model is on disk, else the free
     /// `NLEmbedder` (`embedder`). The EXTRACTIVE path (per-token `tokenVectors` → title/summary/keywords) ALWAYS
     /// stays on `embedder` — Qwen3-Embedding produces no token vectors.
-    var retrievalEmbedder: any TextEmbedder {
+    public var retrievalEmbedder: any TextEmbedder {
         if EmbeddingModelSpec.isDownloaded() { return MLXTextEmbedder.shared }
         return embedder
     }
     /// Provenance tag for the active retrieval embedder's vectors — drives the re-embed-on-switch in `backfillEmbeddings`.
-    var retrievalModelTag: String {
+    public var retrievalModelTag: String {
         EmbeddingModelSpec.isDownloaded() ? EmbeddingModelSpec.active.tag : Self.nlEmbeddingTag
     }
     /// Tag for vectors produced by the free `NLEmbedder` (when no download-tier model is present).
-    static var nlEmbeddingTag: String { "nl-contextual-v1" }
+    public static var nlEmbeddingTag: String { "nl-contextual-v1" }
 
     /// Generative UPGRADE for transcripts whose LANGUAGE has an on-device generative backend: FoundationModels
     /// (English & co., macOS 26) OR MLX/Qwen3 (RU/UK, opt-in download — P3). Replaces the extractive title/summary
@@ -510,7 +509,7 @@ extension AppModel {
     /// once the MLX model is downloaded). Best-effort: any failure leaves the extractive fallback. A hand-edited
     /// title is preserved. Tagged per backend (`generativeTag(forLanguage:)`). TOCTOU-safe: re-finds the item after
     /// the await and skips it if the text changed.
-    func enrichInsights() async {
+    public func enrichInsights() async {
         let targets = history.filter {
             !Self.isAtCurrentGenerativeVersion($0.aiModel)   // not at a CURRENT generative tag (either backend) →
                                                              // reprocess (new note, extractive, OR an outdated version)
@@ -558,7 +557,7 @@ extension AppModel {
     /// Backfill search embeddings for items missing a vector, then persist. Best-effort: an item the
     /// embedder can't vectorize (assets not downloaded, unsupported language, empty text) is skipped and
     /// retried on a later pass. The compute lives in the embedder actor (off the main actor).
-    func backfillEmbeddings() async {
+    public func backfillEmbeddings() async {
         // The ACTIVE retrieval model (NL when nothing downloaded; the download-tier model once it's on disk). If it
         // changed since the stored vectors were written, those vectors live in a DIFFERENT, incomparable space, so
         // re-embed the whole corpus into the new space: treat everything as missing + start the store fresh under
@@ -611,7 +610,7 @@ extension AppModel {
     /// Extractive (title, summary?, keywords) for an item via per-sentence embeddings, or nil if it can't
     /// be embedded (assets missing → bail early). Summary only when the note is long enough to be worth
     /// condensing; a one/two-sentence voice message gets a title but no summary.
-    func extractiveInsights(for item: TranscriptItem) async -> (title: String, summary: String?, keywords: [String])? {
+    public func extractiveInsights(for item: TranscriptItem) async -> (title: String, summary: String?, keywords: [String])? {
         // Cap the extractive pass: the similarity matrix is O(n²) and the per-sentence embeds add up, so a
         // very long / chunked transcript would otherwise stall. The lead ~120 sentences carry the gist.
         let sents = Array(sentences(in: item.text).prefix(120))

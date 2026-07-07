@@ -1,12 +1,11 @@
 import Foundation
-import ParlaCore
 
 /// Audio cache management for the player (feature 06): source copy, auto-cleanup (LRU + orphans),
 /// manual clear. TRANSCRIPT TEXT IS NEVER TOUCHED — only audio copies.
 extension AppModel {
     /// Copy the source + render m4a if needed — in the background. Best-effort. The playback rendition goes
     /// through the injected `decoder` seam (macOS: ffmpeg; iOS: its own), so this stays platform-agnostic.
-    nonisolated static func keepAudio(from url: URL, id: UUID, using decoder: any AudioDecoding) async -> (file: String?, playable: String?) {
+    public nonisolated static func keepAudio(from url: URL, id: UUID, using decoder: any AudioDecoding) async -> (file: String?, playable: String?) {
         await Task.detached(priority: .utility) {
             let file = AudioStore.copy(from: url, id: id)
             let needsRender = !AudioStore.directlyPlayable.contains(url.pathExtension.lowercased())
@@ -16,7 +15,7 @@ extension AppModel {
     }
 
     /// Clear the audio cache (settings button): delete files and null out the references in history.
-    func clearAudioCache() {
+    public func clearAudioCache() {
         AudioStore.clearAll()
         for i in history.indices {
             history[i].audioFile = nil
@@ -35,7 +34,7 @@ extension AppModel {
     /// Auto-cleanup of the audio cache: delete orphans + (if a cap is set) evict audio of the oldest entries.
     /// TRANSCRIPT TEXT IS NOT TOUCHED — only player audio copies. Called after every
     /// transcription and on startup. Heavy FS work — off-main; history mutation — on main.
-    func pruneAudioCache() async {
+    public func pruneAudioCache() async {
         let snapshot = history
         let cap = audioCacheCapBytes
         // Protect specifically the DISPLAYED/playing entry: the card and player are bound to selectedItem,

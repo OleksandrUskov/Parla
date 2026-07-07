@@ -1,34 +1,33 @@
 import Foundation
-import ParlaCore
 // @preconcurrency: WhisperKit isn't Sendable-annotated yet. Treating its API as pre-concurrency
 // suppresses the dependency's missing-Sendable noise so v6 only flags OUR genuine isolation issues.
 @preconcurrency import WhisperKit
 
-enum EngineError: LocalizedError {
+public enum EngineError: LocalizedError {
     case notLoaded
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .notLoaded: return L("error.model.notloaded")
         }
     }
 }
 
-struct EngineResult {
-    var text: String
-    var language: String
-    var segments: [Segment]
-    var duration: Double
+public struct EngineResult: Sendable {
+    public var text: String
+    public var language: String
+    public var segments: [Segment]
+    public var duration: Double
 }
 
 /// Model load stage — exposed for the progress bar.
-enum ModelLoad: Sendable, Equatable {
+public enum ModelLoad: Sendable, Equatable {
     case downloading(Double)   // 0...1
     case loading
 }
 
 /// Seam over the transcription backend so the drop→history orchestration is testable with a fake.
 /// The real `TranscriptionEngine` (WhisperKit) and test doubles both conform.
-protocol TranscribingEngine: Sendable {
+public protocol TranscribingEngine: Sendable {
     func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws
     func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult
     /// Streaming seam (MIC_DICTATION P3): decode an in-memory 16 kHz mono Float buffer — no file round-trip.
@@ -38,27 +37,29 @@ protocol TranscribingEngine: Sendable {
 }
 
 /// Thin wrapper around WhisperKit. Keeps the loaded model and reuses it.
-actor TranscriptionEngine {
+public actor TranscriptionEngine {
     private var whisperKit: WhisperKit?
     private var loadedModel: String?
     private var loadInFlight: (model: String, task: Task<Void, Error>)?   // coalesce concurrent same-model loads
 
+    public init() {}
+
     /// Where WhisperKit stores models: ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml
-    static func modelsRoot() -> URL {
+    public static func modelsRoot() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml", isDirectory: true)
     }
-    static func localFolder(_ model: String) -> URL {
+    public static func localFolder(_ model: String) -> URL {
         modelsRoot().appendingPathComponent(model, isDirectory: true)
     }
     /// Is the model already downloaded to disk?
-    static func isDownloaded(_ model: String) -> Bool {
+    public static func isDownloaded(_ model: String) -> Bool {
         let items = (try? FileManager.default.contentsOfDirectory(atPath: localFolder(model).path)) ?? []
         return !items.isEmpty
     }
 
     /// Total size of files in the folder (recursively).
-    static func folderSize(at url: URL) -> Int64 {
+    public static func folderSize(at url: URL) -> Int64 {
         let fm = FileManager.default
         guard let en = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         var total: Int64 = 0
@@ -67,11 +68,11 @@ actor TranscriptionEngine {
         }
         return total
     }
-    static func modelSize(_ model: String) -> Int64 { folderSize(at: localFolder(model)) }
+    public static func modelSize(_ model: String) -> Int64 { folderSize(at: localFolder(model)) }
 
     /// If the model is on disk — load it LOCALLY (download:false, offline, no re-download).
     /// Otherwise — download with progress. On any local-load failure — fall back to re-downloading.
-    func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {
+    public func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {
         if loadedModel == model, whisperKit != nil { return }
         // Coalesce concurrent loads of the SAME model (e.g. the streaming pre-warm racing the final
         // finishDictation decode): join the in-flight load instead of nil-ing `whisperKit` and starting a
@@ -122,7 +123,7 @@ actor TranscriptionEngine {
     }
 
     /// Delete the model from disk. If it's currently loaded — unload it from memory.
-    func deleteModel(_ name: String) throws {
+    public func deleteModel(_ name: String) throws {
         let folder = Self.localFolder(name)
         if FileManager.default.fileExists(atPath: folder.path) {
             try FileManager.default.removeItem(at: folder)
@@ -130,7 +131,7 @@ actor TranscriptionEngine {
         if loadedModel == name { whisperKit = nil; loadedModel = nil }
     }
 
-    func transcribe(wavPath: String, language: String?, model: String, translate: Bool = false) async throws -> EngineResult {
+    public func transcribe(wavPath: String, language: String?, model: String, translate: Bool = false) async throws -> EngineResult {
         if loadedModel != model || whisperKit == nil {
             try await ensureLoaded(model: model, progress: { _ in })
         }
@@ -159,7 +160,7 @@ actor TranscriptionEngine {
     /// `.transcribe` (dictation never translates); pass `language` explicitly for RU/UK (auto-detect
     /// degrades and misclassifies UK as RU). Returned segment times are buffer-relative — the caller
     /// owns the windowing and the absolute-time offset.
-    func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult {
+    public func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult {
         if loadedModel != model || whisperKit == nil {
             try await ensureLoaded(model: model, progress: { _ in })
         }

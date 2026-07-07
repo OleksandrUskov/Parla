@@ -31,6 +31,15 @@ let package = Package(
         // heavier logic/models/engines migrate in follow-up steps. The macOS app + tests depend on it.
         .target(
             name: "ParlaCore",
+            dependencies: [
+                .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXEmbedders", package: "mlx-swift-lm"),
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+                .product(name: "Hub", package: "swift-transformers"),
+            ],
             path: "Sources/ParlaCore",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

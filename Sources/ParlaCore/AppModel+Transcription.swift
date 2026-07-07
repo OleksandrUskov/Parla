@@ -1,11 +1,10 @@
 import SwiftUI
-import ParlaCore
 
 /// One queued manual-drop job: a batch of URLs waiting for the transcription lane. A drop while the lane
 /// is busy is APPENDED here (not discarded), so the user can stack "5 files, then 5 more".
-struct TranscriptionJob: Identifiable {
-    let id = UUID()
-    let urls: [URL]
+public struct TranscriptionJob: Identifiable {
+    public let id = UUID()
+    public let urls: [URL]
 }
 
 /// Transcription pipeline: drop → (conversion → model load → recognition) → history,
@@ -13,22 +12,22 @@ struct TranscriptionJob: Identifiable {
 extension AppModel {
     /// A dropped batch. Instead of REJECTING a drop while busy (old behavior), we QUEUE it and pump the
     /// lane — so stacked drops run one after another. Shares the isBusy lane with folder-watch.
-    func handleDrop(urls: [URL]) {
+    public func handleDrop(urls: [URL]) {
         enqueueManual(urls)
     }
 
     /// Append a manual-drop batch to the queue and pump the lane.
-    func enqueueManual(_ urls: [URL]) {
+    public func enqueueManual(_ urls: [URL]) {
         transcriptionQueue.append(TranscriptionJob(urls: urls))
         pumpQueues()
     }
 
     /// Total transcription jobs waiting (manual drops + watched files) — drives the "+N queued" badge.
-    var queuedCount: Int { transcriptionQueue.count + watchQueue.count }
+    public var queuedCount: Int { transcriptionQueue.count + watchQueue.count }
 
     /// Start the next MANUAL job if the lane is free (mirrors folder-watch `drainQueue`). Claims the phase
     /// synchronously so a second drop in the same tick can't double-start — it just queues behind this one.
-    func drainManualQueue() {
+    public func drainManualQueue() {
         guard !isBusy, downloadingModel == nil, !transcriptionQueue.isEmpty else { return }
         let job = transcriptionQueue.removeFirst()
         phase = .preparing("…")   // claim the phase synchronously — closes the double-start race
@@ -44,7 +43,7 @@ extension AppModel {
     /// can't be aborted mid-decode (WhisperKit has no early-stop), so it finishes the current unit and then
     /// its result is DISCARDED — nothing partial is saved. Already-completed files in the batch stay. The
     /// folder-watcher is untouched (it has no `currentTranscriptionTask`); only the user's manual run stops.
-    func cancelTranscription() {
+    public func cancelTranscription() {
         transcriptionQueue.removeAll()
         guard let task = currentTranscriptionTask else { return }
         cancelling = true          // "Stopping…" until the current file/chunk finishes and the loop breaks
@@ -53,38 +52,38 @@ extension AppModel {
 
     /// One pump for BOTH lanes whenever the lane may have freed (job finished, dictation ended, …).
     /// Manual (user-initiated) drains first; if it claims the lane, the watch drain then no-ops on isBusy.
-    func pumpQueues() {
+    public func pumpQueues() {
         drainManualQueue()
         drainWatchQueue()
     }
 
     /// Remember the last successfully transcribed source (for «replay the last file»). Pure bookmark write —
     /// lives in Core because the transcription loop calls it (the macOS quick-actions extension reads it back).
-    func rememberSource(_ url: URL) {
+    public func rememberSource(_ url: URL) {
         if let data = try? url.bookmarkData() {   // plain bookmark (the app is not sandboxed)
             UserDefaults.standard.set(data, forKey: Keys.lastBookmark)
         }
     }
 
     /// Clear a stuck error chip (.failed → .idle). No-op otherwise.
-    func dismissError() { if case .failed = phase { phase = .idle } }
+    public func dismissError() { if case .failed = phase { phase = .idle } }
 
     /// Whether «Try again» can re-run the last attempted input.
-    var canRetryLast: Bool { !lastAttemptedURLs.isEmpty && !isBusy && downloadingModel == nil }
+    public var canRetryLast: Bool { !lastAttemptedURLs.isEmpty && !isBusy && downloadingModel == nil }
 
     /// Re-run the last attempted input after a failure — single-flight via handleDrop.
-    func retryLast() {
+    public func retryLast() {
         guard canRetryLast else { return }
         handleDrop(urls: lastAttemptedURLs)
     }
 
     /// Whether a finished run plays the completion sound: user-initiated runs always do (when enabled);
     /// the folder watcher only when nothing else is queued — so a burst of N files beeps ONCE, not N times.
-    nonisolated static func shouldPlayCompletionSound(soundEnabled: Bool, isWatcherRun: Bool, watchQueueEmpty: Bool) -> Bool {
+    public nonisolated static func shouldPlayCompletionSound(soundEnabled: Bool, isWatcherRun: Bool, watchQueueEmpty: Bool) -> Bool {
         soundEnabled && (!isWatcherRun || watchQueueEmpty)
     }
 
-    func transcribe(urls: [URL], isWatcherRun: Bool = false) async {
+    public func transcribe(urls: [URL], isWatcherRun: Bool = false) async {
         lastAttemptedURLs = urls   // remember for «Try again»
         var files: [URL] = []
         for url in urls {
@@ -277,7 +276,7 @@ extension AppModel {
                             segments: stitched, duration: audioDuration)
     }
 
-    func progressHandler() -> @Sendable (ModelLoad) -> Void {   // internal: also reused by +Dictation
+    public func progressHandler() -> @Sendable (ModelLoad) -> Void {   // internal: also reused by +Dictation
         { [weak self] load in
             Task { @MainActor in
                 guard let self else { return }
@@ -292,12 +291,12 @@ extension AppModel {
     // MARK: Re-transcribe (feature 01)
 
     /// Whether the entry can be re-transcribed: the engine is free and the source is available.
-    func canRetranscribe(_ item: TranscriptItem) -> Bool {
+    public func canRetranscribe(_ item: TranscriptItem) -> Bool {
         !isBusy && downloadingModel == nil && item.hasResolvableSource
     }
 
     /// Re-run an entry on a different model, replacing its contents IN PLACE (same id/position).
-    func retranscribe(_ item: TranscriptItem, with model: String) {
+    public func retranscribe(_ item: TranscriptItem, with model: String) {
         guard !isBusy, downloadingModel == nil else { return }
         guard model != item.model else { return }            // same model — nothing to recompute
         // A re-transcribe is NOT a "last drop": clear it so the error chip's «Try again» (which replays

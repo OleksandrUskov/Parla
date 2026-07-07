@@ -1,16 +1,15 @@
 import Foundation
-import ParlaCore
 @preconcurrency import WhisperKit   // not Sendable-annotated yet — see TranscriptionEngine.swift
 
 /// Model catalog: download status / on-disk size, download/delete, tiers for the manager.
 extension AppModel {
     // MARK: Status / on-disk size
 
-    func isDownloaded(_ model: String) -> Bool { downloadedSet.contains(model) }
-    var totalModelsBytes: Int64 { modelSizes.values.reduce(0, +) }
+    public func isDownloaded(_ model: String) -> Bool { downloadedSet.contains(model) }
+    public var totalModelsBytes: Int64 { modelSizes.values.reduce(0, +) }
 
     /// Cheap presence check on the main thread; the heavy size walk runs in the background.
-    func refreshDownloaded() {
+    public func refreshDownloaded() {
         let models = Set(availableModels + [selectedModel])
         var set = Set<String>()
         for m in models where TranscriptionEngine.isDownloaded(m) { set.insert(m) }
@@ -26,7 +25,7 @@ extension AppModel {
         }
     }
 
-    func refreshModels() async {
+    public func refreshModels() async {
         let support = await WhisperKit.recommendedRemoteModels()
         let models = support.supported.sorted()
         guard !models.isEmpty else { return }
@@ -38,7 +37,7 @@ extension AppModel {
         refreshDownloaded()
     }
 
-    func downloadModel(_ name: String) async {
+    public func downloadModel(_ name: String) async {
         guard !isBusy, downloadingModel == nil, !isDownloaded(name) else { return }
         downloadingModel = name
         downloadProgress = 0
@@ -56,7 +55,7 @@ extension AppModel {
         pumpQueues()   // lane freed → a file dropped during the download was queued, not rejected; start it now
     }
 
-    func deleteModel(_ name: String) async {
+    public func deleteModel(_ name: String) async {
         guard !isBusy, downloadingModel == nil else { return }
         do {
             try await engine.deleteModel(name)
@@ -69,7 +68,7 @@ extension AppModel {
     // MARK: Model tiers (for the manager)
 
     /// Clean list of 5 tiers (one variant per tier), without quantized clones.
-    var modelTiers: [ModelTier] {
+    public var modelTiers: [ModelTier] {
         func pick(_ cands: [String]) -> String? {
             cands.first(where: { availableModels.contains($0) })
                 ?? cands.first(where: { c in availableModels.contains(where: { $0.hasPrefix(c) }) })
@@ -97,7 +96,7 @@ extension AppModel {
         return tiers
     }
 
-    nonisolated static func bestDefault(from models: [String]) -> String {
+    public nonisolated static func bestDefault(from models: [String]) -> String {
         // Prefer the quantized 626MB turbo: measured best quality-per-size on RU + smallest "large" download
         // (the full-precision 1.5GB variant decoded WORSE on real RU; full large-v3 worse still). Falls back to
         // any large-v3-v20240930 variant, then large-v3, then base.

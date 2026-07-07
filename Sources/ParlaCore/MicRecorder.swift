@@ -1,5 +1,4 @@
 import Foundation
-import ParlaCore
 import os
 // AVFAudio's AVAudioConverterInputBlock is @Sendable but is called synchronously on the audio thread
 // (no real concurrency) — @preconcurrency relaxes the spurious Sendable-capture diagnostics for AVFAudio
@@ -18,19 +17,19 @@ import os
 /// value) is returned to the caller. Teardown is deterministic (`removeTap` + `engine.stop()` in `stop()`),
 /// never in `deinit` (mirrors the `FolderWatcher` / `PlaybackController` no-`@MainActor`-deinit discipline).
 @MainActor
-final class MicRecorder {
+public final class MicRecorder {
     /// WhisperKit's native input: 16 kHz mono Int16 PCM. Recording straight to this skips the whole
     /// ffmpeg / `AudioConverter` decode step for dictation. Pinned by a unit test (`targetFormat` constant).
-    static let targetFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
+    public static let targetFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
                                             sampleRate: 16_000, channels: 1, interleaved: true)!
 
     /// Auto-stop a forgotten session so a stuck recording can't grow unbounded. `<= 0` disables it.
-    let maxSeconds: TimeInterval
+    public let maxSeconds: TimeInterval
 
     private let engine = AVAudioEngine()
     private var outputURL: URL?
     private var autoStop: DispatchWorkItem?
-    private(set) var isRecording = false
+    public private(set) var isRecording = false
 
     private let vad: SilenceDetector?                 // nil = VAD off (zero overhead on the audio thread)
     private var onAutoStop: (@MainActor () -> Void)?  // stored so the VAD silence hook can route to it
@@ -40,7 +39,7 @@ final class MicRecorder {
     // same Sendable cross-thread discipline as the VAD hook. nil when not streaming → zero overhead.
     private let liveBuffer: OSAllocatedUnfairLock<[Float]>?
 
-    init(maxSeconds: TimeInterval = 120, vad: SilenceDetector? = nil, streaming: Bool = false) {
+    public init(maxSeconds: TimeInterval = 120, vad: SilenceDetector? = nil, streaming: Bool = false) {
         self.maxSeconds = maxSeconds
         self.vad = vad
         self.liveBuffer = streaming ? OSAllocatedUnfairLock(initialState: []) : nil
@@ -50,7 +49,7 @@ final class MicRecorder {
         case alreadyRecording
         case sinkSetupFailed
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .alreadyRecording: return "Already recording."
             case .sinkSetupFailed:  return "Could not start the microphone recorder."
@@ -61,7 +60,7 @@ final class MicRecorder {
     /// Mic-permission gate. `.notDetermined` → system prompt; returns whether access is granted.
     /// Call this BEFORE `start()`. `.denied`/`.restricted` → false (caller points the user to
     /// System Settings › Privacy › Microphone). Mic ≠ Accessibility — the "no Accessibility" story holds.
-    static func ensureMicAccess() async -> Bool {
+    public static func ensureMicAccess() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:    return true
         case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
@@ -73,7 +72,7 @@ final class MicRecorder {
     /// be set up. `onAutoStop` fires on the main actor if `maxSeconds` elapses first. The mic-permission
     /// check is the caller's job (`ensureMicAccess()`) — `start()` assumes access is granted.
     @discardableResult
-    func start(onAutoStop: @escaping @MainActor () -> Void) throws -> URL {
+    public func start(onAutoStop: @escaping @MainActor () -> Void) throws -> URL {
         guard !isRecording else { throw Failure.alreadyRecording }
 
         let url = FileManager.default.temporaryDirectory
@@ -124,7 +123,7 @@ final class MicRecorder {
     /// `engine.stop()` synchronizes the render thread, so no tap block is in flight when this returns —
     /// the sink then deallocs and the `AVAudioFile` finalizes on disk.
     @discardableResult
-    func stop() -> URL? {
+    public func stop() -> URL? {
         guard isRecording else { return nil }
         autoStop?.cancel(); autoStop = nil
         engine.inputNode.removeTap(onBus: 0)
@@ -135,7 +134,7 @@ final class MicRecorder {
 
     /// Stop and DISCARD the recording without transcribing — for app teardown (e.g. quit while recording).
     /// Removes the temp WAV too, so it can't orphan in the temp dir.
-    func cancel() {
+    public func cancel() {
         if let url = stop() { try? FileManager.default.removeItem(at: url) }
     }
 
@@ -146,13 +145,13 @@ final class MicRecorder {
 
     /// Number of 16 kHz mono Float samples captured so far (0 when not streaming) — drives the orchestrator's
     /// window cadence. Lock-guarded; safe to read from the main actor while the audio thread appends.
-    var liveSampleCount: Int { liveBuffer?.withLock { $0.count } ?? 0 }
+    public var liveSampleCount: Int { liveBuffer?.withLock { $0.count } ?? 0 }
 
     /// Snapshot copy of the captured Float samples from `start` (sample index) to now; empty when not
     /// streaming or `start` is past the end. Keep `start` near the tail — the copy runs under the lock the
     /// audio thread appends through, so a whole-buffer copy could briefly stall capture. The orchestrator
     /// only ever windows a bounded un-confirmed tail, so the lock is held for sub-millisecond copies.
-    func liveSamples(from start: Int = 0) -> [Float] {
+    public func liveSamples(from start: Int = 0) -> [Float] {
         guard let liveBuffer else { return [] }
         return liveBuffer.withLock { buf in start < buf.count ? Array(buf[start...]) : [] }
     }
@@ -160,7 +159,7 @@ final class MicRecorder {
     /// 16-bit PCM → Float in [-1, 1), matching how WhisperKit reads an Int16 WAV (÷32768). Pulled out so the
     /// streaming Float feed is bit-identical to the file path — and unit-testable (the live tap itself isn't).
     /// `nonisolated`: it's pure and the audio-thread sink calls it off the main actor.
-    nonisolated static func normalize(_ samples: [Int16]) -> [Float] {
+    public nonisolated static func normalize(_ samples: [Int16]) -> [Float] {
         samples.map { Float($0) / 32768.0 }
     }
 }
@@ -192,7 +191,7 @@ private final class WavSink {
     private var firedSilence = false
     private let liveBuffer: OSAllocatedUnfairLock<[Float]>?   // streaming: mirror frames as Float, else nil
 
-    init?(url: URL, source: AVAudioFormat, target: AVAudioFormat,
+    public init?(url: URL, source: AVAudioFormat, target: AVAudioFormat,
           detector: SilenceDetector? = nil, onSilence: (@Sendable () -> Void)? = nil,
           liveBuffer: OSAllocatedUnfairLock<[Float]>? = nil) {
         guard source.sampleRate > 0,
@@ -209,7 +208,7 @@ private final class WavSink {
         self.liveBuffer = liveBuffer
     }
 
-    func append(_ input: AVAudioPCMBuffer) {
+    public func append(_ input: AVAudioPCMBuffer) {
         guard input.frameLength > 0 else { return }
 
         // VAD (opt-in): feed this buffer's loudness; on a run of silence (after speech) fire the stop ONCE.

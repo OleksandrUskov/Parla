@@ -1,5 +1,4 @@
 import Foundation
-import ParlaCore
 import Hub          // swift-transformers (WhisperKit's 1.1.x): HubApi — backs our Downloader
 import Tokenizers   // swift-transformers: AutoTokenizer + Tokenizer — backs our TokenizerLoader/bridge
 import MLXLMCommon  // loadModelContainer / ChatSession / Downloader / TokenizerLoader / Tokenizer / ModelContainer / GenerateParameters
@@ -22,12 +21,12 @@ import MLX           // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cach
 
 // MARK: Model spec + on-disk location (§6: in-app non-gated download, cache under Application Support)
 
-enum MLXModelSpec {
+public enum MLXModelSpec {
     /// The non-thinking Instruct-2507 4-bit build (no `<think>` preamble before the JSON). Apache-2.0, public/non-gated.
-    static let repoId = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
-    static let revision = "main"
+    public static let repoId = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
+    public static let revision = "main"
     /// What to fetch: weights + tokenizer/config (skip the rest of the repo).
-    static let downloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.jinja", "tokenizer.model"]
+    public static let downloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.jinja", "tokenizer.model"]
 
     /// HubApi download base under Parla's Application Support (clean delete + one "disk used" number, NOT the hidden
     /// default HF cache). HubApi lays the snapshot at `<base>/models/<repoId>`. A settable `var` (not a func) so tests
@@ -42,14 +41,14 @@ enum MLXModelSpec {
     }
 
     /// Where `HubApi.snapshot` materializes the model.
-    static func modelDirectory() -> URL {
+    public static func modelDirectory() -> URL {
         downloadBase.appendingPathComponent("models/\(repoId)", isDirectory: true)
     }
 
     /// "Downloaded" = a COMPLETE-enough snapshot: the model config, the tokenizer files `AutoTokenizer` needs, AND
     /// a weight shard. Stricter than "config + any shard" so an INTERRUPTED download (which lands files one by one)
     /// isn't reported `.ready` with a green check while generation would fail. Cheap, synchronous — drives availability.
-    static func isDownloaded() -> Bool {
+    public static func isDownloaded() -> Bool {
         let dir = modelDirectory()
         let fm = FileManager.default
         func has(_ name: String) -> Bool { fm.fileExists(atPath: dir.appendingPathComponent(name).path) }
@@ -60,7 +59,7 @@ enum MLXModelSpec {
     }
 
     /// Bytes on disk for the model (for the Settings "disk used" line / delete recompute). 0 if absent.
-    static func bytesOnDisk() -> Int64 {
+    public static func bytesOnDisk() -> Int64 {
         let dir = modelDirectory()
         guard let e = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         var total: Int64 = 0
@@ -74,10 +73,10 @@ enum MLXModelSpec {
 // MARK: Downloader — MLXLMCommon.Downloader over swift-transformers Hub.HubApi
 // (Translation of mlx-swift-lm's #hubDownloader macro from swift-huggingface's HubClient to 1.1.x's HubApi.)
 
-struct MLXHubDownloader: Downloader {
-    let downloadBase: URL
+public struct MLXHubDownloader: Downloader {
+    public let downloadBase: URL
 
-    func download(
+    public func download(
         id: String,
         revision: String?,
         matching patterns: [String],
@@ -94,35 +93,35 @@ struct MLXHubDownloader: Downloader {
 // (Translation of mlx-swift-lm's #huggingFaceTokenizerLoader / #adaptHuggingFaceTokenizer macros. Verified the
 //  bridged methods + `Message`/`ToolSpec` types match swift-transformers 1.1.9 exactly — no signature drift.)
 
-struct MLXTokenizerLoader: TokenizerLoader {
-    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+public struct MLXTokenizerLoader: TokenizerLoader {
+    public func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
         let upstream = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
         return MLXTokenizerBridge(upstream)
     }
 }
 
-struct MLXTokenizerBridge: MLXLMCommon.Tokenizer {
+public struct MLXTokenizerBridge: MLXLMCommon.Tokenizer {
     private let upstream: any Tokenizers.Tokenizer
 
-    init(_ upstream: any Tokenizers.Tokenizer) { self.upstream = upstream }
+    public init(_ upstream: any Tokenizers.Tokenizer) { self.upstream = upstream }
 
-    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+    public func encode(text: String, addSpecialTokens: Bool) -> [Int] {
         upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
     }
 
     // swift-transformers names it `decode(tokens:)`, MLXLMCommon's protocol `decode(tokenIds:)`.
-    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+    public func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
         upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
     }
 
-    func convertTokenToId(_ token: String) -> Int? { upstream.convertTokenToId(token) }
-    func convertIdToToken(_ id: Int) -> String? { upstream.convertIdToToken(id) }
+    public func convertTokenToId(_ token: String) -> Int? { upstream.convertTokenToId(token) }
+    public func convertIdToToken(_ id: Int) -> String? { upstream.convertIdToToken(id) }
 
-    var bosToken: String? { upstream.bosToken }
-    var eosToken: String? { upstream.eosToken }
-    var unknownToken: String? { upstream.unknownToken }
+    public var bosToken: String? { upstream.bosToken }
+    public var eosToken: String? { upstream.eosToken }
+    public var unknownToken: String? { upstream.unknownToken }
 
-    func applyChatTemplate(
+    public func applyChatTemplate(
         messages: [[String: any Sendable]],
         tools: [[String: any Sendable]]?,
         additionalContext: [String: any Sendable]?
@@ -138,11 +137,11 @@ struct MLXTokenizerBridge: MLXLMCommon.Tokenizer {
 
 // MARK: Engine — owns the loaded model (actor-internal), downloads + generates
 
-actor MLXEngine {
-    static let shared = MLXEngine()
+public actor MLXEngine {
+    public static let shared = MLXEngine()
 
     /// Bound the model's output so one note can't run away (mirror Backend A's 500-token cap).
-    static let maxOutputTokens = 500
+    public static let maxOutputTokens = 500
 
     private var container: ModelContainer?
     private var loadTask: Task<ModelContainer, Error>?   // single-flight: concurrent callers join one load
@@ -159,7 +158,7 @@ actor MLXEngine {
 
     /// Download-if-needed + load the model, caching the container. SINGLE-FLIGHT (concurrent callers await one load)
     /// and TOCTOU-safe: if `unload()` (a delete) lands during the load, the result is discarded — never cached stale.
-    func loadContainer(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws -> ModelContainer {
+    public func loadContainer(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws -> ModelContainer {
         if let container { return container }
         if let loadTask { return try await loadTask.value }   // join the in-flight load
         capGPUCacheOnce()
@@ -181,7 +180,7 @@ actor MLXEngine {
 
     /// One generation pass: a fresh session (stateless per note) with a bounded output, return the raw model text.
     /// `maxTokens` defaults to the terse insight cap; the comprehensive `summarize` passes a higher budget.
-    func generate(prompt: String, instructions: String, maxTokens: Int = maxOutputTokens) async throws -> String {
+    public func generate(prompt: String, instructions: String, maxTokens: Int = maxOutputTokens) async throws -> String {
         let container = try await loadContainer()
         var params = GenerateParameters()
         params.maxTokens = maxTokens
@@ -191,7 +190,7 @@ actor MLXEngine {
 
     /// Download (or refresh from cache) the model files WITHOUT loading them into memory — the explicit opt-in
     /// "Download" action. Generation later loads lazily from this cache via `loadContainer`.
-    func downloadModel(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws {
+    public func downloadModel(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws {
         _ = try await MLXHubDownloader(downloadBase: MLXModelSpec.downloadBase)
             .download(
                 id: MLXModelSpec.repoId, revision: MLXModelSpec.revision,
@@ -200,7 +199,7 @@ actor MLXEngine {
 
     /// Drop the in-memory model (after a delete, or to free RAM after an enrich batch) + invalidate any in-flight
     /// load so it won't cache a now-stale container. A later `loadContainer` re-reads from disk.
-    func unload() {
+    public func unload() {
         container = nil
         loadTask?.cancel()
         loadTask = nil
@@ -210,17 +209,17 @@ actor MLXEngine {
 
 // MARK: Service — the LocalLLMService seam (Backend B)
 
-struct MLXLLMService: LocalLLMService {
+public struct MLXLLMService: LocalLLMService {
     /// MLX covers the languages Backend A (FoundationModels) can't: Russian + Ukrainian — PLUS English as a FALLBACK.
     /// Qwen3 handles English fine, so when FoundationModels isn't usable for EN (Apple Intelligence off — notably when
     /// the Mac's system language is Russian), MLX serves it. `DefaultAIService` always tries FoundationModels FIRST, so
     /// an English Mac with Apple Intelligence still uses the free zero-download backend; MLX is consulted only as fallback.
-    static let supportedLanguages: Set<String> = ["ru", "uk", "en"]
+    public static let supportedLanguages: Set<String> = ["ru", "uk", "en"]
 
     /// Chars fed to the model in one pass (mirror FoundationModels' budget). Long/chunked notes = P4 map-reduce.
-    static let maxInputChars = 8000
+    public static let maxInputChars = 8000
 
-    static let instructions = """
+    public static let instructions = """
     You extract a title, a short summary, topical keywords, and any action items from a voice-message transcript.
     Respond with ONLY a JSON object and nothing else, in this exact shape:
     {"title": "...", "summary": "...", "keywords": ["...", "..."], "actions": ["...", "..."]}
@@ -233,7 +232,7 @@ struct MLXLLMService: LocalLLMService {
 
     /// MLX runs on Apple Silicon only. The app ships arm64; under Rosetta (x86_64) this is false → the backend
     /// reports `.noAppleSilicon` and the UI hides the download. Also drives whether the MLX model row is shown.
-    static var isSupportedHardware: Bool {
+    public static var isSupportedHardware: Bool {
         #if arch(arm64)
         return true
         #else
@@ -241,7 +240,7 @@ struct MLXLLMService: LocalLLMService {
         #endif
     }
 
-    func availability(forLanguage language: String) -> AIAvailability {
+    public func availability(forLanguage language: String) -> AIAvailability {
         guard Self.isSupportedHardware else { return .noAppleSilicon }
         guard Self.supportedLanguages.contains(languagePrimarySubtag(language)) else { return .languageUnsupported }
         // Downloading the model IS the opt-in (a row in ModelManagerView). Until then: dormant, never .ready.
@@ -249,7 +248,7 @@ struct MLXLLMService: LocalLLMService {
         return .ready
     }
 
-    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
+    public func insights(forTranscript text: String, language: String) async throws -> AIInsights {
         guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw AIError.unavailable }   // nothing to summarize → don't fabricate
@@ -261,7 +260,7 @@ struct MLXLLMService: LocalLLMService {
     }
 
     /// Comprehensive free-form summary prompt (NOT the terse 1–3-sentence `instructions`) — for long-note map-reduce.
-    static let summaryInstructions = """
+    public static let summaryInstructions = """
     You write a thorough, well-structured summary of a long transcript or of a set of chapter summaries. Cover ALL the \
     major topics, arguments and key points — be comprehensive, not terse (several sentences to a few short paragraphs, \
     scaled to the content). Write in the SAME language as the input. Output ONLY the summary text — no preamble, no \
@@ -270,7 +269,7 @@ struct MLXLLMService: LocalLLMService {
 
     /// Comprehensive free-form summary (long-note map-reduce) — a longer prompt + a higher output-token budget than
     /// the terse `insights` summary. Returns the raw model text (no JSON parse).
-    func summarize(_ text: String, language: String) async throws -> String {
+    public func summarize(_ text: String, language: String) async throws -> String {
         guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw AIError.unavailable }
@@ -286,7 +285,7 @@ struct MLXLLMService: LocalLLMService {
     /// top-level balanced `{…}` (the model may fence it or wrap it in prose), parse loosely via JSONSerialization,
     /// and read title/summary/actions INDEPENDENTLY — a malformed `actions` field never discards a good title+summary.
     /// Returns the first object that yields a non-empty title or summary; nil if none → caller keeps extractive.
-    static func parseInsights(from raw: String) -> AIInsights? {
+    public static func parseInsights(from raw: String) -> AIInsights? {
         for json in balancedJSONObjects(in: raw) {
             guard let data = json.data(using: .utf8),
                   let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }
@@ -318,7 +317,7 @@ struct MLXLLMService: LocalLLMService {
 
     /// All top-level balanced `{…}` substrings, in order (braces inside strings + escapes ignored). Lets the parser
     /// skip a stray brace-pair in pre-JSON prose and find the real object. Pure + testable.
-    static func balancedJSONObjects(in text: String) -> [String] {
+    public static func balancedJSONObjects(in text: String) -> [String] {
         let chars = Array(text)
         var objects: [String] = []
         var i = 0

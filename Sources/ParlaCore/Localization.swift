@@ -39,12 +39,12 @@ public enum Localized {
     }
 
     /// Resolve a key against the active language bundle; missing key → the key itself (visible in dev).
-    static func string(_ key: String) -> String {
+    public static func string(_ key: String) -> String {
         bundle.localizedString(forKey: key, value: key, table: nil)
     }
 
     /// Resolve + `String(format:)` for keys carrying `%@` / `%lld` / positional placeholders.
-    static func format(_ key: String, _ args: [CVarArg]) -> String {
+    public static func format(_ key: String, _ args: [CVarArg]) -> String {
         String(format: string(key), arguments: args)
     }
 

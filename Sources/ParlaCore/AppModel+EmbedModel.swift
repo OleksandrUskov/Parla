@@ -1,5 +1,4 @@
 import Foundation
-import ParlaCore
 
 /// Embedding model (AI P3.5): opt-in download / delete / on-disk state for query→note SEMANTIC SEARCH — parallel
 /// to the MLX generative model (`AppModel+MLXModel.swift`) and the WhisperKit catalog. Downloading it switches the
@@ -7,7 +6,7 @@ import ParlaCore
 /// into the new (better, cross-lingual) space (`backfillEmbeddings`) and search goes semantic.
 extension AppModel {
     /// Refresh the cached on-disk state (presence + size). Cheap presence check on main; size walk off-main.
-    func refreshEmbedModelState() {
+    public func refreshEmbedModelState() {
         embedModelDownloaded = EmbeddingModelSpec.isDownloaded()
         let present = embedModelDownloaded
         Task {   // @MainActor task; heavy size walk detached, assigned back on main
@@ -21,7 +20,7 @@ extension AppModel {
     /// that re-embeds the corpus into the new space and turns on query→note search — WITHOUT holding the lane (the
     /// refresh is best-effort and must not freeze the UI). A failure surfaces inline + as a transient chip, and
     /// search stays lexical.
-    func downloadEmbedModel() async {
+    public func downloadEmbedModel() async {
         guard !isBusy, downloadingModel == nil, !embedDownloading, !embedModelDownloaded else { return }
         embedDownloading = true
         embedDownloadProgress = 0
@@ -45,7 +44,7 @@ extension AppModel {
 
     /// Delete the downloaded model + drop it from memory. Re-embeds the corpus back into the NL space (the tag
     /// switch) so "Related" + search keep working on the free embedder. Recomputes the size line.
-    func deleteEmbedModel() async {
+    public func deleteEmbedModel() async {
         guard !isBusy, downloadingModel == nil, !embedDownloading else { return }
         try? FileManager.default.removeItem(at: EmbeddingModelSpec.modelDirectory())
         await MLXTextEmbedder.shared.unload()

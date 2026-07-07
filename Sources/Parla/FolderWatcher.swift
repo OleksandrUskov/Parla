@@ -7,7 +7,7 @@ import CoreServices   // FSEvents — system framework, no new dependencies
 /// to actually do is made by `AppModel` through the pure `FolderScan` core.
 ///
 /// For unstable volumes (network/cloud) there's a poll fallback with the same `onChange`.
-final class FolderWatcher: @unchecked Sendable {
+final class FolderWatcher: FileWatching, @unchecked Sendable {
     private var stream: FSEventStreamRef?
     private let lock = NSLock()
     private var pollTimer: Timer?

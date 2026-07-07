@@ -1,14 +1,13 @@
 import Foundation
-import ParlaCore
 
 /// Export formats for a transcript — the single source of truth for extension + display name.
 /// SRT/VTT are inherently per-recording (cue indices/timecodes can't concatenate across the archive),
 /// so they're excluded from whole-history export.
-enum ExportFormat: String, CaseIterable, Identifiable {
+public enum ExportFormat: String, CaseIterable, Identifiable {
     case txt, markdown, srt, vtt, json
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var fileExtension: String {
+    public var fileExtension: String {
         switch self {
         case .txt:      return "txt"
         case .markdown: return "md"
@@ -18,7 +17,7 @@ enum ExportFormat: String, CaseIterable, Identifiable {
         }
     }
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .txt:      return "Plain text (.txt)"
         case .markdown: return "Markdown (.md)"
@@ -29,7 +28,7 @@ enum ExportFormat: String, CaseIterable, Identifiable {
     }
 
     /// Whether the format makes sense for the WHOLE history (one file). SRT/VTT are per-recording only.
-    var supportsWholeHistory: Bool {
+    public var supportsWholeHistory: Bool {
         switch self {
         case .txt, .markdown, .json: return true
         case .srt, .vtt:             return false
@@ -37,11 +36,11 @@ enum ExportFormat: String, CaseIterable, Identifiable {
     }
 
     /// A subtitle format (SubRip/WebVTT) — grouped + labelled together in the export menu (the video→subtitles win).
-    var isSubtitle: Bool { self == .srt || self == .vtt }
+    public var isSubtitle: Bool { self == .srt || self == .vtt }
 
     /// Whether this format is offered for "summary only" export — prose digests (Plain/Markdown). Subtitle formats
     /// (SRT/VTT) and the full-record JSON have no meaning without the transcript body, so they're hidden in that mode.
-    var supportsInsightsOnly: Bool {
+    public var supportsInsightsOnly: Bool {
         switch self {
         case .txt, .markdown:     return true
         case .srt, .vtt, .json:   return false
@@ -50,12 +49,12 @@ enum ExportFormat: String, CaseIterable, Identifiable {
 }
 
 /// What an export includes (AI P4) — the 3-way "Content" picker in the export menu, remembered across launches.
-enum ExportContent: String, CaseIterable, Identifiable, Sendable {
+public enum ExportContent: String, CaseIterable, Identifiable, Sendable {
     case transcript      // the transcript only (the pre-P4 default)
     case withInsights    // transcript + AI insights + per-chapter digest
     case insightsOnly    // just the insights + per-chapter digest, NO transcript body
-    var id: String { rawValue }
-    var label: String {
+    public var id: String { rawValue }
+    public var label: String {
         switch self {
         case .transcript:   return L("export.content.transcript")
         case .withInsights: return L("export.content.withInsights")
@@ -67,10 +66,10 @@ enum ExportContent: String, CaseIterable, Identifiable, Sendable {
 // MARK: - Subtitle timecodes
 
 /// `HH:MM:SS,mmm` (SubRip — comma before the milliseconds). Negatives clamp to zero.
-func srtTimecode(_ seconds: Double) -> String { subtitleTimecode(seconds, msSeparator: ",") }
+public func srtTimecode(_ seconds: Double) -> String { subtitleTimecode(seconds, msSeparator: ",") }
 
 /// `HH:MM:SS.mmm` (WebVTT — dot before the milliseconds). Negatives clamp to zero.
-func vttTimecode(_ seconds: Double) -> String { subtitleTimecode(seconds, msSeparator: ".") }
+public func vttTimecode(_ seconds: Double) -> String { subtitleTimecode(seconds, msSeparator: ".") }
 
 private func subtitleTimecode(_ seconds: Double, msSeparator: String) -> String {
     let safe = seconds.isFinite ? seconds : 0               // NaN/±inf would trap Int(_:) → kill the export
@@ -88,7 +87,7 @@ private func subtitleTimecode(_ seconds: Double, msSeparator: String) -> String 
 /// Collapse blank lines inside a cue body. A BLANK LINE terminates a cue in both SubRip and WebVTT,
 /// so an edited transcript containing a paragraph break would emit a structurally-broken subtitle
 /// file (the text after the gap is parsed as a new, index-less cue). Single line breaks are kept.
-func collapseBlankLines(_ s: String) -> String {
+public func collapseBlankLines(_ s: String) -> String {
     s.replacingOccurrences(of: #"\n[ \t]*\n+"#, with: "\n", options: .regularExpression)
 }
 
@@ -98,7 +97,7 @@ func collapseBlankLines(_ s: String) -> String {
 ///   spanning `[0, durationSec]` — never emit mismatched timecodes,
 /// - clamps each cue so `start ≥ 0` and `end ≥ start` (no reversed `-->` ranges),
 /// - collapses blank lines in each cue body (a blank line would break the cue framing).
-func subtitleCues(_ item: TranscriptItem) -> [(start: Double, end: Double, text: String)] {
+public func subtitleCues(_ item: TranscriptItem) -> [(start: Double, end: Double, text: String)] {
     if item.isEdited || item.segments.isEmpty {
         let text = collapseBlankLines(item.text.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !text.isEmpty else { return [] }
@@ -120,7 +119,7 @@ func subtitleCues(_ item: TranscriptItem) -> [(start: Double, end: Double, text:
 /// Markdown (blockquote summary, bold labels, `- [ ]`/`- [x]` GitHub checkboxes) and plain labelled lines.
 /// When non-empty the block ALWAYS ends with exactly one trailing blank line, so a caller can prepend it
 /// before the body. Labels are localized (resolve to the current UI language, like `exportMarkdown`'s `transcript.edited`).
-func insightBlock(_ item: TranscriptItem, markdown: Bool) -> String {
+public func insightBlock(_ item: TranscriptItem, markdown: Bool) -> String {
     var out = ""
     // Title: the real AI/extractive title only (NOT the sourceName fallback — the header already carries the name).
     let title = item.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -151,7 +150,7 @@ func insightBlock(_ item: TranscriptItem, markdown: Bool) -> String {
 /// that has one (matched by its stable start-time window). "" for short notes / notes without chapter summaries.
 /// Placed ABOVE the full transcript — a navigable digest that ADDS to the source, never replaces it. `markdown`
 /// switches between a `###` heading + blockquote and plain `range` + line. Ends with one trailing blank line.
-func chapterDigest(_ item: TranscriptItem, markdown: Bool) -> String {
+public func chapterDigest(_ item: TranscriptItem, markdown: Bool) -> String {
     guard let summaries = item.chapterSummaries, !summaries.isEmpty else { return "" }
     let chapters = AudioChunker.chapters(from: item.segments)
     guard !chapters.isEmpty else { return "" }
@@ -179,7 +178,7 @@ private func insightNoteVTT(_ item: TranscriptItem) -> String {
 /// Empty when there are no usable cues (never a 0-cue garbage file).
 /// NOTE: insights are DELIBERATELY never injected — SubRip has no comment syntax, so any header would parse
 /// as a malformed first cue and break players (WebVTT carries them in a `NOTE` block instead).
-func exportSRT(_ item: TranscriptItem) -> String {
+public func exportSRT(_ item: TranscriptItem) -> String {
     let cues = subtitleCues(item)
     guard !cues.isEmpty else { return "" }
     var out = ""
@@ -193,7 +192,7 @@ func exportSRT(_ item: TranscriptItem) -> String {
 
 /// WebVTT: `WEBVTT` header, dot-ms timecodes, no integer cue index. Always valid (header even if empty).
 /// `.withInsights` inserts a `NOTE` comment block after the header; `.insightsOnly` keeps just that NOTE (no cues).
-func exportVTT(_ item: TranscriptItem, content: ExportContent = .transcript) -> String {
+public func exportVTT(_ item: TranscriptItem, content: ExportContent = .transcript) -> String {
     var out = "WEBVTT\n\n"
     if content != .transcript { out += insightNoteVTT(item) }   // "" when the note has no insights → byte-identical
     guard content != .insightsOnly else { return out }
@@ -206,7 +205,7 @@ func exportVTT(_ item: TranscriptItem, content: ExportContent = .transcript) -> 
 
 /// JSON over the REAL `Codable` model (no parallel DTO that could drift). Pretty + sorted keys →
 /// deterministic bytes; default date encoding → exact round-trip.
-func exportJSON(_ item: TranscriptItem) throws -> Data {
+public func exportJSON(_ item: TranscriptItem) throws -> Data {
     var clean = item
     clean.segments = item.segments.map { Segment(start: $0.start, end: $0.end, text: $0.cleanText) }
     let encoder = JSONEncoder()
@@ -216,7 +215,7 @@ func exportJSON(_ item: TranscriptItem) throws -> Data {
 
 /// Plain text — flat (`item.text`) or timestamped (`[mm:ss] line`), via the existing `display`.
 /// `.withInsights` prepends a labelled insight header; `.insightsOnly` emits only that header (no body).
-func exportPlainTXT(_ item: TranscriptItem, timestamps: Bool, content: ExportContent = .transcript) -> String {
+public func exportPlainTXT(_ item: TranscriptItem, timestamps: Bool, content: ExportContent = .transcript) -> String {
     var out = ""
     if content != .transcript { out += insightBlock(item, markdown: false) + chapterDigest(item, markdown: false) }
     if content != .insightsOnly { out += item.display(timestamps: timestamps) }
@@ -226,7 +225,7 @@ func exportPlainTXT(_ item: TranscriptItem, timestamps: Bool, content: ExportCon
 /// One transcript as a Markdown block — the same shape as a single `exportText` record, minus the
 /// archive title header and the trailing `---` separator (that divider sits between records).
 /// `.withInsights` inserts the insight header before the body; `.insightsOnly` drops the body.
-func exportMarkdown(_ item: TranscriptItem, content: ExportContent = .transcript) -> String {
+public func exportMarkdown(_ item: TranscriptItem, content: ExportContent = .transcript) -> String {
     let editedMark = item.isEdited ? " · " + L("transcript.edited") : ""
     let meta = "_\(item.date.formatted(date: .abbreviated, time: .shortened)) · \(item.language.uppercased()) · \(friendlyModel(item.model))\(editedMark)_"
     var out = "## \(item.sourceName)\n\(meta)\n\n"
@@ -239,7 +238,7 @@ func exportMarkdown(_ item: TranscriptItem, content: ExportContent = .transcript
 /// (it returns `Data`); this returns its UTF-8 string form for share-sheet convenience. `content` (the export-menu
 /// picker) folds insights into the human-readable formats / drops the body for "summary only"; JSON is always the
 /// full record, and SRT deliberately omits insights (no comment syntax) — both ignore the picker beyond cues.
-func exportString(_ item: TranscriptItem, as format: ExportFormat, timestamps: Bool = true, content: ExportContent = .transcript) -> String {
+public func exportString(_ item: TranscriptItem, as format: ExportFormat, timestamps: Bool = true, content: ExportContent = .transcript) -> String {
     switch format {
     case .txt:      return exportPlainTXT(item, timestamps: timestamps, content: content)
     case .markdown: return exportMarkdown(item, content: content)

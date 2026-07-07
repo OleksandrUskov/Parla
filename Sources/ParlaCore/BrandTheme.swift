@@ -1,17 +1,16 @@
 import SwiftUI
-import ParlaCore
 
-enum Brand {
-    static let name = "Parla"
-    static let c1 = Color(hex: 0x6D5DF6)   // indigo
-    static let c2 = Color(hex: 0x8B5CF6)   // violet
-    static let c3 = Color(hex: 0xB14AED)   // purple
-    static let accent = c2
-    static let gradient = LinearGradient(colors: [c1, c3], startPoint: .topLeading, endPoint: .bottomTrailing)
+public enum Brand {
+    public static let name = "Parla"
+    public static let c1 = Color(hex: 0x6D5DF6)   // indigo
+    public static let c2 = Color(hex: 0x8B5CF6)   // violet
+    public static let c3 = Color(hex: 0xB14AED)   // purple
+    public static let accent = c2
+    public static let gradient = LinearGradient(colors: [c1, c3], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 
 extension Color {
-    init(hex: UInt) {
+    public init(hex: UInt) {
         self.init(.sRGB,
                   red: Double((hex >> 16) & 0xFF) / 255,
                   green: Double((hex >> 8) & 0xFF) / 255,
@@ -22,8 +21,9 @@ extension Color {
 
 /// Dark «aurora» background built from soft radial blobs. macOS 14 APIs only
 /// (RadialGradient + blur) — no MeshGradient/Liquid Glass, works everywhere.
-struct AuroraBackground: View {
-    var body: some View {
+public struct AuroraBackground: View {
+    public init() {}
+    public var body: some View {
         ZStack {
             Color(hex: 0x141220)
             ZStack {
