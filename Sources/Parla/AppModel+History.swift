@@ -1,13 +1,8 @@
-import SwiftUI
-import AppKit
-import UniformTypeIdentifiers
+import Foundation
 
 /// History: copy, inline edit (feature 02), delete, export to Markdown.
 extension AppModel {
-    func copy(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-    }
+    func copy(_ text: String) { copyToClipboard(text) }
 
     func copyItem(_ item: TranscriptItem) {
         copy(item.display(timestamps: showTimestamps))
@@ -62,14 +57,11 @@ extension AppModel {
         HistoryStore.save(history)
     }
 
-    /// Export the entire history to a markdown file (save dialog).
+    /// Export the entire history to a markdown file (save dialog). The picker is the `presentSavePanel`
+    /// platform seam (macOS: NSSavePanel); the render + write + error handling stay here in Core.
     func exportHistory() {
         guard !history.isEmpty else { return }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "parla-history.md"
-        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText, .plainText]
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = presentSavePanel("parla-history.md", ["md"]) else { return }
         do {
             try Data(exportText(history, content: exportContent).utf8).write(to: url)
         } catch {
@@ -78,14 +70,10 @@ extension AppModel {
     }
 
     /// Export ONE transcript in the chosen format (save dialog). The format rendering is the pure
-    /// `Export.swift` layer; this just runs the panel + writes, reusing `exportHistory`'s error path.
+    /// `Export.swift` layer; this just runs the picker seam + writes, reusing `exportHistory`'s error path.
     func export(_ item: TranscriptItem, as format: ExportFormat) {
-        let panel = NSSavePanel()
         let base = (item.sourceName as NSString).deletingPathExtension
-        panel.nameFieldStringValue = "\(base).\(format.fileExtension)"
-        panel.allowedContentTypes = [UTType(filenameExtension: format.fileExtension) ?? .plainText, .plainText]
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = presentSavePanel("\(base).\(format.fileExtension)", [format.fileExtension]) else { return }
         do {
             let data = format == .json
                 ? try exportJSON(item)

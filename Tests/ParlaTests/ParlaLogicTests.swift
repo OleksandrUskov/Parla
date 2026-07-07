@@ -2590,6 +2590,7 @@ final class ParlaLogicTests: XCTestCase {
     @MainActor func testDictationPasteDisabledNeverPastes() async {
         await withTemporaryHistoryStoreAsync {
             var pasteCalls = 0
+            var clipboard: String?
             let fake = FakeEngine(results: [EngineResult(text: "вставь меня", language: "ru", segments: [], duration: 1)])
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }
@@ -2598,6 +2599,7 @@ final class ParlaLogicTests: XCTestCase {
             m.autoCopy = true
             m.dictationPasteIntoFrontmost = false
             m.attemptPaste = { pasteCalls += 1; return true }
+            m.copyToClipboard = { clipboard = $0 }          // capture the seam (deterministic; no live system pasteboard)
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
 
@@ -2605,13 +2607,14 @@ final class ParlaLogicTests: XCTestCase {
 
             XCTAssertEqual(pasteCalls, 0)                    // paste off → never synthesizes ⌘V
             XCTAssertEqual(m.history.first?.text, "вставь меня")
-            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "вставь меня")   // text on the clipboard
+            XCTAssertEqual(clipboard, "вставь меня")         // text on the clipboard
         }
     }
 
     @MainActor func testDictationPasteEnabledAttemptsAndSetsClipboard() async {
         await withTemporaryHistoryStoreAsync {
             var pasteCalls = 0
+            var clipboard: String?
             let fake = FakeEngine(results: [EngineResult(text: "наберись", language: "ru", segments: [], duration: 1)])
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }
@@ -2620,6 +2623,7 @@ final class ParlaLogicTests: XCTestCase {
             m.autoCopy = false                              // even with autoCopy off, paste must put text on the clipboard
             m.dictationPasteIntoFrontmost = true
             m.attemptPaste = { pasteCalls += 1; return true }   // simulate Accessibility-trusted + pasted
+            m.copyToClipboard = { clipboard = $0 }          // capture the seam (deterministic; no live system pasteboard)
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
 
@@ -2627,13 +2631,14 @@ final class ParlaLogicTests: XCTestCase {
 
             XCTAssertEqual(pasteCalls, 1)
             XCTAssertEqual(m.history.first?.text, "наберись")
-            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "наберись")   // clipboard set for the ⌘V
+            XCTAssertEqual(clipboard, "наберись")            // clipboard set for the ⌘V
         }
     }
 
     @MainActor func testDictationPasteUntrustedFallsBackToClipboard() async {
         await withTemporaryHistoryStoreAsync {
             var pasteCalls = 0
+            var clipboard: String?
             let fake = FakeEngine(results: [EngineResult(text: "запас", language: "ru", segments: [], duration: 1)])
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }
@@ -2642,6 +2647,7 @@ final class ParlaLogicTests: XCTestCase {
             m.autoCopy = false
             m.dictationPasteIntoFrontmost = true
             m.attemptPaste = { pasteCalls += 1; return false }   // not Accessibility-trusted → no paste, graceful fallback
+            m.copyToClipboard = { clipboard = $0 }          // capture the seam (deterministic; no live system pasteboard)
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
 
@@ -2649,7 +2655,7 @@ final class ParlaLogicTests: XCTestCase {
 
             XCTAssertEqual(pasteCalls, 1)                    // attempted, returned false
             XCTAssertEqual(m.history.first?.text, "запас")   // record still saved
-            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "запас")   // text remains on the clipboard
+            XCTAssertEqual(clipboard, "запас")               // text remains on the clipboard
         }
     }
 

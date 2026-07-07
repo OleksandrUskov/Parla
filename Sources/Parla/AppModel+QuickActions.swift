@@ -9,7 +9,7 @@ extension AppModel {
             QuickToast.shared.show(L("toast.busy"))
             return
         }
-        let urls = PasteboardReader.audioOnly(PasteboardReader.fileURLs())
+        let urls = clipboardAudioURLs()
         guard let first = urls.first else {
             QuickToast.shared.show(L("toast.clipboard.empty"))
             return

@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 /// One queued manual-drop job: a batch of URLs waiting for the transcription lane. A drop while the lane
 /// is busy is APPENDED here (not discarded), so the user can stack "5 files, then 5 more".
@@ -148,8 +147,9 @@ extension AppModel {
         // Notification: only if the job «was worth the wait» and the window isn't frontmost.
         // Read frontmost at the END — switching away during the batch is exactly what should trigger a notification.
         let elapsed = Date().timeIntervalSince(jobStart)
-        // NSApplication.shared (not NSApp): the latter is nil until the app instance exists → would crash under tests.
-        if BatchNotifier.shouldNotify(total: total, elapsed: elapsed, frontmost: NSApplication.shared.isActive) {
+        // Frontmost via the `isAppActive` platform seam (macOS wires NSApplication.shared.isActive); the inert
+        // Core/XCTest default reports "not frontmost", so this stays AppKit-free and portable.
+        if BatchNotifier.shouldNotify(total: total, elapsed: elapsed, frontmost: isAppActive()) {
             await postNotification(succeeded, failures.count)
         }
 

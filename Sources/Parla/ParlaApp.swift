@@ -6,7 +6,7 @@ import KeyboardShortcuts
 @main
 struct ParlaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var model = AppModel.mac()   // macOS platform seams wired in (Core stays AppKit-free — IOS_PORT.md §1)
     @State private var hotkeyInstalled = false
     @AppStorage("didOnboard") private var didOnboard = false   // first-run sheet gate (UI pref, not history)
     @State private var showOnboarding = false

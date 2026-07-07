@@ -1,5 +1,5 @@
 import SwiftUI
-import AppKit
+import Foundation
 import UniformTypeIdentifiers
 import WhisperKit
 
@@ -151,6 +151,26 @@ final class AppModel {
     /// Paste-into-frontmost (test seam): real CGEvent ⌘V in production; tests inject a recorder.
     /// Returns whether a synthetic paste was actually performed (false → not Accessibility-trusted).
     var attemptPaste: @MainActor () -> Bool = { PasteService.pasteIntoFrontmost() }
+
+    // MARK: Platform seams (iOS-port P0.1)
+    // AppModel is Core-bound — it must stay AppKit-free so it ports to iOS. Each platform behavior below is an
+    // injectable closure with an INERT Foundation-only default; the macOS app installs the real AppKit behavior
+    // through `AppModel.mac()` (see AppModel+PlatformMac.swift). iOS will wire UIKit equivalents (IOS_PORT.md §1).
+
+    /// Clipboard write: macOS wires `NSPasteboard`; inert default is a no-op (Core + tests stay AppKit-free).
+    var copyToClipboard: @MainActor (String) -> Void = { _ in }
+
+    /// Whether the app window is frontmost — gates the batch-completion notification. macOS wires
+    /// `NSApplication.shared.isActive`; the inert default reports "not frontmost" (matches the headless/XCTest reality).
+    var isAppActive: @MainActor () -> Bool = { false }
+
+    /// Audio file URLs currently on the clipboard (drives «recognize from clipboard»): macOS wires
+    /// `PasteboardReader`; inert default is empty.
+    var clipboardAudioURLs: @MainActor () -> [URL] = { [] }
+
+    /// Present a save dialog and return the chosen destination (or nil if cancelled): macOS wires `NSSavePanel`.
+    /// The data production + write + error handling stay in Core — only the file-picker UI is platform-specific.
+    var presentSavePanel: @MainActor (_ suggestedName: String, _ extensions: [String]) -> URL? = { _, _ in nil }
 
     enum Keys {
         static let model = "model"
