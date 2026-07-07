@@ -4,22 +4,36 @@ struct MainPane: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        // The whole right pane scrolls (like the history list): everything flows top-to-bottom and a long
-        // transcript just extends the page. The transcript is a plain block (no nested ScrollView), so there's
-        // exactly ONE scroll axis here — no inner/outer scroll conflict, and nothing can collapse to zero height.
-        ScrollView {
+        // Two reading layouts, toggled by `pinnedPlayerLayout` (instant, code-free rollback):
+        // • PINNED — the chrome + card header + audio player stay FIXED, only the transcript scrolls (its own
+        //   ScrollView filling the card height). One meaningful scroll axis (the transcript), player always visible.
+        // • CLASSIC — the whole right pane is ONE ScrollView; everything flows and a long transcript extends the
+        //   page (no nested ScrollView → no inner/outer conflict, nothing collapses to zero). Also used when no note.
+        if model.pinnedPlayerLayout, let item = model.selectedItem {
             VStack(spacing: 18) {
                 BrandHeader()
                 DropZoneView().frame(height: 210)
                 StatusBar()
-                if let item = model.selectedItem {
-                    TranscriptCard(item: item)
-                } else {
-                    EmptyState()
-                }
+                TranscriptCard(item: item, pinned: true)
+                    .frame(maxHeight: .infinity)   // fill the remaining height so the transcript scroll is meaningful
             }
             .padding(24)
-            .frame(maxWidth: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        } else {
+            ScrollView {
+                VStack(spacing: 18) {
+                    BrandHeader()
+                    DropZoneView().frame(height: 210)
+                    StatusBar()
+                    if let item = model.selectedItem {
+                        TranscriptCard(item: item)
+                    } else {
+                        EmptyState()
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
         }
     }
 }
@@ -575,6 +589,7 @@ struct EmptyState: View {
 struct TranscriptCard: View {
     @Environment(AppModel.self) private var model
     let item: TranscriptItem
+    var pinned = false           // pinned layout: header + player fixed, transcript scrolls on its own + card fills height
 
     @State private var isEditing = false
     @State private var draft = ""
@@ -597,19 +612,35 @@ struct TranscriptCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            // Make the reading content selectable/copyable (summary, transcript, chapter digest, related) — users
-            // expect to grab text by default. The header is excluded so its action buttons stay click-first.
-            VStack(alignment: .leading, spacing: 12) {
-                insights
-                content
-                relatedNotes
+            if pinned && !isEditing {
+                // Pinned: player stays put; ONLY the transcript (+ insights/related) scrolls, filling the card height.
+                playerBar
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        insights
+                        readingBody
+                        relatedNotes
+                    }
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: .infinity)
+            } else {
+                // Classic: one flowing block (the page ScrollView scrolls it). Make the reading content
+                // selectable/copyable — the header is excluded so its action buttons stay click-first.
+                VStack(alignment: .leading, spacing: 12) {
+                    insights
+                    content
+                    relatedNotes
+                }
+                .textSelection(.enabled)
             }
-            .textSelection(.enabled)
         }
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
-        .frame(maxWidth: .infinity, alignment: .top)   // sizes to its content; the page ScrollView handles scrolling
+        // Pinned fills the remaining height (so the transcript scroll has room); classic sizes to content.
+        .frame(maxWidth: .infinity, maxHeight: pinned ? CGFloat.infinity : nil, alignment: .top)
         // Selection change (or a new transcript): discard any in-progress edit (so we don't
         // write it into someone else's record) and reload the player with the new record's audio.
         // initial:true — also load on first appearance.
@@ -966,24 +997,34 @@ struct TranscriptCard: View {
                 .padding(10)
                 .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
         } else {
-            VStack(spacing: 10) {
-                TransportBar(player: player, hasAudio: audioURL != nil)
-                // Transcript ⇄ Digest toggle — only when a long note has per-chapter summaries to read.
-                if hasChapterDigest {
-                    Picker("", selection: $showDigest) {
-                        Text(L("view.transcript")).tag(false)
-                        Text(L("view.digest")).tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 280)
+            VStack(spacing: 10) { playerBar; readingBody }
+        }
+    }
+
+    /// The audio player + (for long notes) the Transcript⇄Digest picker. In the pinned layout this is FIXED above
+    /// the scrolling transcript; in the classic layout it's the top of the flowing reading block.
+    private var playerBar: some View {
+        VStack(spacing: 10) {
+            TransportBar(player: player, hasAudio: audioURL != nil)
+            // Transcript ⇄ Digest toggle — only when a long note has per-chapter summaries to read.
+            if hasChapterDigest {
+                Picker("", selection: $showDigest) {
+                    Text(L("view.transcript")).tag(false)
+                    Text(L("view.digest")).tag(true)
                 }
-                if showDigest, hasChapterDigest {
-                    ChapterDigestView(item: item)
-                } else {
-                    readBody
-                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 280)
             }
+        }
+    }
+
+    /// The scrolling reading content itself — the per-chapter digest or the transcript body.
+    @ViewBuilder private var readingBody: some View {
+        if showDigest, hasChapterDigest {
+            ChapterDigestView(item: item)
+        } else {
+            readBody
         }
     }
 

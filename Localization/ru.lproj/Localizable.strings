@@ -176,6 +176,8 @@
 "a11y.pause"              = "Пауза";
 "a11y.dismiss"            = "Закрыть";
 "settings.behavior.sound" = "Звук по завершении";
+"settings.behavior.pinnedplayer" = "Закреплённый плеер";
+"settings.behavior.pinnedplayer.caption" = "Плеер остаётся на месте, а транскрипт скроллится сам по себе. Выкл = классическая страница с одним скроллом.";
 "error.retry"             = "Повторить";
 
 /* Toasts */

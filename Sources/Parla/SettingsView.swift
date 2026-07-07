@@ -47,6 +47,9 @@ struct SettingsView: View {
                 Toggle(L("settings.behavior.autocopy"), isOn: $model.autoCopy)
                 Toggle(L("settings.behavior.timestamps"), isOn: $model.showTimestamps)
                 Toggle(L("settings.behavior.sound"), isOn: $model.soundOnComplete)
+                Toggle(L("settings.behavior.pinnedplayer"), isOn: $model.pinnedPlayerLayout)
+                Text(L("settings.behavior.pinnedplayer.caption"))
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section(L("settings.section.insights")) {

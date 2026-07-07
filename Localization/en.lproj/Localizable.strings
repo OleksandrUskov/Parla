@@ -176,6 +176,8 @@
 "a11y.pause"              = "Pause";
 "a11y.dismiss"            = "Dismiss";
 "settings.behavior.sound" = "Play a sound on completion";
+"settings.behavior.pinnedplayer" = "Pinned player";
+"settings.behavior.pinnedplayer.caption" = "Keep the audio player fixed while the transcript scrolls on its own. Off = classic single-scroll page.";
 "error.retry"             = "Try again";
 
 /* Toasts */

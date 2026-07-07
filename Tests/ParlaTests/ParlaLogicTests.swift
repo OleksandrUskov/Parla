@@ -3458,6 +3458,14 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(AppModel().showTimestamps)   // an explicit OFF choice is preserved
     }
 
+    @MainActor func testPinnedPlayerLayoutDefaultsOnAndPersists() {
+        UserDefaults.standard.removeObject(forKey: AppModel.Keys.pinnedPlayer)
+        XCTAssertTrue(AppModel().pinnedPlayerLayout)   // default ON — the pinned reading layout
+        UserDefaults.standard.set(false, forKey: AppModel.Keys.pinnedPlayer)
+        defer { UserDefaults.standard.removeObject(forKey: AppModel.Keys.pinnedPlayer) }
+        XCTAssertFalse(AppModel().pinnedPlayerLayout)   // toggling OFF (rollback to classic) is preserved
+    }
+
     func testShouldPlayCompletionSound() {
         // user-initiated run → always plays when enabled
         XCTAssertTrue(AppModel.shouldPlayCompletionSound(soundEnabled: true, isWatcherRun: false, watchQueueEmpty: false))

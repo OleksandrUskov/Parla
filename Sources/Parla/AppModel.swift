@@ -54,6 +54,9 @@ final class AppModel {
     var language: String { didSet { UserDefaults.standard.set(language, forKey: Keys.language) } }
     var autoCopy: Bool { didSet { UserDefaults.standard.set(autoCopy, forKey: Keys.autoCopy) } }
     var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Keys.timestamps) } }
+    /// Pinned-player reading layout: fixes the chrome + audio player and gives the transcript its OWN scroll (vs the
+    /// classic single-scroll page). ON by default; the toggle is the instant, code-free rollback if it doesn't land.
+    var pinnedPlayerLayout: Bool { didSet { UserDefaults.standard.set(pinnedPlayerLayout, forKey: Keys.pinnedPlayer) } }
     var translateToEnglish: Bool { didSet { UserDefaults.standard.set(translateToEnglish, forKey: Keys.translate) } }
     var soundOnComplete: Bool { didSet { UserDefaults.standard.set(soundOnComplete, forKey: Keys.sound) } }
 
@@ -153,6 +156,7 @@ final class AppModel {
         static let language = "language"
         static let autoCopy = "autoCopy"
         static let timestamps = "timestamps"
+        static let pinnedPlayer = "pinnedPlayerLayout"
         static let sound = "soundOnComplete"
         static let translate = "translateToEnglish"
         static let watchEnabled = "watchEnabled"
@@ -207,6 +211,7 @@ final class AppModel {
         language = d.string(forKey: Keys.language) ?? ""
         autoCopy = (d.object(forKey: Keys.autoCopy) as? Bool) ?? true
         showTimestamps = (d.object(forKey: Keys.timestamps) as? Bool) ?? true   // default ON: reveal the click-to-seek SegmentList
+        pinnedPlayerLayout = (d.object(forKey: Keys.pinnedPlayer) as? Bool) ?? true   // default ON: pinned player + independent transcript scroll
         translateToEnglish = d.bool(forKey: Keys.translate)
         soundOnComplete = (d.object(forKey: Keys.sound) as? Bool) ?? true
         watchEnabled = d.bool(forKey: Keys.watchEnabled)
