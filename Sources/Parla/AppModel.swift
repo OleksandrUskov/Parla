@@ -138,8 +138,9 @@ final class AppModel {
     let embedder: any TextEmbedder                      // semantic-embedding seam (P1) — injectable; NLContextualEmbedding default
     let tts: any TTSService                              // TTS seam (voice synthesis P1a) — injectable; SystemTTSService default (system voice)
 
-    /// WAV conversion (test seam): real ffmpeg by default; tests inject a stub to skip ffmpeg.
-    var wavConverter: @Sendable (URL) throws -> URL = { try AudioConverter.toWav16k($0) }
+    /// Audio decoding (platform + test seam): real ffmpeg via `FFmpegAudioDecoder` by default; iOS injects an
+    /// in-process decoder (IOS_PORT.md §2), tests inject a stub to skip the subprocess.
+    var decoder: any AudioDecoding = FFmpegAudioDecoder()
 
     /// Completion-notification dispatch (test seam): real UNUserNotificationCenter in production;
     /// tests inject a no-op so they don't touch the notification center (no bundle proxy under XCTest).

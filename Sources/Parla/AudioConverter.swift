@@ -1,5 +1,4 @@
 import Foundation
-import AVFoundation
 
 /// Converts any audio/video to 16 kHz mono WAV via ffmpeg.
 /// Needed because Telegram serves .ogg/Opus, which AVFoundation (used by
@@ -142,13 +141,6 @@ enum AudioConverter {
     }
 
     // MARK: Long-audio support
-
-    /// Actual audio length in seconds (AVFoundation). nil if the file can't be opened.
-    static func duration(of path: String) -> Double? {
-        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)) else { return nil }
-        let sr = file.fileFormat.sampleRate
-        return sr > 0 ? Double(file.length) / sr : nil
-    }
 
     /// Whether an ffmpeg binary is resolvable right now — required to split long files into chunks.
     static var isFFmpegAvailable: Bool { ffmpegURL() != nil }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Live mic dictation (MIC_DICTATION v1): record the microphone → 16 kHz mono WAV (`MicRecorder`) →
-/// transcribe it locally, reusing the same result handling as a file drop but **bypassing `wavConverter`**
+/// transcribe it locally, reusing the same result handling as a file drop but **bypassing the `decoder` seam**
 /// (the WAV is already in WhisperKit's input format — `.wav` ∈ `avDecodable`). Clipboard-only in v1
 /// (paste-into-frontmost is P2). 100% on-device — the only new permission is the Microphone.
 extension AppModel {
@@ -193,7 +193,7 @@ extension AppModel {
         await pruneAudioCache()
     }
 
-    /// Transcribe a finished dictation WAV and fold the result into history. Bypasses `wavConverter`
+    /// Transcribe a finished dictation WAV and fold the result into history. Bypasses the `decoder` seam
     /// (the WAV is already 16 kHz mono). Best-effort + always toasts (dictation has no in-window chip flow).
     func finishDictation(wav: URL) async {
         defer { try? FileManager.default.removeItem(at: wav) }   // throwaway temp; keepAudio copies what it needs
@@ -202,7 +202,7 @@ extension AppModel {
 
         // Drop a near-silent / too-short clip before spinning up the model. (A real WAV opens via
         // AVAudioFile; a non-audio path returns nil → fall through and let the engine decide.)
-        let dur = await Task.detached(priority: .userInitiated) { AudioConverter.duration(of: wav.path) }.value
+        let dur = await Task.detached(priority: .userInitiated) { AudioDuration.seconds(ofFileAt: wav.path) }.value
         if let dur, dur < 0.4 {
             phase = .idle
             dictationToast(empty: true, failed: false)

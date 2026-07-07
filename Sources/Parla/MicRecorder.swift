@@ -8,7 +8,7 @@ import os
 
 /// Records the microphone straight to a **16 kHz mono Int16 WAV** — WhisperKit's native input format, so a
 /// dictation result needs NO ffmpeg decode: the WAV goes straight to `engine.transcribe(wavPath:)` (`.wav`
-/// is in `AppModel.avDecodable`, so the dictation path bypasses `wavConverter` entirely).
+/// is in `AppModel.avDecodable`, so the dictation path bypasses the `decoder` seam entirely).
 ///
 /// Concurrency (we're on Swift 6 `.v6`): the input tap fires on CoreAudio's real-time thread. All capture
 /// state (the `AVAudioConverter` + `AVAudioFile`) is owned by a private `WavSink` that is *transferred* into

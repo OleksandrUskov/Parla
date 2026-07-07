@@ -148,7 +148,7 @@ actor TranscriptionEngine {
         let mapped = mapResults(results, language: language)
         // duration = the ACTUAL audio length, not the processing time (`elapsed`). Fall back to the
         // last segment end, then to elapsed, if the file can't be probed.
-        let audioLen = AudioConverter.duration(of: wavPath) ?? mapped.segments.map(\.end).max() ?? elapsed
+        let audioLen = AudioDuration.seconds(ofFileAt: wavPath) ?? mapped.segments.map(\.end).max() ?? elapsed
         return EngineResult(text: mapped.text, language: mapped.language,
                             segments: mapped.segments, duration: audioLen)
     }

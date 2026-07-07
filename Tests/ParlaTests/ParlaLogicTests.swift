@@ -2366,7 +2366,7 @@ final class ParlaLogicTests: XCTestCase {
             m.soundOnComplete = false
             m.history = []
             m.autoCopy = false
-            // 5-byte stub .wav → AudioConverter.duration is nil → the short-clip guard is skipped and the
+            // 5-byte stub .wav → AudioDuration.seconds is nil → the short-clip guard is skipped and the
             // FakeEngine runs. The live mic capture itself is manual-only; this drives the result back-half.
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
@@ -2519,13 +2519,13 @@ final class ParlaLogicTests: XCTestCase {
             m.soundOnComplete = false
             m.history = []
             m.autoCopy = false
-            m.wavConverter = { _ in throw AudioConverter.Failure.ffmpegNotFound }   // would fail if dictation used it
+            m.decoder = ClosureAudioDecoder(decode: { _ in throw AudioConverter.Failure.ffmpegNotFound })   // would fail if dictation used it
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
 
             await m.finishDictation(wav: wav)
 
-            XCTAssertEqual(m.history.count, 1)                      // succeeded → wavConverter was never called
+            XCTAssertEqual(m.history.count, 1)                      // succeeded → the decoder was never called
             XCTAssertEqual(m.history.first?.text, "ok")
         }
     }
@@ -2730,6 +2730,23 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(wavFallback.contains("-vn"))
     }
 
+    /// `AudioDuration` (the ffmpeg-free AVFoundation probe the engine + chunking gate now use) must return
+    /// nil for a path AVAudioFile can't open, so callers fall back instead of trusting a bogus length.
+    func testAudioDurationNilForNonAudio() {
+        let junk = FileManager.default.temporaryDirectory.appendingPathComponent("parla-not-audio-\(UUID().uuidString).bin")
+        try? Data([0x00, 0x01, 0x02, 0x03, 0x04]).write(to: junk)
+        defer { try? FileManager.default.removeItem(at: junk) }
+        XCTAssertNil(AudioDuration.seconds(ofFileAt: junk.path))
+        XCTAssertNil(AudioDuration.seconds(ofFileAt: "/no/such/file.wav"))
+    }
+
+    /// The default macOS decoder conforms to the `AudioDecoding` seam and reports chunking availability from
+    /// the real ffmpeg resolver — the same source of truth as `AudioConverter.isFFmpegAvailable`.
+    func testFFmpegDecoderReflectsFfmpegAvailability() {
+        let decoder: any AudioDecoding = FFmpegAudioDecoder()
+        XCTAssertEqual(decoder.isChunkingAvailable, AudioConverter.isFFmpegAvailable)
+    }
+
     /// An AVFoundation format (.m4a) must NOT spawn ffmpeg — the source path goes straight to the engine.
     @MainActor func testTranscribeSkipsConverterForAvFormat() async {
         await withTemporaryHistoryStoreAsync {
@@ -2740,7 +2757,7 @@ final class ParlaLogicTests: XCTestCase {
             m.history = []
             m.autoCopy = false
             // If the converter ran, the engine would receive THIS sentinel instead of the source path.
-            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/CONVERTER-RAN.wav") }
+            m.decoder = ClosureAudioDecoder(decode: { _ in URL(fileURLWithPath: "/tmp/CONVERTER-RAN.wav") })
             let src = makeTempSource("voice.m4a")
             defer { try? FileManager.default.removeItem(at: src) }
 
@@ -2760,8 +2777,8 @@ final class ParlaLogicTests: XCTestCase {
             m.soundOnComplete = false
             m.history = []
             m.autoCopy = false
-            m.wavConverter = { _ in URL(fileURLWithPath: "/tmp/fake.wav") }
-            let src = makeTempSource("voice.opus")   // .opus ∉ avDecodable → must route through ffmpeg
+            m.decoder = ClosureAudioDecoder(decode: { _ in URL(fileURLWithPath: "/tmp/fake.wav") })
+            let src = makeTempSource("voice.opus")   // .opus ∉ avDecodable → must route through the decoder
             defer { try? FileManager.default.removeItem(at: src) }
 
             await m.transcribe(urls: [src])
@@ -4012,6 +4029,19 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     }
 
     func deleteModel(_ name: String) async throws { deletedModels.append(name) }
+}
+
+// MARK: - Test double for the AudioDecoding seam (iOS-port P0.0)
+
+/// Fake `AudioDecoding`: closures stand in for the ffmpeg subprocess so a test can script the decode
+/// (return a sentinel path, or throw) without touching ffmpeg. Defaults are inert (passthrough / no chunking).
+private struct ClosureAudioDecoder: AudioDecoding {
+    var decode: @Sendable (URL) throws -> URL = { $0 }
+    var split: @Sendable (URL, Double) throws -> [URL] = { _, _ in [] }
+    var chunkingAvailable = false
+    func decodeToWav16k(_ src: URL) throws -> URL { try decode(src) }
+    func splitIntoChunks(_ src: URL, chunkLength: Double) throws -> [URL] { try split(src, chunkLength) }
+    var isChunkingAvailable: Bool { chunkingAvailable }
 }
 
 // MARK: - Test double for the Local-AI seam (P0)

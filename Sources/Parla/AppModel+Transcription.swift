@@ -182,9 +182,9 @@ extension AppModel {
             decodePath = url.path
             tempWav = nil
         } else {
-            let convert = wavConverter      // capture the seam (real ffmpeg in production, stub in tests)
+            let decoder = self.decoder      // capture the seam (real ffmpeg in production, stub in tests)
             let wav = try await Task.detached(priority: .userInitiated) {
-                try convert(url)
+                try decoder.decodeToWav16k(url)
             }.value
             decodePath = wav.path
             tempWav = wav
@@ -195,8 +195,8 @@ extension AppModel {
         // folder batch (a long file mustn't bypass chunking just because it was dropped with others).
         // Needs ffmpeg to split; the no-ffmpeg / unknown-duration cases fall through to single-pass.
         // The duration probe opens the file via AVAudioFile → run it off the main actor.
-        let dur = await Task.detached(priority: .userInitiated) { AudioConverter.duration(of: decodePath) }.value
-        if let dur, AudioChunker.shouldChunk(durationSec: dur, ffmpegAvailable: AudioConverter.isFFmpegAvailable) {
+        let dur = await Task.detached(priority: .userInitiated) { AudioDuration.seconds(ofFileAt: decodePath) }.value
+        if let dur, AudioChunker.shouldChunk(durationSec: dur, ffmpegAvailable: decoder.isChunkingAvailable) {
             return try await transcribeChunked(source: URL(fileURLWithPath: decodePath),
                                                model: model, audioDuration: dur)
         }
@@ -215,8 +215,9 @@ extension AppModel {
     /// in flight at a time → memory stays bounded regardless of total length. A failed chunk is recorded
     /// as a placeholder so the rest of the transcript survives.
     private func transcribeChunked(source: URL, model: String, audioDuration: Double) async throws -> EngineResult {
+        let decoder = self.decoder
         let chunks = try await Task.detached(priority: .userInitiated) {
-            try AudioConverter.splitIntoChunks(source, chunkLength: AudioChunker.chunkLengthSec)
+            try decoder.splitIntoChunks(source, chunkLength: AudioChunker.chunkLengthSec)
         }.value
         let chunkDir = chunks.first?.deletingLastPathComponent()
         defer { if let chunkDir { try? FileManager.default.removeItem(at: chunkDir) } }
