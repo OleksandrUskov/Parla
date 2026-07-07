@@ -41,7 +41,7 @@ extension AppModel {
 
         // Folder-watch (macOS-only feature): wire the Core seams to the +FolderWatch impls.
         m.drainWatchQueue = { [weak m] in m?.drainQueue() }
-        m.syncWatch = { [weak m] in m?.applyWatchToggle() }
+        m.syncWatch = { [weak m] in m?.reapplyWatch() }
 
         return m
     }

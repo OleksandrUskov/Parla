@@ -37,6 +37,11 @@ extension AppModel {
     func applyWatchToggle() { watchEnabled ? startWatching() : stopWatching() }
     func restartWatching() { stopWatching(); startWatching() }
 
+    /// Re-apply the current watch config after a settings change (wired to `AppModel.syncWatch`). Enabled →
+    /// restart (stop→start, which CLEARS the stale watch queue + re-scans under the new recursive setting);
+    /// disabled → stop. Preserves the pre-extraction didSet semantics (watchRecursive change cleared the queue).
+    func reapplyWatch() { watchEnabled ? restartWatching() : stopWatching() }
+
     private func startWatching() {
         guard let folder = watchedFolderURL ?? resolveBookmarkedFolder() else { return }
         watcher?.stop()   // safety: never drop the old watcher without stop() (its thread holds a +1 on itself)
