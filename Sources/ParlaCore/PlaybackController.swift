@@ -23,6 +23,13 @@ public final class PlaybackController {
         guard let url else { return }
         // AVAudioPlayer can't open Ogg/Opus directly — on failure we stay «without a player» (canPlay=false).
         guard let p = try? AVAudioPlayer(contentsOf: url) else { return }
+        // iOS: default session category is `.soloAmbient`, which is silenced by the hardware mute switch and
+        // ducked by other audio. A media player should use `.playback` so the recording is actually audible.
+        // (macOS has no AVAudioSession.)
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setCategory(.playback)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        #endif
         p.prepareToPlay()
         player = p
         duration = p.duration

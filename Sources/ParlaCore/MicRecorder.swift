@@ -68,6 +68,18 @@ public final class MicRecorder {
         }
     }
 
+    #if os(iOS)
+    /// Configure + activate the shared audio session for recording. Required on iOS before touching the input
+    /// node (see `start()`). `.playAndRecord` (not `.record`) so an in-app player can still play afterwards
+    /// without a category flip; `.defaultToSpeaker` routes to the speaker. (Bluetooth-mic input is deferred:
+    /// the new `.allowBluetoothHFP` option is a newer-SDK symbol we avoid under the iOS-17 deployment floor.)
+    private static func activateRecordSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+        try session.setActive(true)
+    }
+    #endif
+
     /// Begin capturing; returns the WAV URL being written. Throws if already recording or the sink can't
     /// be set up. `onAutoStop` fires on the main actor if `maxSeconds` elapses first. The mic-permission
     /// check is the caller's job (`ensureMicAccess()`) — `start()` assumes access is granted.
@@ -79,6 +91,13 @@ public final class MicRecorder {
             .appendingPathComponent("parla-dictation-\(UUID().uuidString).wav")
 
         self.onAutoStop = onAutoStop
+
+        // iOS: the audio session MUST be `.playAndRecord` + active BEFORE reading the input node's format or
+        // starting the engine — otherwise `inputNode.outputFormat(forBus:)` reports 0 ch / 0 Hz and the mic is
+        // silently dead. (macOS has no AVAudioSession; the input node is always live.)
+        #if os(iOS)
+        try Self.activateRecordSession()
+        #endif
 
         let input = engine.inputNode
         let inFormat = input.outputFormat(forBus: 0)
