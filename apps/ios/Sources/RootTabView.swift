@@ -10,34 +10,12 @@ struct RootTabView: View {
 
     var body: some View {
         TabView {
-            homeTab
+            HomeView()
                 .tabItem { Label(L("history.title"), systemImage: "waveform") }
             modelsTab
                 .tabItem { Label(L("model.manager.title"), systemImage: "square.stack.3d.up.fill") }
         }
         .tint(Brand.accent)
-    }
-
-    /// Home = the future history list + import surface. For the shell it shows the localized empty state.
-    private var homeTab: some View {
-        NavigationStack {
-            ZStack {
-                AuroraBackground().ignoresSafeArea()
-                VStack(spacing: 14) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 46, weight: .semibold))
-                        .foregroundStyle(Brand.gradient)
-                    Text(L("empty.title"))
-                        .font(.title2.weight(.semibold))
-                    Text(L("empty.subtitle"))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(32)
-            }
-            .navigationTitle(L("history.title"))
-        }
     }
 
     /// Models = the future manager. For the shell it surfaces the RAM-adaptive default the factory picked —
