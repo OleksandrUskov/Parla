@@ -357,12 +357,16 @@ public enum HistoryStore {
     /// audio dir AND the folder-watch dedup set — so migrated records keep playback and the watched
     /// folder doesn't re-transcribe everything once. All guarded by "target missing" → idempotent.
     private static func migrateLegacyIfNeeded() {
+        // "Murmur" (Parla's former name) was a macOS-only app → iOS never had that Application Support dir.
+        // Under the iOS sandbox this migration is at best dead FS churn on every launch, so skip it there.
+        #if os(macOS)
         let parla = fileURL.deletingLastPathComponent()
         migrate(target: fileURL, legacy: legacyBase.appendingPathComponent("history.json"))
         migrate(target: parla.appendingPathComponent("processed.json"),
                 legacy: legacyBase.appendingPathComponent("processed.json"))
         migrateDir(target: parla.appendingPathComponent("audio", isDirectory: true),
                    legacy: legacyBase.appendingPathComponent("audio", isDirectory: true))
+        #endif
     }
 
     /// Crash-safe copy: stage to a temp sibling, then atomically rename into place. A crash (or full
