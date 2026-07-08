@@ -285,4 +285,5 @@
 "onboarding.ffmpeg.title"   = "Готов к аудио из Telegram";
 "onboarding.ffmpeg.bundled" = "ffmpeg уже встроен — ставить ничего не надо. Ogg/Opus, m4a, mp3, wav и другое работают сразу.";
 "onboarding.start"          = "Начать";
+"firstrun.later"            = "Позже";
 "status.loadingmodel.firstrun" = "Первый запуск дольше — компилирует модель под Apple Neural Engine (разово). Дальше компиляция пропускается, остаётся только загрузка в память.";

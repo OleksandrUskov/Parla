@@ -285,4 +285,5 @@
 "onboarding.ffmpeg.title"   = "Ready for Telegram audio";
 "onboarding.ffmpeg.bundled" = "ffmpeg is built in — nothing to install. Ogg/Opus, m4a, mp3, wav and more just work.";
 "onboarding.start"          = "Get started";
+"firstrun.later"            = "Maybe later";
 "status.loadingmodel.firstrun" = "First run is slower — it compiles the model for the Apple Neural Engine (one-time). Later launches skip that and just load it into memory.";

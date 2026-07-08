@@ -22,4 +22,15 @@ public enum ModelTierSelector {
         default:               return base        // ~4 GB (SE) / while-downloading floor
         }
     }
+
+    /// Human-facing download size for a variant — the SAME localized estimate the tier list shows, but computed
+    /// from the name so it's available BEFORE the (networked) model list loads, for the first-run 4.2.3 screen.
+    /// Order matters: the 626 MB turbo also matches "large-v3", so test the compact turbo first.
+    public static func sizeEstimate(for model: String) -> String {
+        if model.contains("626MB") || model.contains("large-v3-v20240930") { return L("model.size.turbo") }
+        if model.contains("large-v3") { return L("model.size.large") }
+        if model.contains("small") { return L("model.size.small") }
+        if model.contains("tiny") { return L("model.size.tiny") }
+        return L("model.size.base")   // base + the safe fallback
+    }
 }
