@@ -31,6 +31,33 @@ final class AVAssetDecodeTests: XCTestCase {
                        "decoded length \(out.length) should be ~\(Int(expected)) frames")
     }
 
+    func testLane2ChunkingCutsExactBoundaries() throws {
+        let seconds = 5.0
+        let chunkLength = 2.0
+        let framesPerChunk = 32_000            // 2 s @ 16 kHz
+        let src = try makeSineMP4(seconds: seconds, sampleRate: 44_100)
+        defer { try? FileManager.default.removeItem(at: src) }
+
+        let chunks = try OpusAudioDecoder().splitIntoChunks(src, chunkLength: chunkLength)
+        defer { chunks.first.map { try? FileManager.default.removeItem(at: $0.deletingLastPathComponent()) } }
+
+        // ceil(5 s / 2 s) = 3 chunks; exact cutting → the first two are precisely one chunk long.
+        XCTAssertEqual(chunks.count, 3, "5 s split at 2 s should yield 3 chunks")
+        XCTAssertEqual(chunks, chunks.sorted { $0.lastPathComponent < $1.lastPathComponent }, "chunks must be ordered")
+        XCTAssertEqual(Set(chunks.map { $0.deletingLastPathComponent() }).count, 1, "all chunks under one temp dir")
+
+        var totalFrames: AVAudioFramePosition = 0
+        for (i, chunk) in chunks.enumerated() {
+            let f = try AVAudioFile(forReading: chunk)
+            XCTAssertEqual(f.fileFormat.sampleRate, 16_000)
+            XCTAssertEqual(f.fileFormat.channelCount, 1)
+            if i < 2 { XCTAssertEqual(f.length, AVAudioFramePosition(framesPerChunk), "chunk \(i) must be an exact boundary cut") }
+            totalFrames += f.length
+        }
+        // No frames dropped across the split (within AAC priming/padding slack).
+        XCTAssertEqual(Double(totalFrames), seconds * 16_000, accuracy: 2_400)
+    }
+
     // MARK: - Synthetic AAC/mp4 source (no fixture on disk)
 
     /// Encode `seconds` of a 440 Hz sine (mono, `sampleRate`) to an AAC `.mp4` via `AVAssetWriter`. Returns the

@@ -5,65 +5,113 @@ import CoreMedia
 import opus
 
 /// iOS in-process `AudioDecoding` (iOS-port P1.3). The macOS ffmpeg subprocess is impossible on iOS, so the
-/// transcription pipeline's decode seam is served here by two pure-library lanes:
+/// transcription pipeline's decode seam is served here by two pure-library lanes that both stream one small
+/// mono Float32 buffer at a time (bounded memory regardless of length):
 ///
-/// - **LANE-1 — Ogg/Opus (Opusfile):** Telegram `.ogg`/`.opus` → a mono Float WAV, stream-decoded page-by-page
-///   so a long recording never materializes in RAM (a 70-min file ≈ 200M floats ≈ 800 MB otherwise → jetsam,
-///   IOS_PORT §2). AVFoundation can't open Ogg/Opus, hence the dedicated `libopusfile` path.
-/// - **LANE-2 — everything else AVFoundation can demux (`AVAssetReader`):** mp4/mov/m4v/flac/… → a 16 kHz mono
-///   Float WAV. The reader resamples + downmixes for us and we drain it one `CMSampleBuffer` at a time, so
-///   memory stays O(one buffer) regardless of length. Throws when the source has no readable audio track (the
-///   caller surfaces the error / falls back — best-effort).
+/// - **LANE-1 — Ogg/Opus (`libopusfile`):** Telegram `.ogg`/`.opus` → 48 kHz mono. AVFoundation can't demux
+///   Ogg/Opus, hence the dedicated Opusfile path.
+/// - **LANE-2 — everything else AVFoundation can demux (`AVAssetReader`):** mp4/mov/m4v/flac/… → 16 kHz mono
+///   (the reader resamples + downmixes for us). Throws when the source has no readable audio track.
 ///
-/// AV-native containers (m4a/mp3/wav/aac/caf/aiff — `AppModel.avDecodable`) never reach this seam at all;
-/// WhisperKit opens them directly. Both lanes emit a Float32 WAV; WhisperKit's `transcribe(wavPath:)` resamples
-/// to 16 kHz on load (Lane-1 emits 48 kHz native, Lane-2 emits 16 kHz), so no extra resample is needed.
+/// AV-native containers (m4a/mp3/wav/aac/caf/aiff — `AppModel.avDecodable`) never reach this seam; WhisperKit
+/// opens them directly. Each lane's WAV is Float32 at its native rate; WhisperKit resamples to 16 kHz on load.
 ///
-/// FOLLOW-UPS (throw / no-op for now): streaming `splitIntoChunks` for the long-audio per-chunk progress UI,
-/// and playback renders. webm is scoped OUT of iOS v1 (§2 — no clean in-process decoder).
+/// `splitIntoChunks` streams either lane into `ChunkWriter`, which cuts EXACTLY on `chunkLength`-second
+/// boundaries so the pipeline's nominal per-chunk timeline offsets (`AudioChunker.stitch`, `k * chunkLength`)
+/// stay accurate with no compounding drift. webm is scoped OUT of iOS v1 (§2 — no clean in-process decoder).
 public struct OpusAudioDecoder: AudioDecoding {
     public init() {}
 
     private static let opusExtensions: Set<String> = ["ogg", "oga", "opus"]
+    private static let opusSampleRate = 48_000.0    // Opusfile decodes at the Opus-native rate
+    private static let avAssetSampleRate = 16_000.0 // AVAssetReader resamples to the engine's rate for us
+
+    // MARK: - AudioDecoding
 
     public func decodeToWav16k(_ src: URL) throws -> URL {
-        if Self.opusExtensions.contains(src.pathExtension.lowercased()) {
-            return try Self.decodeOpusToWav(src)         // Lane-1: Ogg/Opus via libopusfile
+        let lane = try Self.lane(for: src)
+        guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else {
+            throw AudioDecodingError.noDecoderAvailable
         }
-        return try Self.decodeViaAVAssetReader(src)      // Lane-2: mp4/mov/flac/… via AVFoundation
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent("parla-decode-\(UUID().uuidString).wav")
+        let out = try AVAudioFile(forWriting: dest, settings: format.settings)
+        do {
+            try lane.read(src, format) { try out.write(from: $0) }
+        } catch {
+            try? FileManager.default.removeItem(at: dest)   // drop a partial WAV so it can't masquerade as decoded
+            throw error
+        }
+        return dest
     }
 
-    /// Long-audio chunking is a follow-up → returning `[]` makes the pipeline fall back to a single pass
-    /// (WhisperKit windows long audio internally, so this is correct, just without our per-chunk progress UI).
-    public func splitIntoChunks(_ src: URL, chunkLength: Double) throws -> [URL] { [] }
-    public var isChunkingAvailable: Bool { false }
+    /// Split a long source into ~`chunkLength`-second 16 kHz/48 kHz mono WAV chunks under one temp dir (the
+    /// caller removes it, deriving it from the first chunk URL). An empty result → the caller falls back to a
+    /// single pass; since it can't derive a dir from zero chunks, this cleans its own temp dir in that case.
+    public func splitIntoChunks(_ src: URL, chunkLength: Double) throws -> [URL] {
+        let lane = try Self.lane(for: src)
+        guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else {
+            throw AudioDecodingError.noDecoderAvailable
+        }
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("parla-chunks-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let framesPerChunk = AVAudioFrameCount(max(1, chunkLength * lane.sampleRate))
+        let writer = ChunkWriter(dir: dir, format: format, framesPerChunk: framesPerChunk)
+        do {
+            try lane.read(src, format) { try writer.append($0) }
+            writer.close()
+        } catch {
+            try? FileManager.default.removeItem(at: dir)    // failed split → don't leak the temp chunk dir
+            throw error
+        }
+        let urls = writer.urls
+        if urls.isEmpty { try? FileManager.default.removeItem(at: dir) }
+        return urls
+    }
+
+    public var isChunkingAvailable: Bool { true }
     public func renderPlayableM4a(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
     public func renderPlayableWav(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
 
-    // MARK: - Lane 1 — Ogg/Opus (libopusfile)
+    // MARK: - Lane selection
 
-    /// Stream-decode Ogg/Opus to a mono Float32 WAV (48 kHz). `op_open_file` reads the container incrementally
-    /// from disk; each `op_read_float` page is downmixed to mono and appended to the AVAudioFile → O(one page)
-    /// memory regardless of length. Returns the temp WAV URL (the caller removes it after transcription).
-    static func decodeOpusToWav(_ src: URL) throws -> URL {
+    /// A lane streams mono Float32 buffers (at `sampleRate`) from `src` into a `sink`, one small buffer at a time.
+    private typealias FrameReader = (_ src: URL, _ format: AVAudioFormat,
+                                     _ sink: (AVAudioPCMBuffer) throws -> Void) throws -> Void
+
+    private static func lane(for src: URL) throws -> (read: FrameReader, sampleRate: Double) {
+        if opusExtensions.contains(src.pathExtension.lowercased()) {
+            return (readOpusFrames, opusSampleRate)
+        }
+        return (readAVAssetFrames, avAssetSampleRate)
+    }
+
+    private static func monoFloatFormat(sampleRate: Double) -> AVAudioFormat? {
+        AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)
+    }
+
+    // MARK: - Lane 1 read loop — Ogg/Opus (libopusfile), 48 kHz
+
+    /// `op_open_file` reads the container incrementally from disk; each `op_read_float` page is downmixed to
+    /// mono and handed to `sink`. O(one page) memory regardless of length. The single reused `mono` buffer is
+    /// safe because `sink` consumes it synchronously (AVAudioFile.write / ChunkWriter copy on write).
+    private static func readOpusFrames(_ src: URL, _ format: AVAudioFormat,
+                                       _ sink: (AVAudioPCMBuffer) throws -> Void) throws {
         var err: Int32 = 0
         guard let file = op_open_file(src.path, &err), err == 0 else { throw AudioDecodingError.noDecoderAvailable }
         defer { op_free(file) }
 
         let channels = Int(op_channel_count(file, -1))
         guard channels > 0,
-              let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false),
               let mono = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 5760)   // Opusfile yields ≤ 5760 frames/channel per call
         else { throw AudioDecodingError.noDecoderAvailable }
-
-        let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("parla-opus-\(UUID().uuidString).wav")
-        let out = try AVAudioFile(forWriting: dest, settings: format.settings)
 
         var interleaved = [Float](repeating: 0, count: 5760 * channels)
         while true {
             let n = interleaved.withUnsafeMutableBufferPointer {
-                op_read_float(file, $0.baseAddress, Int32($0.count), nil)   // returns frames PER CHANNEL, 0 = EOF, <0 = error
+                op_read_float(file, $0.baseAddress, Int32($0.count), nil)   // frames PER CHANNEL, 0 = EOF, <0 = error
             }
             if n < 0 { throw AudioDecodingError.noDecoderAvailable }
             if n == 0 { break }
@@ -79,20 +127,19 @@ public struct OpusAudioDecoder: AudioDecoding {
                 }
             }
             mono.frameLength = AVAudioFrameCount(frames)
-            try out.write(from: mono)
+            try sink(mono)
         }
-        return dest
     }
 
-    // MARK: - Lane 2 — AVAssetReader (mp4/mov/m4v/flac/…)
+    // MARK: - Lane 2 read loop — AVAssetReader (mp4/mov/m4v/flac/…), 16 kHz
 
-    /// Output PCM spec handed to `AVAssetReaderTrackOutput`: the reader resamples the source to 16 kHz and
-    /// downmixes to mono for us, delivering interleaved Float32 (mono → interleaved == non-interleaved).
-    /// Computed (not a stored `static let`) so the `[String: Any]` isn't a non-Sendable global under `.v6`.
-    static var pcm16kMonoSettings: [String: Any] {
+    /// Output PCM spec for `AVAssetReaderTrackOutput`: the reader resamples to 16 kHz and downmixes to mono,
+    /// delivering interleaved Float32 (mono → interleaved == non-interleaved). Computed (not a stored `static
+    /// let`) so the `[String: Any]` isn't a non-Sendable global under `.v6`.
+    private static var pcm16kMonoSettings: [String: Any] {
         [
             AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16_000,
+            AVSampleRateKey: avAssetSampleRate,
             AVNumberOfChannelsKey: 1,
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,
@@ -101,34 +148,21 @@ public struct OpusAudioDecoder: AudioDecoding {
         ]
     }
 
-    /// Decode any AVFoundation-demuxable container (mp4/mov/m4v/flac/…) to a 16 kHz mono Float32 WAV, streaming
-    /// one `CMSampleBuffer` at a time so memory stays bounded on a long file. Throws when there's no readable
-    /// audio track (unknown/corrupt container, or a video-only file). The synchronous `tracks(withMediaType:)`
-    /// is intentional: this seam is `throws`-sync and always runs off the main actor (`Task.detached` in the
-    /// pipeline), so the brief synchronous property load is fine.
-    static func decodeViaAVAssetReader(_ src: URL) throws -> URL {
+    /// Drain the first audio track one `CMSampleBuffer` at a time into `sink`. The synchronous
+    /// `tracks(withMediaType:)` is intentional: this seam is `throws`-sync and always runs off the main actor
+    /// (`Task.detached` in the pipeline), so the brief synchronous property load is fine.
+    private static func readAVAssetFrames(_ src: URL, _ format: AVAudioFormat,
+                                          _ sink: (AVAudioPCMBuffer) throws -> Void) throws {
         let asset = AVURLAsset(url: src)
         guard let track = asset.tracks(withMediaType: .audio).first else {
             throw AudioDecodingError.noDecoderAvailable   // no audio stream / unreadable container
         }
-
         let reader = try AVAssetReader(asset: asset)
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: Self.pcm16kMonoSettings)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: pcm16kMonoSettings)
         output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else { throw AudioDecodingError.noDecoderAvailable }
         reader.add(output)
-
-        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)
-        else { throw AudioDecodingError.noDecoderAvailable }
-
-        let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("parla-av-\(UUID().uuidString).wav")
-        let out = try AVAudioFile(forWriting: dest, settings: format.settings)
-
-        guard reader.startReading() else {
-            try? FileManager.default.removeItem(at: dest)
-            throw reader.error ?? AudioDecodingError.noDecoderAvailable
-        }
+        guard reader.startReading() else { throw reader.error ?? AudioDecodingError.noDecoderAvailable }
 
         while reader.status == .reading {
             guard let sample = output.copyNextSampleBuffer() else { break }
@@ -143,14 +177,71 @@ public struct OpusAudioDecoder: AudioDecoding {
             let status = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: byteCount,
                                                     destination: buf.floatChannelData![0])
             guard status == kCMBlockBufferNoErr else { continue }
-            try out.write(from: buf)
+            try sink(buf)
+        }
+        if reader.status == .failed { throw reader.error ?? AudioDecodingError.noDecoderAvailable }
+    }
+}
+
+/// Streams mono Float32 buffers into a sequence of `chunk_%04d.wav` files, cutting EXACTLY on `framesPerChunk`
+/// boundaries (a buffer that straddles a boundary is split) so every chunk but the last is exactly
+/// `chunkLength` seconds — keeping `AudioChunker`'s nominal `k * chunkLength` offsets drift-free. Only one
+/// `AVAudioFile` is open at a time → bounded memory. Used synchronously within one `splitIntoChunks` call
+/// (never shared across threads), so it needs no locking.
+private final class ChunkWriter {
+    private let dir: URL
+    private let format: AVAudioFormat
+    private let framesPerChunk: AVAudioFrameCount
+    private var current: AVAudioFile?
+    private var framesInCurrent: AVAudioFrameCount = 0
+    private var index = 0
+    private(set) var urls: [URL] = []
+
+    init(dir: URL, format: AVAudioFormat, framesPerChunk: AVAudioFrameCount) {
+        self.dir = dir
+        self.format = format
+        self.framesPerChunk = framesPerChunk
+    }
+
+    func append(_ buffer: AVAudioPCMBuffer) throws {
+        let total = buffer.frameLength
+        guard total > 0 else { return }
+        if current == nil { try rollover() }
+
+        // Fast path: the whole buffer fits in the current chunk → write as-is (no copy).
+        if framesInCurrent + total <= framesPerChunk {
+            try current!.write(from: buffer)
+            framesInCurrent += total
+            return
         }
 
-        guard reader.status != .failed else {
-            try? FileManager.default.removeItem(at: dest)
-            throw reader.error ?? AudioDecodingError.noDecoderAvailable
+        // Straddles ≥ 1 boundary → copy out exact slices, rolling over on each full chunk.
+        let src = buffer.floatChannelData![0]
+        var offset: AVAudioFrameCount = 0
+        while offset < total {
+            if framesInCurrent >= framesPerChunk { try rollover() }
+            let take = min(framesPerChunk - framesInCurrent, total - offset)
+            guard let slice = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: take) else {
+                throw AudioDecodingError.noDecoderAvailable
+            }
+            slice.frameLength = take
+            slice.floatChannelData![0].update(from: src + Int(offset), count: Int(take))
+            try current!.write(from: slice)
+            offset += take
+            framesInCurrent += take
         }
-        return dest
+    }
+
+    /// Release the open file so its buffered frames flush to disk (AVAudioFile writes eagerly, but dropping the
+    /// reference is the clean end-of-stream). Chunk URLs are already recorded in `urls`.
+    func close() { current = nil }
+
+    private func rollover() throws {
+        let url = dir.appendingPathComponent(String(format: "chunk_%04d.wav", index))
+        current = try AVAudioFile(forWriting: url, settings: format.settings)
+        urls.append(url)
+        framesInCurrent = 0
+        index += 1
     }
 }
 #endif
