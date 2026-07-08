@@ -22,14 +22,20 @@ struct ParlaiOSApp: App {
 }
 
 /// First-run gate: show the 4.2.3 model-download screen until the user downloads (or defers), then the main UI.
+/// Keeps the display awake while any job is in flight (model download or transcription) — a long on-device run
+/// must survive the screen not locking (P1.4f).
 private struct RootView: View {
+    @Environment(AppModel.self) private var model
     @AppStorage("didFirstRunSetup") private var didFirstRun = false
 
     var body: some View {
-        if didFirstRun {
-            RootTabView()
-        } else {
-            FirstRunDownloadView(onDone: { didFirstRun = true })
+        Group {
+            if didFirstRun {
+                RootTabView()
+            } else {
+                FirstRunDownloadView(onDone: { didFirstRun = true })
+            }
         }
+        .keepAwake(while: model.isBusy)
     }
 }

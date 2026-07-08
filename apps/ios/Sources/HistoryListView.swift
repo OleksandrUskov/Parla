@@ -134,6 +134,8 @@ struct HistoryListView: View {
     // MARK: - Busy / failed / empty (ported from the P1.4b home, unchanged)
 
     /// Busy = copying an import, downloading the model (determinate), the one-time ANE compile, or transcribing.
+    /// A long recording chunks into an "N of M" pass (`BatchProgress`) — a multi-file batch too — so both get a
+    /// determinate bar instead of a bare spinner (a 70-min file is ~35 chunks; the bar is real feedback).
     @ViewBuilder private var busyView: some View {
         VStack(spacing: 14) {
             switch model.phase {
@@ -145,6 +147,14 @@ struct HistoryListView: View {
                 ProgressView().controlSize(.large)
                 Text(L("status.loadingmodel.firstrun"))
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            case .transcribing(let name, let batch), .preparing(let name, let batch):
+                if let b = batch, b.total > 1 {
+                    ProgressView(value: Double(b.done), total: Double(b.total))
+                        .frame(maxWidth: 240).tint(Brand.accent)
+                } else {
+                    ProgressView().controlSize(.large)
+                }
+                Text(name).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
             default:
                 ProgressView().controlSize(.large)
                 Text(busyLabel).font(.callout).foregroundStyle(.secondary)
