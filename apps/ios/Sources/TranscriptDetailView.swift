@@ -1,0 +1,64 @@
+import SwiftUI
+import ParlaCore
+
+/// The rich reading surface (iOS-port P1.4d) — a pinned player + Transcript/Digest picker on top, the scrolling
+/// transcript below (tap-to-seek segments, or collapsible chapters for long audio, or the per-chapter digest).
+/// Composed ENTIRELY from the SHARED ParlaCore views (`TransportBar`/`SegmentList`/`ChapterListView`/
+/// `ChapterDigestView`) the Mac app also renders → true cross-platform parity. Chrome (background/title/toolbar)
+/// is the caller's; this is the reading content. Mirrors the macOS `TranscriptCard` reading body 1:1.
+struct TranscriptDetailView: View {
+    @Environment(AppModel.self) private var model
+    let item: TranscriptItem
+    @State private var player = PlaybackController()
+    @State private var showDigest = false
+
+    private var audioURL: URL? { AudioStore.playableURL(for: item) }
+    private var hasChapterDigest: Bool { (item.chapterSummaries ?? []).contains { !$0.summary.isEmpty } }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            pinnedTop
+            ScrollView { readingBody.padding(.bottom, 24) }
+        }
+        .padding(.horizontal)
+        .task(id: item.id) {
+            showDigest = false
+            player.load(audioURL)   // AVAudioSession(.playback) is wired inside PlaybackController.load on iOS
+        }
+    }
+
+    /// Fixed above the scroll: the player transport + (for a long note with summaries) the Transcript⇄Digest toggle.
+    private var pinnedTop: some View {
+        VStack(spacing: 10) {
+            TransportBar(player: player, hasAudio: audioURL != nil)
+            if hasChapterDigest {
+                Picker("", selection: $showDigest) {
+                    Text(L("view.transcript")).tag(false)
+                    Text(L("view.digest")).tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 280)
+            }
+        }
+    }
+
+    @ViewBuilder private var readingBody: some View {
+        if showDigest, hasChapterDigest {
+            ChapterDigestView(item: item)
+        } else if model.showTimestamps, !item.isEdited, !item.segments.isEmpty {
+            if AudioChunker.isLong(durationSec: item.durationSec) {
+                ChapterListView(item: item, player: player, tappable: audioURL != nil)
+            } else {
+                SegmentList(segments: item.segments, player: player, tappable: audioURL != nil)
+            }
+        } else {
+            Text(item.text)
+                .font(.system(.body, design: .rounded))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+}

@@ -16,7 +16,7 @@ struct HomeView: View {
                 AuroraBackground().ignoresSafeArea()
                 content
             }
-            .navigationTitle(L("history.title"))
+            .navigationTitle(navTitle)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showImporter = true } label: { Image(systemName: "plus.circle.fill") }
@@ -41,24 +41,17 @@ struct HomeView: View {
             }
             .padding(32)
         } else if let item = model.selectedItem {
-            transcript(item)
+            TranscriptDetailView(item: item)   // rich reading surface: pinned player + segments/chapters/digest
         } else {
             emptyState
         }
     }
 
-    private func transcript(_ item: TranscriptItem) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(item.displayTitle)
-                    .font(.title3.weight(.semibold))
-                Text(item.text)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding()
-        }
+    /// The nav title reflects the shown transcript (its title) or the tab name when idle/empty.
+    private var navTitle: String {
+        if case .failed = model.phase { return L("history.title") }
+        if !model.isBusy, let item = model.selectedItem { return item.displayTitle }
+        return L("history.title")
     }
 
     private var emptyState: some View {
