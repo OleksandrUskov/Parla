@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 import ParlaCore
 
 /// The rich reading surface (iOS-port P1.4d) — a pinned player + Transcript/Digest picker on top, the scrolling
@@ -24,6 +25,17 @@ struct TranscriptDetailView: View {
         .task(id: item.id) {
             showDigest = false
             player.load(audioURL)   // AVAudioSession(.playback) is wired inside PlaybackController.load on iOS
+        }
+        // The container audio copy (keepAudio) lands AFTER the transcript is first shown, so audioURL goes
+        // nil → real for the same item id (and .task doesn't re-fire on a same-id change). Reload when it
+        // arrives so a just-imported note gets a working player. load() is idempotent (guard loadedURL != url).
+        .onChange(of: audioURL) { _, url in player.load(url) }
+        // Tear down when the detail leaves the screen (HomeView swaps it out on a new import): PlaybackController
+        // has no deinit — stop() invalidates the 0.1s ticker — and we release the audio session so playback
+        // stops ducking other apps once the user navigates away.
+        .onDisappear {
+            player.stop()
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }
 

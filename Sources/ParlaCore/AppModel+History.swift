@@ -37,6 +37,7 @@ extension AppModel {
 
     public func delete(_ item: TranscriptItem) {
         AudioStore.remove(item)                 // drop the audio copy along with the entry
+        Self.pruneImportedSource(item.sourcePath)  // …and the iOS import-container copy (no-op elsewhere)
         EmbeddingStore.remove([item.id])        // …and its semantic vector (no orphan in embeddings.json)
         embeddingIndex[item.id] = nil           // keep the in-memory mirrors in sync (doc↔doc related + search)
         lemmaIndex[item.id] = nil
@@ -48,6 +49,7 @@ extension AppModel {
 
     public func clearHistory() {
         history.forEach(AudioStore.remove)
+        history.forEach { Self.pruneImportedSource($0.sourcePath) }   // …and the iOS import-container copies
         EmbeddingStore.pruneOrphans(keeping: [])   // wipe all vectors along with the history
         embeddingIndex.removeAll()
         lemmaIndex.removeAll()
@@ -55,6 +57,21 @@ extension AppModel {
         selection = nil
         relatedIDs = []
         HistoryStore.save(history)
+    }
+
+    /// Remove an iOS import-container copy (`Application Support/Parla/imports/<uuid>/<name>`) when its note is
+    /// deleted. The iOS import funnel keeps that copy as the note's `sourcePath` for re-transcribe, so without
+    /// this it leaks forever (unbounded disk growth on device). A no-op for any source OUTSIDE that dir (macOS
+    /// originals, AV-native drops) — the prefix guard makes it cross-platform-safe.
+    nonisolated static func pruneImportedSource(_ sourcePath: String?) {
+        guard let sourcePath else { return }
+        let fm = FileManager.default
+        guard let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                        appropriateFor: nil, create: false) else { return }
+        let importsRoot = support.appendingPathComponent("Parla/imports", isDirectory: true).path + "/"
+        let dir = (sourcePath as NSString).deletingLastPathComponent   // the per-import <uuid> dir
+        guard (dir + "/").hasPrefix(importsRoot) else { return }        // only Parla-managed imports
+        try? fm.removeItem(atPath: dir)
     }
 
     /// Export the entire history to a markdown file (save dialog). The picker is the `presentSavePanel`

@@ -25,7 +25,12 @@ extension AppModel {
         // device's live memory headroom, but ONLY when the user hasn't already chosen one. The bytes→variant
         // mapping is pure + unit-tested (ModelTierSelector); here we just feed it the live number.
         if UserDefaults.standard.string(forKey: "model") == nil {   // "model" == AppModel.Keys.model — no persisted choice
-            m.selectedModel = ModelTierSelector.defaultModel(availableBytes: UInt64(max(0, os_proc_available_memory())))
+            let available = os_proc_available_memory()
+            // 0 = the API is unavailable / returned unknown → keep the safe built-in default (626MB turbo) rather
+            // than force the `base` floor. (A momentary-pressure mis-tier is recoverable via the P1.4i model manager.)
+            if available > 0 {
+                m.selectedModel = ModelTierSelector.defaultModel(availableBytes: UInt64(available))
+            }
         }
 
         return m
