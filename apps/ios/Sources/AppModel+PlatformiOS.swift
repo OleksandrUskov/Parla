@@ -21,6 +21,13 @@ extension AppModel {
         m.copyToClipboard = { text in UIPasteboard.general.string = text }
         m.isAppActive = { UIApplication.shared.applicationState == .active }
 
+        // RAM-adaptive default model — jetsam is the iOS ceiling, so pick the largest tier that fits this
+        // device's live memory headroom, but ONLY when the user hasn't already chosen one. The bytes→variant
+        // mapping is pure + unit-tested (ModelTierSelector); here we just feed it the live number.
+        if UserDefaults.standard.string(forKey: "model") == nil {   // "model" == AppModel.Keys.model — no persisted choice
+            m.selectedModel = ModelTierSelector.defaultModel(availableBytes: UInt64(max(0, os_proc_available_memory())))
+        }
+
         return m
     }
 }
