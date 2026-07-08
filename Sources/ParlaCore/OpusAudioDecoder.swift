@@ -42,6 +42,13 @@ public struct OpusAudioDecoder: AudioDecoding {
             try? FileManager.default.removeItem(at: dest)   // drop a partial WAV so it can't masquerade as decoded
             throw error
         }
+        // A source that decoded no audio (empty/silent header, or a track that yielded no readable samples) must
+        // NOT return a 0-frame WAV as success — downstream that becomes a silent empty transcript with no error
+        // surfaced. Fail loudly instead (mirrors splitIntoChunks, which already treats an empty split as failure).
+        guard out.length > 0 else {
+            try? FileManager.default.removeItem(at: dest)
+            throw AudioDecodingError.noDecoderAvailable
+        }
         return dest
     }
 
@@ -103,18 +110,31 @@ public struct OpusAudioDecoder: AudioDecoding {
         guard let file = op_open_file(src.path, &err), err == 0 else { throw AudioDecodingError.noDecoderAvailable }
         defer { op_free(file) }
 
-        let channels = Int(op_channel_count(file, -1))
-        guard channels > 0,
-              let mono = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 5760)   // Opusfile yields ≤ 5760 frames/channel per call
-        else { throw AudioDecodingError.noDecoderAvailable }
+        let firstChannels = Int(op_channel_count(file, -1))
+        guard firstChannels > 0 else { throw AudioDecodingError.noDecoderAvailable }
 
-        var interleaved = [Float](repeating: 0, count: 5760 * channels)
+        // `op_read_float` never writes past the buffer size we pass, so a fixed buffer is overflow-safe for ANY
+        // link's channel count. Size it (and the mono buffer) for the first link's count: that also covers the
+        // worst case where a later CHAINED link has fewer channels (a mono link yields up to `capacity` frames,
+        // which the mono buffer must be able to hold). Telegram voice is single-link mono → capacity == 5760.
+        let capacity = 5760 * firstChannels                                // Opusfile yields ≤ 5760 frames/channel per call
+        guard let mono = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(capacity)) else {
+            throw AudioDecodingError.noDecoderAvailable
+        }
+        var interleaved = [Float](repeating: 0, count: capacity)
+
         while true {
+            var li: Int32 = -1
             let n = interleaved.withUnsafeMutableBufferPointer {
-                op_read_float(file, $0.baseAddress, Int32($0.count), nil)   // frames PER CHANNEL, 0 = EOF, <0 = error
+                op_read_float(file, $0.baseAddress, Int32($0.count), &li)   // frames PER CHANNEL; fills `li` (the link)
             }
-            if n < 0 { throw AudioDecodingError.noDecoderAvailable }
-            if n == 0 { break }
+            if n == OP_HOLE { continue }                                   // recoverable gap (corrupt/missing page) → keep going
+            if n < 0 { throw AudioDecodingError.noDecoderAvailable }        // genuine error (OP_EREAD/OP_EBADPACKET/…)
+            if n == 0 { break }                                            // EOF
+
+            // Re-read THIS link's channel count — a chained stream can change it link-to-link, and a stale count
+            // would mis-stride the downmix (garble) or, for stereo→mono, overrun the mono buffer.
+            let channels = max(1, Int(op_channel_count(file, li)))
             let frames = Int(n)
             let dst = mono.floatChannelData![0]
             if channels == 1 {
@@ -154,7 +174,11 @@ public struct OpusAudioDecoder: AudioDecoding {
     private static func readAVAssetFrames(_ src: URL, _ format: AVAudioFormat,
                                           _ sink: (AVAudioPCMBuffer) throws -> Void) throws {
         let asset = AVURLAsset(url: src)
-        guard let track = asset.tracks(withMediaType: .audio).first else {
+        let audioTracks = asset.tracks(withMediaType: .audio)
+        // Prefer an ENABLED audio track over raw track order: multi-audio-track containers (screen recordings =
+        // mic + system audio, multi-language m4v) can list a non-default track first, and `.first` would
+        // silently transcribe the wrong/silent one. Falls back to the first track when none flags enabled.
+        guard let track = audioTracks.first(where: { $0.isEnabled }) ?? audioTracks.first else {
             throw AudioDecodingError.noDecoderAvailable   // no audio stream / unreadable container
         }
         let reader = try AVAssetReader(asset: asset)
