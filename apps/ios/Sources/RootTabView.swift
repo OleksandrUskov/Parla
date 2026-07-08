@@ -10,7 +10,7 @@ struct RootTabView: View {
 
     var body: some View {
         TabView {
-            HomeView()
+            HistoryListView()
                 .tabItem { Label(L("history.title"), systemImage: "waveform") }
             modelsTab
                 .tabItem { Label(L("model.manager.title"), systemImage: "square.stack.3d.up.fill") }

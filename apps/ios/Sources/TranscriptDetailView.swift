@@ -30,7 +30,8 @@ struct TranscriptDetailView: View {
         // nil → real for the same item id (and .task doesn't re-fire on a same-id change). Reload when it
         // arrives so a just-imported note gets a working player. load() is idempotent (guard loadedURL != url).
         .onChange(of: audioURL) { _, url in player.load(url) }
-        // Tear down when the detail leaves the screen (HomeView swaps it out on a new import): PlaybackController
+        // Tear down when the detail leaves the screen (nav pop, or a fresh import auto-pushes over it):
+        // PlaybackController
         // has no deinit — stop() invalidates the 0.1s ticker — and we release the audio session so playback
         // stops ducking other apps once the user navigates away.
         .onDisappear {
