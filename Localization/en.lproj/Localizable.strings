@@ -285,5 +285,10 @@
 "onboarding.ffmpeg.title"   = "Ready for Telegram audio";
 "onboarding.ffmpeg.bundled" = "ffmpeg is built in — nothing to install. Ogg/Opus, m4a, mp3, wav and more just work.";
 "onboarding.start"          = "Get started";
+// iOS onboarding (P1.4l) — device-neutral copy (macOS onboarding.* says "Mac"/"drag")
+"onboarding.ios.title" = "Transcribe voice to text — 100% on your device.";
+"onboarding.ios.step1.title" = "Import a file, get text";
+"onboarding.ios.step1.body" = "Share or import any voice message, audio, or video and Parla writes out the words — Telegram .ogg/.opus too.";
+"onboarding.ios.privacy.body" = "Nothing is uploaded. The only network use is the one-time model download — after that, fully offline.";
 "firstrun.later"            = "Maybe later";
 "status.loadingmodel.firstrun" = "First run is slower — it compiles the model for the Apple Neural Engine (one-time). Later launches skip that and just load it into memory.";

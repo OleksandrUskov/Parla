@@ -27,11 +27,14 @@ struct ParlaiOSApp: App {
 private struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("didOnboardIOS") private var didOnboard = false
     @AppStorage("didFirstRunSetup") private var didFirstRun = false
 
     var body: some View {
         Group {
-            if didFirstRun {
+            if !didOnboard {
+                OnboardingView(onDone: { didOnboard = true })   // intro + privacy, then the model-download gate
+            } else if didFirstRun {
                 RootTabView()
             } else {
                 FirstRunDownloadView(onDone: { didFirstRun = true })
