@@ -44,11 +44,38 @@ public actor TranscriptionEngine {
 
     public init() {}
 
-    /// Where WhisperKit stores models: ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml
-    public static func modelsRoot() -> URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml", isDirectory: true)
+    /// The `downloadBase` handed to WhisperKit/HubApi — it appends `models/argmaxinc/whisperkit-coreml`. Matches
+    /// HubApi's own default (`<base>/huggingface`), so passing it explicitly on macOS is a no-op (still ~/Documents).
+    /// On iOS the weights are large + re-downloadable and MUST stay OUT of Documents (user-visible + iCloud-backed
+    /// → App Store 2.5 rejection): use Application Support (also excluded from backup — see `prepareModelStorage`).
+    public static func downloadBase() -> URL {
+        #if os(iOS)
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #else
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #endif
+        return base.appendingPathComponent("huggingface", isDirectory: true)   // == HubApi's default component
     }
+
+    /// Where WhisperKit stores models: `<downloadBase>/models/argmaxinc/whisperkit-coreml`
+    /// (macOS: ~/Documents/huggingface/… unchanged; iOS: Application Support/huggingface/…).
+    public static func modelsRoot() -> URL {
+        downloadBase().appendingPathComponent("models/argmaxinc/whisperkit-coreml", isDirectory: true)
+    }
+
+    #if os(iOS)
+    /// Create the model-download tree and mark it excluded-from-backup, so the large re-downloadable weights never
+    /// inflate the user's iCloud backup (App Store 2.5). Idempotent; only the `huggingface` subtree is touched —
+    /// history/audio under Application Support/Parla stay backed up. Call before any download.
+    public static func prepareModelStorage() {
+        let hf = downloadBase()   // Application Support/huggingface
+        try? FileManager.default.createDirectory(at: hf, withIntermediateDirectories: true)
+        var url = hf
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+    }
+    #endif
     public static func localFolder(_ model: String) -> URL {
         modelsRoot().appendingPathComponent(model, isDirectory: true)
     }
@@ -107,13 +134,19 @@ public actor TranscriptionEngine {
         }
 
         progress(.downloading(0))
+        #if os(iOS)
+        Self.prepareModelStorage()   // weights out of iCloud backup before the auto-download (App Store 2.5)
+        #endif
         // `@Sendable` is LOAD-BEARING, not cosmetic: WhisperKit's `progressCallback` is `((Progress) -> Void)?`
         // (NOT @Sendable), so without it this closure inherits THIS actor's isolation — and WhisperKit invokes
         // it off-actor on the cooperative pool (Hub download thread), which traps (`swift_task_isCurrentExecutor`,
         // the same crash class as the MicRecorder tap). `@Sendable` strips the isolation (it only reads `p` and
         // calls the already-@Sendable `progress`). The sibling call site in `AppModel+Models.swift` is @Sendable
         // for the same reason — keep BOTH that way.
-        let folder = try await WhisperKit.download(variant: model, progressCallback: { @Sendable p in
+        // downloadBase keeps the auto-download in lockstep with `modelsRoot()`/`isDownloaded()` (esp. iOS's
+        // Application Support relocation) — matches HubApi's default on macOS, so it's a no-op there.
+        let folder = try await WhisperKit.download(variant: model, downloadBase: Self.downloadBase(),
+                                                   progressCallback: { @Sendable p in
             progress(.downloading(p.fractionCompleted))
         })
         progress(.loading)

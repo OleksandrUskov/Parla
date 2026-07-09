@@ -41,8 +41,14 @@ extension AppModel {
         guard !isBusy, downloadingModel == nil, !isDownloaded(name) else { return }
         downloadingModel = name
         downloadProgress = 0
+        #if os(iOS)
+        TranscriptionEngine.prepareModelStorage()   // weights out of iCloud backup before download (App Store 2.5)
+        #endif
         do {
-            _ = try await WhisperKit.download(variant: name, progressCallback: { @Sendable [weak self] p in
+            // downloadBase keeps the download in lockstep with modelsRoot()/isDownloaded() — matches HubApi's
+            // default on macOS (no-op), and lands the weights in Application Support on iOS (see prepareModelStorage).
+            _ = try await WhisperKit.download(variant: name, downloadBase: TranscriptionEngine.downloadBase(),
+                                              progressCallback: { @Sendable [weak self] p in
                 // @Sendable: the callback crosses into WhisperKit's nonisolated download. `self`
                 // (a @MainActor class → Sendable) is touched only inside the @MainActor Task hop.
                 Task { @MainActor in self?.downloadProgress = p.fractionCompleted }
