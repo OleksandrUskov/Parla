@@ -26,6 +26,7 @@ struct ParlaiOSApp: App {
 /// must survive the screen not locking (P1.4f).
 private struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("didFirstRunSetup") private var didFirstRun = false
 
     var body: some View {
@@ -37,5 +38,15 @@ private struct RootView: View {
             }
         }
         .keepAwake(while: model.isBusy)
+        // Pick up anything the Share Extension dropped in the App Group inbox — on cold launch and every
+        // foreground. Gated on didFirstRun so a shared file waits for the model-download gate instead of
+        // failing to transcribe with no weights.
+        .task { drainShareInbox() }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { drainShareInbox() } }
+    }
+
+    private func drainShareInbox() {
+        guard didFirstRun else { return }
+        ShareInbox.drain(into: model)
     }
 }

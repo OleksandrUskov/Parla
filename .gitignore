@@ -14,8 +14,9 @@ Resources/AppIcon.icns
 Vendor/ffmpeg/ffmpeg-*/
 Vendor/ffmpeg/*.tar.xz
 
-# XcodeGen-generated iOS Xcode project — a build artifact; apps/ios/project.yml is the checked-in source of truth
+# XcodeGen-generated iOS Xcode project + entitlements — build artifacts; apps/ios/project.yml is the source of truth
 apps/ios/*.xcodeproj
+apps/ios/*.entitlements
 
 # iOS test fixtures — real Telegram voice notes; voice NEVER in git. Local-only; the decode test XCTSkips without them.
 apps/ios/Tests/Fixtures/

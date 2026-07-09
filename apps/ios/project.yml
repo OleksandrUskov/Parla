@@ -52,6 +52,13 @@ targets:
         product: opus
       - package: ogg
         product: ogg
+    # App Group: the shared container the Share Extension (P1.4j) copies incoming voice notes into, and the app
+    # drains on foreground. Generated from here by XcodeGen (the .entitlements is a gitignored build artifact).
+    entitlements:
+      path: Parla-iOS.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.parla.ios
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.parla.ios
