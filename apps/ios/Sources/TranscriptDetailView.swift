@@ -10,7 +10,9 @@ import ParlaCore
 struct TranscriptDetailView: View {
     @Environment(AppModel.self) private var model
     let item: TranscriptItem
-    @State private var player = PlaybackController()
+    /// Injected by the History shell (owned in HistoryTab, ABOVE the compact↔regular layout swap) so playback
+    /// survives an iPad rotate / Split-View resize that tears down and rebuilds this subtree (P2.2).
+    let player: PlaybackController
     @State private var showDigest = false
     @State private var shareItem: ShareItem?
     @State private var editing = false          // edit-in-place sheet (P2.1c)

@@ -15,7 +15,7 @@ struct RootTabView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            HistoryListView()
+            HistoryTab()
                 .tabItem { Label(L("history.title"), systemImage: "waveform") }
                 .tag(RootTab.history)
             ModelManagerView()
