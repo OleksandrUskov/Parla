@@ -17,6 +17,7 @@ struct ParlaiOSApp: App {
             RootView()
                 .environment(model)
                 .preferredColorScheme(.dark)   // Parla is dark-theme only, like the Mac app
+                .task { ParlaRuntime.model = model }   // app-bound App Intents (Siri/Shortcuts) reach the live model
         }
     }
 }
