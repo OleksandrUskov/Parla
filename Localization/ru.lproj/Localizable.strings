@@ -166,6 +166,7 @@
 "settings.system.audio"         = "Аудио для плеера";
 "settings.system.clearaudio"    = "Очистить аудио-кэш";
 "settings.system.audiohint"     = "Parla хранит копии аудио для повторного прослушивания и автоматически удаляет самые старые, когда их набирается слишком много. Текст расшифровок при этом сохраняется всегда.";
+"settings.title"                = "Настройки";
 "settings.section.interface"    = "Интерфейс";
 "settings.interface.language"   = "Язык интерфейса";
 "settings.interface.hint"       = "Язык приложения отдельно от языка распознавания речи.";

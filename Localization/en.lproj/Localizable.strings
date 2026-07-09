@@ -166,6 +166,7 @@
 "settings.system.audio"         = "Audio for the player";
 "settings.system.clearaudio"    = "Clear audio cache";
 "settings.system.audiohint"     = "Parla keeps audio copies for replay and automatically deletes the oldest when too many pile up. The transcript text is always kept.";
+"settings.title"                = "Settings";
 "settings.section.interface"    = "Interface";
 "settings.interface.language"   = "Interface language";
 "settings.interface.hint"       = "The app's language is separate from the speech-recognition language.";

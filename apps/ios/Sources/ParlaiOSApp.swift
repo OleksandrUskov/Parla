@@ -31,13 +31,15 @@ private struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("didOnboardIOS") private var didOnboard = false
     @AppStorage("didFirstRunSetup") private var didFirstRun = false
+    // Held here (above RootTabView's `.id(uiLanguage)` swap) so the selected tab survives a language switch.
+    @State private var tab: RootTab = .history
 
     var body: some View {
         Group {
             if !didOnboard {
                 OnboardingView(onDone: { didOnboard = true })   // intro + privacy, then the model-download gate
             } else if didFirstRun {
-                RootTabView()
+                RootTabView(selection: $tab)
             } else {
                 FirstRunDownloadView(onDone: { didFirstRun = true })
             }
