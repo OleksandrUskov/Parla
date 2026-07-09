@@ -14,6 +14,8 @@ struct TranscriptDetailView: View {
     @State private var showDigest = false
     @State private var shareItem: ShareItem?
     @State private var editing = false          // edit-in-place sheet (P2.1c)
+    @State private var ttsPlayer = PlaybackController()   // read-aloud (TTS P2.1d) — separate from the source player
+    @State private var synthesizingTTS = false            // brief spinner while the voice synthesizes the transcript
 
     private var audioURL: URL? { AudioStore.playableURL(for: item) }
     private var hasChapterDigest: Bool { (item.chapterSummaries ?? []).contains { !$0.summary.isEmpty } }
@@ -37,6 +39,7 @@ struct TranscriptDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { exportMenu }
             ToolbarItem(placement: .topBarTrailing) { actionsMenu }
+            ToolbarItem(placement: .topBarTrailing) { readAloudButton }
         }
         .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
         .sheet(isPresented: $editing) {
@@ -45,6 +48,7 @@ struct TranscriptDetailView: View {
         .task(id: item.id) {
             model.selection = item.id   // mark this the open note (audio-cache protection + Related bind to it)
             showDigest = false
+            ttsPlayer.stop()            // switching notes stops any in-progress read-aloud
             player.load(audioURL)       // AVAudioSession(.playback) is wired inside PlaybackController.load on iOS
             model.refreshRelatedNotes() // recompute the doc↔doc "Related" for the newly-opened note (best-effort)
         }
@@ -58,6 +62,7 @@ struct TranscriptDetailView: View {
         // stops ducking other apps once the user navigates away.
         .onDisappear {
             player.stop()
+            ttsPlayer.stop()            // stop any read-aloud when the detail leaves the screen
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }
@@ -161,6 +166,41 @@ struct TranscriptDetailView: View {
         if model.setTitle(title, for: item.id) { changed = true }
         if model.saveEdit(text, for: item.id) { changed = true }
         if changed { Task { await model.refreshSemanticIndex() } }
+    }
+
+    // MARK: - Read-aloud (TTS P2.1d) — mirrors the macOS TranscriptCard read-aloud button 1:1. SIM-VERIFIABLE
+    // (SystemTTSService is AVSpeechSynthesizer, not gated); its own PlaybackController so it never fights the
+    // note's source player. Best-effort + additive — off the isBusy lane, so it works even mid-transcription.
+
+    private var readAloudButton: some View {
+        Button { readAloud() } label: {
+            if synthesizingTTS { ProgressView().controlSize(.small) }
+            else { Image(systemName: ttsPlayer.isPlaying ? "stop.fill" : "speaker.wave.2.fill") }
+        }
+        .disabled(synthesizingTTS)
+        .accessibilityLabel(L("transcript.readaloud"))
+    }
+
+    /// Speak the raw transcript aloud with a system voice. Best-effort — any failure silently no-ops, never
+    /// disrupts the note. Toggles play↔stop; picks a voice for the note's language, falling back to any voice.
+    private func readAloud() {
+        if ttsPlayer.isPlaying { ttsPlayer.stop(); return }
+        let speech = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !speech.isEmpty,
+              let voice = model.tts.voices(forLanguage: item.language).first
+                       ?? model.tts.voices(forLanguage: "").first else { return }
+        player.stop()               // one audio at a time — pause the note's source player
+        synthesizingTTS = true
+        Task {
+            defer { synthesizingTTS = false }
+            do {
+                let url = try await model.tts.synthesize(speech, voice: voice)
+                ttsPlayer.load(url)
+                ttsPlayer.togglePlay()
+            } catch {
+                // best-effort: a TTS failure never disrupts the transcript UI
+            }
+        }
     }
 
     // MARK: - Export (P1.4h) — mirrors the macOS TranscriptCard menu 1:1, delivering via the system share sheet
