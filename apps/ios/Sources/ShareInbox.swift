@@ -35,14 +35,22 @@ enum ShareInbox {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
+    /// Single-flight guard: `drain` is invoked from BOTH the cold-launch `.task` AND every `scenePhase == .active`
+    /// change, which can fire together (or back-to-back on a fast background→foreground). Without this, two drains
+    /// read the same inbox files before either clears them → the SAME voice note imports + transcribes twice. The
+    /// guard is set synchronously on the main actor (no await before it) so only one drain can ever claim the files.
+    @MainActor private static var isDraining = false
+
     /// Move any shared files into the app's own import container and hand them to the pipeline, clearing the
     /// inbox. The copy runs off-main (a big video would otherwise freeze foregrounding). No-op if the container
-    /// is unavailable or empty. Call on app activation. Files land as a normal drop → queued if a job is running.
+    /// is unavailable, empty, or a drain is already in flight. Files land as a normal drop → queued if busy.
     @MainActor static func drain(into model: AppModel) {
-        guard let inbox = inboxURL() else { return }
+        guard !isDraining, let inbox = inboxURL() else { return }
         let pending = pendingFiles(in: inbox)
         guard !pending.isEmpty else { return }
+        isDraining = true
         Task {
+            defer { isDraining = false }
             let containerURLs = await Task.detached(priority: .userInitiated) {
                 let urls = ImportCoordinator.copyIntoContainer(pending)   // group files aren't scoped → a plain copy
                 pending.forEach { try? FileManager.default.removeItem(at: $0) }   // clear the inbox regardless

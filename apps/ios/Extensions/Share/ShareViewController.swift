@@ -22,10 +22,14 @@ class ShareViewController: UIViewController {
 
         let group = DispatchGroup()
         for provider in attachments {
+            // Load the item as its OWN declared type (registeredTypeIdentifiers is ordered most-specific-first)
+            // rather than assuming public.data — more reliable across share sources (a Telegram .ogg vends its
+            // audio type, not necessarily public.data) and it yields a file URL with the correct extension, which
+            // the app routes on (.ogg → Opus). Falls back to public.data if the provider declares nothing.
+            let typeID = provider.registeredTypeIdentifiers.first ?? UTType.data.identifier
             group.enter()
-            // Load any file-backed representation (audio/movie/ogg all conform to public.data). The URL is only
-            // valid inside the closure, so copy it into the shared inbox immediately.
-            provider.loadFileRepresentation(forTypeIdentifier: UTType.data.identifier) { url, _ in
+            // The URL is only valid inside the closure, so copy it into the shared inbox immediately.
+            provider.loadFileRepresentation(forTypeIdentifier: typeID) { url, _ in
                 defer { group.leave() }
                 guard let url else { return }
                 let dest = inbox.appendingPathComponent(Self.uniqueName(for: url))
