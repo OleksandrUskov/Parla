@@ -216,6 +216,18 @@ struct HistoryListView: View {
                     ProgressView().controlSize(.large)
                 }
                 Text(name).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                // Cancel + queued-count, mirroring the macOS progressChip. Cancel lands at the next file/chunk
+                // boundary (WhisperKit can't abort mid-decode) → show "Stopping…" until it does.
+                if model.cancelling {
+                    Text(L("transcribe.cancelling")).font(.caption).foregroundStyle(.secondary)
+                } else if model.currentTranscriptionTask != nil {
+                    Button(L("common.cancel")) { model.cancelTranscription() }
+                        .buttonStyle(.bordered).tint(Brand.accent)
+                }
+                if model.queuedCount > 0 {
+                    Text(Lf("queue.pending", model.queuedCount))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             default:
                 ProgressView().controlSize(.large)
                 Text(busyLabel).font(.callout).foregroundStyle(.secondary)
