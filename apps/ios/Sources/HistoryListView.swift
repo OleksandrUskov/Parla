@@ -103,11 +103,10 @@ struct HistoryListView: View {
         if let item = model.history.first(where: { $0.id == id }) {
             ZStack {
                 AuroraBackground().ignoresSafeArea()
-                TranscriptDetailView(item: item)
+                TranscriptDetailView(item: item)   // sets model.selection = item.id in its .task (single owner)
             }
             .navigationTitle(item.displayTitle)
             .navigationBarTitleDisplayMode(.inline)
-            .task { model.selection = id }   // keep Core selection in sync (audio-cache protection binds to it)
         } else {
             Color.clear.onAppear { if !path.isEmpty { path.removeLast() } }
         }

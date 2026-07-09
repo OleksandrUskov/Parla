@@ -19,12 +19,24 @@ struct TranscriptDetailView: View {
     var body: some View {
         VStack(spacing: 12) {
             pinnedTop
-            ScrollView { readingBody.padding(.bottom, 24) }
+            ScrollView {
+                // Insights above, transcript/chapters/digest in the middle, Related below — the macOS
+                // TranscriptCard reading stack, 1:1, via the same shared Core views (P1.4g).
+                VStack(alignment: .leading, spacing: 12) {
+                    InsightsView(item: item)
+                    readingBody
+                    RelatedNotesView()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 24)
+            }
         }
         .padding(.horizontal)
         .task(id: item.id) {
+            model.selection = item.id   // mark this the open note (audio-cache protection + Related bind to it)
             showDigest = false
-            player.load(audioURL)   // AVAudioSession(.playback) is wired inside PlaybackController.load on iOS
+            player.load(audioURL)       // AVAudioSession(.playback) is wired inside PlaybackController.load on iOS
+            model.refreshRelatedNotes() // recompute the doc↔doc "Related" for the newly-opened note (best-effort)
         }
         // The container audio copy (keepAudio) lands AFTER the transcript is first shown, so audioURL goes
         // nil → real for the same item id (and .task doesn't re-fire on a same-id change). Reload when it

@@ -601,7 +601,6 @@ struct TranscriptCard: View {
     @State private var isEditingTitle = false
     @State private var titleDraft = ""
     @FocusState private var titleFocused: Bool
-    @State private var summaryExpanded = false
     @State private var showDigest = false      // right pane: Transcript vs Digest (per-chapter summaries) reading mode
 
     private var text: String { item.display(timestamps: model.showTimestamps) }
@@ -648,7 +647,6 @@ struct TranscriptCard: View {
         .onChange(of: item.id, initial: true) { _, _ in
             if isEditing { cancelEdit() }
             if isEditingTitle { cancelTitleEdit() }
-            summaryExpanded = false          // each record opens with the transcript primary; expand the summary on demand
             showDigest = false               // ...and on the Transcript view, not the Digest
             player.load(audioURL)
             ttsPlayer.stop()                 // switching notes stops any in-progress read-aloud
@@ -702,116 +700,13 @@ struct TranscriptCard: View {
         }
     }
 
-    /// AI insight fields under the header: keyword tags + a summary block, each shown only when its
-    /// toggle is on AND there's something to show (so the card stays clean for short notes / disabled fields).
-    @ViewBuilder private var insights: some View {
-        if model.showKeywords, let keywords = item.keywords, !keywords.isEmpty {
-            HStack(spacing: 6) {
-                Image(systemName: "tag").font(.caption2).foregroundStyle(.secondary)
-                ForEach(keywords, id: \.self) { keyword in
-                    Text(keyword)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Brand.accent.opacity(0.15), in: Capsule())
-                        .foregroundStyle(Brand.accent)
-                }
-                Spacer(minLength: 0)
-            }
-            .accessibilityLabel(Text(L("transcript.keywords")))
-        }
-        // Collapsible so it never crowds out the timestamped transcript (which stays the primary content);
-        // collapsed by default → click the header to reveal the TL;DR.
-        if model.showSummaries, let summary = item.summary, !summary.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) { summaryExpanded.toggle() }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: summaryExpanded ? "chevron.down" : "chevron.right").font(.caption2)
-                        Text(L("transcript.summary").uppercased()).font(.caption2.weight(.semibold))
-                    }
-                    .foregroundStyle(.secondary)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                if summaryExpanded {
-                    Text(summary).font(.callout).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
-        }
-        // Action items (generative tier only — FoundationModels). A tappable checklist; tap toggles done.
-        if model.showActions, let actions = item.actions, !actions.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Image(systemName: "checklist").font(.caption2)
-                    Text(L("transcript.actions").uppercased()).font(.caption2.weight(.semibold))
-                }
-                .foregroundStyle(.secondary)
-                ForEach(Array(actions.enumerated()), id: \.offset) { i, action in
-                    Button { model.toggleAction(i, for: item.id) } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Image(systemName: action.done ? "checkmark.circle.fill" : "circle")
-                                .font(.callout)
-                                .foregroundStyle(action.done ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.secondary))
-                            Text(action.text)
-                                .font(.callout)
-                                .strikethrough(action.done)
-                                .foregroundStyle(action.done ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                            Spacer(minLength: 0)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    // Convey the done state to VoiceOver (not just the checkmark glyph): the row reads as a
-                    // toggle and announces "selected" when done; the action text is the label.
-                    .accessibilityLabel(Text(action.text))
-                    .accessibilityAddTraits(action.done ? [.isToggle, .isSelected] : [.isToggle])
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
-        }
-    }
+    /// AI insight fields under the header — the shared Core `InsightsView` (keyword tags + collapsible summary +
+    /// action-items checklist). Relocated verbatim into ParlaCore (P1.4g) so the iOS app renders it identically.
+    private var insights: some View { InsightsView(item: item) }
 
-    /// "Related notes" — whole history notes close BY MEANING to the open one (doc↔doc semantic, computed in
-    /// `AppModel.refreshRelatedNotes`). A footer suggestion: shown only when something is genuinely related;
-    /// each row selects that note. This is where the on-device semantic layer actually helps — note↔note —
-    /// since word→note search isn't viable on the free model (that's the download tier; LOCAL_AI_LAYER.md §5).
-    @ViewBuilder private var relatedNotes: some View {
-        let related = model.relatedHistory
-        if !related.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles").font(.caption2)
-                    Text(L("transcript.related").uppercased()).font(.caption2.weight(.semibold))
-                }
-                .foregroundStyle(.secondary)
-                ForEach(related) { note in
-                    // Clear any active search first: a related note is a topic match, not a query match, so it
-                    // may be absent from filteredHistory — selectedItem (scoped to filteredHistory) couldn't
-                    // resolve it and the tap would be a no-op. Clearing search makes navigation always land.
-                    Button { model.searchQuery = ""; model.selection = note.id } label: {
-                        HStack(spacing: 8) {
-                            Text(model.showTitles ? note.displayTitle : note.sourceName)
-                                .font(.callout).lineLimit(1)
-                            Spacer(minLength: 8)
-                            Text(note.date.formatted(date: .abbreviated, time: .omitted))
-                                .font(.caption2).foregroundStyle(.tertiary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
-        }
-    }
+    /// "Related notes" — the shared Core `RelatedNotesView` (doc↔doc semantic footer). Relocated verbatim into
+    /// ParlaCore (P1.4g) so the iOS app renders it identically.
+    private var relatedNotes: some View { RelatedNotesView() }
 
     private var readActions: some View {
         HStack(spacing: 10) {
