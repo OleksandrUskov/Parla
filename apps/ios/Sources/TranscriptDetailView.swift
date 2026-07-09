@@ -65,10 +65,13 @@ struct TranscriptDetailView: View {
         // has no deinit — stop() invalidates the 0.1s ticker — and we release the audio session so playback
         // stops ducking other apps once the user navigates away.
         .onDisappear {
-            player.stop()
-            ttsTask?.cancel()           // a synth still in flight must not load+play after we tear the session down
+            // The source `player` is HOISTED (owned by HistoryTab, injected) so it survives an iPad compact↔regular
+            // shell swap — a shell teardown fires .onDisappear too, and stopping the player here would rewind + cut
+            // playback across a Split-View resize, defeating the whole point of hoisting it. So we do NOT touch the
+            // source player here: the compact shell stops it on pop (HistoryListView, path→empty); the split keeps
+            // it alive until a different note loads. Only the view-local read-aloud (ttsPlayer/ttsTask) is torn down.
+            ttsTask?.cancel()           // a synth still in flight must not load+play after the view is gone
             ttsPlayer.stop()            // stop any read-aloud when the detail leaves the screen
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }
 

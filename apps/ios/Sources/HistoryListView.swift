@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AVFoundation
 import ParlaCore
 
 /// «История» — the COMPACT History shell (iOS-port P1.4e; iPad split is HistorySplitView, P2.2). A
@@ -49,6 +50,15 @@ struct HistoryListView: View {
         // `path.isEmpty` so a background insert never yanks the user out of a detail they're reading.
         .onChange(of: model.history.count) { old, new in
             if new > old, path.isEmpty, let top = model.history.first { path = [top.id] }
+        }
+        // The hoisted player (P2.2) keeps playing across shell swaps, so TranscriptDetailView no longer stops it on
+        // disappear. On the compact shell that means we stop it HERE when the user pops back to the list — there's
+        // no transport control on the list — and release the audio session so other apps un-duck.
+        .onChange(of: path) { old, new in
+            if new.isEmpty, !old.isEmpty {
+                player.stop()
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
         }
     }
 
