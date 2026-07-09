@@ -21,15 +21,18 @@ struct HistorySplitView: View {
                 AuroraBackground().ignoresSafeArea()
                 sidebar
             }
+            .dropDestination(for: URL.self) { urls, _ in importDropped(urls) }   // drag a file from Files → import
             .navigationTitle(L("history.title"))
             .toolbar { toolbarContent }
             .searchable(text: $model.searchQuery, prompt: L("history.search"))
             .onChange(of: model.searchQuery) { _, _ in model.onSearchQueryChanged() }
+            .navigationSplitViewColumnWidth(min: 300, ideal: 340)
         } detail: {
             ZStack {
                 AuroraBackground().ignoresSafeArea()
                 detailColumn
             }
+            .dropDestination(for: URL.self) { urls, _ in importDropped(urls) }   // drop onto the reading pane too
         }
         .navigationSplitViewStyle(.balanced)
         .fileImporter(isPresented: $showImporter,
@@ -121,6 +124,7 @@ struct HistorySplitView: View {
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button { showImporter = true } label: { Image(systemName: "plus.circle.fill") }
+                .keyboardShortcut("i", modifiers: .command)   // ⌘I import — hardware keyboard on iPad
                 .disabled(importing || model.isBusy)
                 .accessibilityLabel(L("drop.choose"))
         }
@@ -163,5 +167,13 @@ struct HistorySplitView: View {
             importing = false
             if !urls.isEmpty { model.handleDrop(urls: urls) }
         }
+    }
+
+    /// Files-app drag-drop → the same copy-into-container-then-transcribe path as the file importer.
+    /// (SwiftUI resolves `URL.self` to app-owned temp file URLs, valid past this callback.)
+    private func importDropped(_ urls: [URL]) -> Bool {
+        guard !urls.isEmpty else { return false }
+        handleImport(.success(urls))
+        return true
     }
 }
