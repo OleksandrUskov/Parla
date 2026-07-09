@@ -16,6 +16,7 @@ struct TranscriptDetailView: View {
     @State private var editing = false          // edit-in-place sheet (P2.1c)
     @State private var ttsPlayer = PlaybackController()   // read-aloud (TTS P2.1d) — separate from the source player
     @State private var synthesizingTTS = false            // brief spinner while the voice synthesizes the transcript
+    @State private var ttsTask: Task<Void, Never>?        // in-flight synth job — cancel on nav-away so it can't reactivate the session
 
     private var audioURL: URL? { AudioStore.playableURL(for: item) }
     private var hasChapterDigest: Bool { (item.chapterSummaries ?? []).contains { !$0.summary.isEmpty } }
@@ -48,6 +49,7 @@ struct TranscriptDetailView: View {
         .task(id: item.id) {
             model.selection = item.id   // mark this the open note (audio-cache protection + Related bind to it)
             showDigest = false
+            ttsTask?.cancel()           // cancel an in-flight synth before it can load+play on the new note
             ttsPlayer.stop()            // switching notes stops any in-progress read-aloud
             player.load(audioURL)       // AVAudioSession(.playback) is wired inside PlaybackController.load on iOS
             model.refreshRelatedNotes() // recompute the doc↔doc "Related" for the newly-opened note (best-effort)
@@ -62,6 +64,7 @@ struct TranscriptDetailView: View {
         // stops ducking other apps once the user navigates away.
         .onDisappear {
             player.stop()
+            ttsTask?.cancel()           // a synth still in flight must not load+play after we tear the session down
             ttsPlayer.stop()            // stop any read-aloud when the detail leaves the screen
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
@@ -134,6 +137,10 @@ struct TranscriptDetailView: View {
             } label: {
                 Label(L("transcript.retranscribe.help"), systemImage: "arrow.triangle.2.circlepath")
             }
+            // Mirror the macOS RetranscribeMenu guard: a dictation note has no resolvable source (sourcePath/bookmark
+            // nil), and a busy/downloading engine can't take a new job — retranscribe() would fail into the GLOBAL
+            // phase=.failed, which flips HistoryListView to a full-screen error over the whole list.
+            .disabled(!model.canRetranscribe(item))
             // Regenerate insights — all or one field; Tasks only when a generative backend can serve this note.
             if !model.isBusy {
                 Menu {
@@ -191,10 +198,13 @@ struct TranscriptDetailView: View {
                        ?? model.tts.voices(forLanguage: "").first else { return }
         player.stop()               // one audio at a time — pause the note's source player
         synthesizingTTS = true
-        Task {
+        ttsTask = Task {
             defer { synthesizingTTS = false }
             do {
                 let url = try await model.tts.synthesize(speech, voice: voice)
+                // Navigated away (or switched notes) mid-synthesis? Don't load+play — that would re-activate the
+                // AVAudioSession .onDisappear just tore down and start ghost audio on a view the user already left.
+                guard !Task.isCancelled else { return }
                 ttsPlayer.load(url)
                 ttsPlayer.togglePlay()
             } catch {
