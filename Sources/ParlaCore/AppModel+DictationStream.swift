@@ -1,5 +1,4 @@
 import Foundation
-import ParlaCore
 
 /// Live segment-level streaming preview (MIC_DICTATION P3).
 ///
@@ -40,7 +39,7 @@ extension AppModel {
     /// True while a streaming decode loop is actually running — drives the live-preview visibility.
     /// LOOP-driven, not setting-driven, so flipping the Settings toggle mid-dictation can't surface a
     /// frozen, decoding-nothing preview (the loop only starts at startDictation when streaming was on).
-    var isStreamingDictation: Bool { streamingTask != nil }
+    public var isStreamingDictation: Bool { streamingTask != nil }
 
     /// Pure (unit-tested): the language to use for the next streaming window. An explicit `current` is kept;
     /// on "Auto" (`current == nil`) the first non-empty `detected` language is pinned so later short windows

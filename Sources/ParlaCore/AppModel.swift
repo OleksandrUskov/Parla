@@ -162,6 +162,15 @@ public final class AppModel {
     /// was actually performed (false → not Accessibility-trusted).
     public var attemptPaste: @MainActor () -> Bool = { false }
 
+    /// Whether Parla itself is frontmost — dictation skips synthetic paste into our OWN window (it would land in
+    /// the search / edit field). macOS wires `PasteService.isSelfFrontmost`; inert default false (iOS has no
+    /// paste-into-frontmost, and the feature's toggle is macOS-only, so this path is dead there anyway).
+    public var pasteIsSelfFrontmost: @MainActor () -> Bool = { false }
+
+    /// One-time Accessibility prompt when paste-into-frontmost is enabled but not yet trusted. macOS wires
+    /// `PasteService.requestAccessibility`; inert default is a no-op.
+    public var requestPasteAccessibility: @MainActor () -> Void = { }
+
     // MARK: Platform seams (iOS-port P0.1)
     // AppModel is Core-bound — it must stay AppKit-free so it ports to iOS. Each platform behavior below is an
     // injectable closure with an INERT Foundation-only default; the macOS app installs the real AppKit behavior

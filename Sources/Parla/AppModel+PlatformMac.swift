@@ -38,6 +38,8 @@ extension AppModel {
         m.hideToast = { QuickToast.shared.hide() }
         m.playCompletionSound = { success in success ? CompletionSound.success() : CompletionSound.failure() }
         m.attemptPaste = { PasteService.pasteIntoFrontmost() }
+        m.pasteIsSelfFrontmost = { PasteService.isSelfFrontmost }
+        m.requestPasteAccessibility = { PasteService.requestAccessibility() }
 
         // Folder-watch (macOS-only feature): wire the Core seams to the +FolderWatch impls.
         m.drainWatchQueue = { [weak m] in m?.drainQueue() }

@@ -1,5 +1,4 @@
 import Foundation
-import ParlaCore
 
 /// Live mic dictation (MIC_DICTATION v1): record the microphone → 16 kHz mono WAV (`MicRecorder`) →
 /// transcribe it locally, reusing the same result handling as a file drop but **bypassing the `decoder` seam**
@@ -7,25 +6,25 @@ import ParlaCore
 /// (paste-into-frontmost is P2). 100% on-device — the only new permission is the Microphone.
 extension AppModel {
     /// True while a dictation is being recorded (drives `isBusy`, the recording chip, and the menu label).
-    var isRecordingDictation: Bool { recordingStartedAt != nil }
+    public var isRecordingDictation: Bool { recordingStartedAt != nil }
 
     /// Seconds the current dictation has been recording (0 when not recording) — for the live chip timer.
-    var recordingElapsed: TimeInterval { recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0 }
+    public var recordingElapsed: TimeInterval { recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0 }
 
     /// Whether a NEW dictation can start: engine free, nothing downloading, not already recording
     /// (`isBusy` already folds in the recording state).
-    var canDictate: Bool { !isBusy && downloadingModel == nil }
+    public var canDictate: Bool { !isBusy && downloadingModel == nil }
 
     /// Pure gate (unit-tested): pre-warm the model on launch only for users who actually dictate (the
     /// dictation hotkey is enabled) AND when the model is already on disk (never trigger a download here).
-    nonisolated static func shouldPrewarmModel(dictationHotkeyEnabled: Bool, modelDownloaded: Bool) -> Bool {
+    public nonisolated static func shouldPrewarmModel(dictationHotkeyEnabled: Bool, modelDownloaded: Bool) -> Bool {
         dictationHotkeyEnabled && modelDownloaded
     }
 
     /// Pre-warm the model INTO MEMORY at app launch so the first dictation is instant instead of waiting a few
     /// seconds for the load. Silent + best-effort; ensureLoaded coalesces, so a dictation that starts mid-warm
     /// just joins the same load. Gated by `shouldPrewarmModel` (hotkey users, model already downloaded).
-    func prewarmDictationModel() {
+    public func prewarmDictationModel() {
         guard Self.shouldPrewarmModel(dictationHotkeyEnabled: dictationHotkeyEnabled,
                                       modelDownloaded: TranscriptionEngine.isDownloaded(selectedModel)) else { return }
         let model = selectedModel
@@ -33,19 +32,19 @@ extension AppModel {
     }
 
     /// Hotkey / menu-bar / Settings entry point: start recording, or stop+transcribe if already recording.
-    func toggleDictation() {
+    public func toggleDictation() {
         if isRecordingDictation { stopAndTranscribeDictation() }
         else { startDictation() }
     }
 
     // MARK: Hotkey routing (toggle vs hold-to-talk)
 
-    enum DictationKeyEdge { case down, up }
-    enum DictationAction: Equatable { case start, stop, toggle, ignore }
+    public enum DictationKeyEdge { case down, up }
+    public enum DictationAction: Equatable { case start, stop, toggle, ignore }
 
     /// Pure routing (unit-tested): which action a hotkey edge maps to under the current mode.
     /// Toggle mode acts on key-UP (press to start/stop); hold mode starts on key-DOWN, stops on key-UP.
-    nonisolated static func dictationAction(for edge: DictationKeyEdge, mode: DictationMode) -> DictationAction {
+    public nonisolated static func dictationAction(for edge: DictationKeyEdge, mode: DictationMode) -> DictationAction {
         switch (edge, mode) {
         case (.down, .hold):   return .start
         case (.down, .toggle): return .ignore
@@ -54,8 +53,8 @@ extension AppModel {
         }
     }
 
-    func dictationKeyDown() { perform(Self.dictationAction(for: .down, mode: dictationMode)) }
-    func dictationKeyUp()   { perform(Self.dictationAction(for: .up, mode: dictationMode)) }
+    public func dictationKeyDown() { perform(Self.dictationAction(for: .down, mode: dictationMode)) }
+    public func dictationKeyUp()   { perform(Self.dictationAction(for: .up, mode: dictationMode)) }
 
     private func perform(_ action: DictationAction) {
         switch action {
@@ -68,7 +67,7 @@ extension AppModel {
 
     /// Begin recording after a mic-permission check. Single-flight: refuses while busy/downloading.
     func startDictation() {
-        guard canDictate else { QuickToast.shared.show(L("toast.busy")); return }
+        guard canDictate else { showToast(L("toast.busy"), false); return }
         guard recorder == nil, !requestingMic else { return }
         requestingMic = true   // claim the lane synchronously (→ isBusy) so a drop can't race in during the prompt
         Task {
@@ -82,7 +81,7 @@ extension AppModel {
             let granted = await MicRecorder.ensureMicAccess()
             // A newer start already committed a recorder → don't start a SECOND engine (orphans the first).
             guard recorder == nil else { return }
-            guard granted else { QuickToast.shared.show(L("toast.mic.denied")); return }
+            guard granted else { showToast(L("toast.mic.denied"), false); return }
             let rec = MicRecorder(vad: dictationVADEnabled ? SilenceDetector() : nil,
                                   streaming: dictationLiveStreaming)
             do {
@@ -92,13 +91,13 @@ extension AppModel {
                 if dictationLiveStreaming { startStreamingLoop(for: rec) }   // live preview (full decode still saves)
             } catch {
                 recorder = nil
-                QuickToast.shared.show(L("toast.dictation.failed"))
+                showToast(L("toast.dictation.failed"), false)
             }
         }
     }
 
     /// Stop the recorder and transcribe the captured WAV (reusing the standard result path).
-    func stopAndTranscribeDictation() {
+    public func stopAndTranscribeDictation() {
         guard isRecordingDictation else { return }
         // Capture what the user SAW streaming (confirmed + the live tail) BEFORE stopStreamingLoop clears it.
         let streamed = streamedDictationText()
@@ -109,7 +108,7 @@ extension AppModel {
         let wav = rec.stop()
         recorder = nil
         recordingStartedAt = nil
-        guard let wav else { QuickToast.shared.show(L("error.dictation.empty")); pumpQueues(); return }   // lane freed → pump a drop queued during recording
+        guard let wav else { showToast(L("error.dictation.empty"), false); pumpQueues(); return }   // lane freed → pump a drop queued during recording
         if streamed.isEmpty {
             // No streamed preview (streaming off, or it produced nothing) → the plain record-then-transcribe path.
             phase = .preparing(L("dictation.label"))    // claim the phase synchronously (like handleDrop)
@@ -163,7 +162,7 @@ extension AppModel {
         refiningDictations.insert(id)        // idempotent (caller pre-inserted); keeps the badge + the lane
         HistoryStore.save(history)
         if autoCopy || dictationPasteIntoFrontmost { copy(item.text) }
-        if soundOnComplete { CompletionSound.success() }
+        if soundOnComplete { playCompletionSound(true) }
         if dictationPasteIntoFrontmost { pasteDictationResult() }
         else { dictationToast(empty: false, failed: false) }
 
@@ -241,14 +240,14 @@ extension AppModel {
             if autoCopy || dictationPasteIntoFrontmost { copy(item.text) }
             if keepDictationAudio { await keepDictationAudioFor(item.id, wav: wav) }
             phase = .idle
-            if soundOnComplete { CompletionSound.success() }
+            if soundOnComplete { playCompletionSound(true) }
             if dictationPasteIntoFrontmost { pasteDictationResult() }
             else { dictationToast(empty: false, failed: false) }
         } catch {
             // Dictation is toast-driven (no in-window chip): report via toast + sound and leave phase .idle,
             // so we don't strand a `.failed` chip whose "Try again" would replay an unrelated earlier drop.
             phase = .idle
-            if soundOnComplete { CompletionSound.failure() }
+            if soundOnComplete { playCompletionSound(false) }
             dictationToast(empty: false, failed: true)
         }
         await pruneAudioCache()
@@ -260,7 +259,7 @@ extension AppModel {
     private func pasteDictationResult() {
         // Don't synthesize ⌘V into our OWN window (e.g. dictation stopped via the in-window Stop button) —
         // that would paste into Parla's search / edit field. Fall back to clipboard-only (text is copied).
-        if PasteService.isSelfFrontmost {
+        if pasteIsSelfFrontmost() {
             dictationToast(empty: false, failed: false)
             return
         }
@@ -271,9 +270,9 @@ extension AppModel {
             // the clipboard-fallback toast still shows every time so the text is never silently lost.
             if !UserDefaults.standard.bool(forKey: Keys.dictationPasteAXPrompted) {
                 UserDefaults.standard.set(true, forKey: Keys.dictationPasteAXPrompted)
-                PasteService.requestAccessibility()
+                requestPasteAccessibility()
             }
-            QuickToast.shared.show(L("toast.dictation.paste.needsax"))
+            showToast(L("toast.dictation.paste.needsax"), false)
         }
     }
 
@@ -289,9 +288,9 @@ extension AppModel {
     }
 
     private func dictationToast(empty: Bool, failed: Bool) {
-        if empty { QuickToast.shared.show(L("error.dictation.empty")) }
-        else if failed { QuickToast.shared.show(L("toast.failed")) }
-        else { QuickToast.shared.show(autoCopy ? L("toast.done.copied") : L("toast.done")) }
+        if empty { showToast(L("error.dictation.empty"), false) }
+        else if failed { showToast(L("toast.failed"), false) }
+        else { showToast(autoCopy ? L("toast.done.copied") : L("toast.done"), false) }
     }
 
     /// Synthesized sidebar label, e.g. "Dictation · 25 Jun 2026 at 2:03 PM".

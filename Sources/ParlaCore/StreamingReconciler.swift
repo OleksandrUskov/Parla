@@ -1,5 +1,4 @@
 import Foundation
-import ParlaCore
 
 /// Pure segment-level streaming reconciliation (MIC_DICTATION P3).
 ///
@@ -13,25 +12,25 @@ import ParlaCore
 /// pauses/clause boundaries, so the confirmed text never truncates a case/aspect ending mid-word. This drives
 /// the *live preview only*; the saved transcript still comes from a full offline decode, so streaming
 /// artifacts never reach stored text. No audio types inside → fully unit-testable (mirrors `SilenceDetector`).
-struct StreamingReconciler {
+public struct StreamingReconciler {
     /// Trailing segments withheld from confirmation each tick (most likely to change as more audio arrives).
     /// WhisperKit's `AudioStreamTranscriber` uses 2.
-    let holdback: Int
+    public let holdback: Int
 
     /// The stable, confirmed transcript so far (segment texts joined in order). Render this solid.
-    private(set) var confirmedText: String = ""
+    public private(set) var confirmedText: String = ""
 
     /// Absolute audio position (seconds from capture start) where the confirmed prefix ends — i.e. where the
     /// next decode window should begin. The orchestrator turns this into a sample index for `liveSamples(from:)`.
-    private(set) var confirmedSeconds: Double = 0
+    public private(set) var confirmedSeconds: Double = 0
 
     /// The trailing un-confirmed segment texts joined — the live, dimmed tail. Recomputed every tick.
-    private(set) var hypothesisText: String = ""
+    public private(set) var hypothesisText: String = ""
 
-    init(holdback: Int = 2) { self.holdback = max(0, holdback) }
+    public init(holdback: Int = 2) { self.holdback = max(0, holdback) }
 
     /// The full live text to show (confirmed prefix + dimmed hypothesis), for callers that render one string.
-    var liveText: String { Self.appended(confirmedText, hypothesisText) }
+    public var liveText: String { Self.appended(confirmedText, hypothesisText) }
 
     /// Feed the decode of the current window.
     /// - Parameters:
@@ -46,7 +45,7 @@ struct StreamingReconciler {
     ///   decode window has grown large without the cursor advancing (continuous low-pause speech where
     ///   Whisper emits ≤ holdback segments per window) — flushing makes the cursor catch up so the next
     ///   window stays bounded instead of re-decoding an ever-growing buffer. Normal ticks hold the tail back.
-    mutating func ingest(segments: [Segment], windowStart: Double, flush: Bool = false) {
+    public mutating func ingest(segments: [Segment], windowStart: Double, flush: Bool = false) {
         let effectiveHoldback = flush ? 0 : holdback
         let confirmCount = max(0, segments.count - effectiveHoldback)
         let confirmed = segments.prefix(confirmCount)
@@ -67,7 +66,7 @@ struct StreamingReconciler {
     /// before the word's true acoustic end, so the next window re-emits it). Deliberately ONLY one word:
     /// deduping a longer run would eat genuinely repeated speech ("так так так", "да да да", stutters) — a
     /// worse artifact than a rare single re-emit. Preview-only either way (the saved transcript is a full decode).
-    static func mergeDedup(_ base: String, _ addition: String) -> String {
+    public static func mergeDedup(_ base: String, _ addition: String) -> String {
         if addition.isEmpty { return base }
         if base.isEmpty { return addition }
         let addWords = addition.split(separator: " ")
