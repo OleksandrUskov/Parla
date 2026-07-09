@@ -12,6 +12,7 @@ struct TranscriptDetailView: View {
     let item: TranscriptItem
     @State private var player = PlaybackController()
     @State private var showDigest = false
+    @State private var shareItem: ShareItem?
 
     private var audioURL: URL? { AudioStore.playableURL(for: item) }
     private var hasChapterDigest: Bool { (item.chapterSummaries ?? []).contains { !$0.summary.isEmpty } }
@@ -32,6 +33,8 @@ struct TranscriptDetailView: View {
             }
         }
         .padding(.horizontal)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { exportMenu } }
+        .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
         .task(id: item.id) {
             model.selection = item.id   // mark this the open note (audio-cache protection + Related bind to it)
             showDigest = false
@@ -85,5 +88,48 @@ struct TranscriptDetailView: View {
                 .padding(14)
                 .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
         }
+    }
+
+    // MARK: - Export (P1.4h) — mirrors the macOS TranscriptCard menu 1:1, delivering via the system share sheet
+    // instead of NSSavePanel. Rendering is the pure Core layer (exportString / exportJSON).
+
+    private var exportMenu: some View {
+        Menu {
+            // What goes in the file (remembered): transcript / +summary / summary-only — same 3-way as macOS.
+            Picker(L("export.content"), selection: Binding(get: { model.exportContent },
+                                                           set: { model.exportContent = $0 })) {
+                ForEach(ExportContent.allCases) { Text($0.label).tag($0) }
+            }
+            Divider()
+            ForEach(ExportFormat.allCases.filter { !$0.isSubtitle }) { fmt in
+                // In "summary only" mode, hide the formats that need the transcript body (full JSON).
+                if model.exportContent != .insightsOnly || fmt.supportsInsightsOnly {
+                    Button(fmt.displayName) { share(fmt) }
+                }
+            }
+            // Subtitles grouped + labelled (the video→subtitles win); they need the body, so hidden in summary-only.
+            if model.exportContent != .insightsOnly {
+                Section(L("export.subtitles")) {
+                    ForEach(ExportFormat.allCases.filter { $0.isSubtitle }) { fmt in
+                        Button(fmt.displayName) { share(fmt) }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+        }
+        .accessibilityLabel(L("export.menu.help"))
+    }
+
+    /// Render the chosen format to a temp file (pure Core formatters) and present the system share sheet.
+    private func share(_ fmt: ExportFormat) {
+        let base = (item.sourceName as NSString).deletingPathExtension
+        let name = base.isEmpty ? "transcript" : base
+        let data: Data = fmt == .json
+            ? ((try? exportJSON(item)) ?? Data())
+            : Data(exportString(item, as: fmt, timestamps: model.showTimestamps, content: model.exportContent).utf8)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).\(fmt.fileExtension)")
+        guard (try? data.write(to: url)) != nil else { return }   // bad filename / write failure → no-op, never crash
+        shareItem = ShareItem(url: url)
     }
 }

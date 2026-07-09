@@ -14,6 +14,7 @@ struct HistoryListView: View {
     @State private var importing = false          // copying picks into the container (before handleDrop starts)
     @State private var showClearConfirm = false
     @State private var path: [TranscriptItem.ID] = []   // nav stack: the pushed transcript id(s)
+    @State private var shareItem: ShareItem?            // whole-history backup export (P1.4h)
 
     var body: some View {
         @Bindable var model = model
@@ -37,6 +38,7 @@ struct HistoryListView: View {
             } message: {
                 Text(L("history.clear.confirm.message"))
             }
+            .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
         }
         // When a transcription finishes (phase returns to .idle after a run), open its result so the import flow
         // is pick → progress → text without an extra tap. Transcription is single-flight (isBusy blocks concurrent
@@ -122,12 +124,27 @@ struct HistoryListView: View {
         }
         if !model.history.isEmpty {
             ToolbarItem(placement: .topBarLeading) {
-                Button(role: .destructive) { showClearConfirm = true } label: {
-                    Image(systemName: "trash")
+                Menu {
+                    Button { shareHistory() } label: {
+                        Label(L("history.export.help"), systemImage: "square.and.arrow.up")
+                    }
+                    Button(role: .destructive) { showClearConfirm = true } label: {
+                        Label(L("history.clear.confirm.button"), systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel(L("history.clear.help"))
             }
         }
+    }
+
+    /// Whole-history backup → a single Markdown file (the honored 3-mode content) shared via the system sheet.
+    private func shareHistory() {
+        guard !model.history.isEmpty else { return }
+        let md = exportText(model.history, content: model.exportContent)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("parla-history.md")
+        guard (try? Data(md.utf8).write(to: url)) != nil else { return }
+        shareItem = ShareItem(url: url)
     }
 
     // MARK: - Busy / failed / empty (ported from the P1.4b home, unchanged)
