@@ -40,16 +40,14 @@ struct HistoryListView: View {
             }
             .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
         }
-        // When a transcription finishes (phase returns to .idle after a run), open its result so the import flow
-        // is pick → progress → text without an extra tap. Transcription is single-flight (isBusy blocks concurrent
-        // jobs), so we're reliably on the list — not inside a detail — when this fires.
-        .onChange(of: model.phase) { old, new in
-            guard case .idle = new else { return }
-            switch old {
-            case .transcribing, .preparing:
-                if let fresh = model.selectedItem { path = [fresh.id] }
-            default: break
-            }
+        // Auto-open a freshly-produced transcript so the flow is one-shot (pick/record → progress → text, no extra
+        // tap). Key on the history COUNT rising — the real "a new item was added" signal — NOT on a phase edge:
+        // an empty/failed dictation returns .idle from .preparing without inserting anything (would push a STALE
+        // item), and the default streaming dictation never leaves .idle at all (a phase edge would never fire).
+        // Counting the insert handles import + both dictation paths and never fires on delete/clear (count drops).
+        // `path.isEmpty` so a background insert never yanks the user out of a detail they're reading.
+        .onChange(of: model.history.count) { old, new in
+            if new > old, path.isEmpty, let top = model.history.first { path = [top.id] }
         }
     }
 
