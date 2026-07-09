@@ -58,6 +58,8 @@ struct HistoryListView: View {
     @ViewBuilder private var content: some View {
         if case .failed(let msg) = model.phase {
             failedView(msg)
+        } else if model.isRecordingDictation {
+            recordingView
         } else if importing || model.isBusy {
             busyView
         } else if model.history.isEmpty {
@@ -122,6 +124,11 @@ struct HistoryListView: View {
                 .disabled(importing || model.isBusy)
                 .accessibilityLabel(L("drop.choose"))
         }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { model.toggleDictation() } label: { Image(systemName: "mic.fill") }
+                .disabled(!model.canDictate)
+                .accessibilityLabel(L("dictation.label"))
+        }
         if !model.history.isEmpty {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
@@ -145,6 +152,46 @@ struct HistoryListView: View {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("parla-history.md")
         guard (try? Data(md.utf8).write(to: url)) != nil else { return }
         shareItem = ShareItem(url: url)
+    }
+
+    // MARK: - Live dictation (P1.4k)
+
+    /// Shown while recording a dictation: a pulsing mic + running timer, the live streaming preview (confirmed
+    /// solid + hypothesis dimmed) when live-streaming is on, and a big Stop that ends capture and transcribes.
+    /// The transcript inference itself is device-only (WhisperKit crashes on the sim, no ANE).
+    private var recordingView: some View {
+        VStack(spacing: 22) {
+            // TimelineView keeps the elapsed timer ticking (recordingElapsed is derived from a start Date).
+            TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                VStack(spacing: 10) {
+                    Image(systemName: "waveform.circle.fill")
+                        .font(.system(size: 68))
+                        .foregroundStyle(Brand.gradient)
+                        .symbolEffect(.pulse)
+                    Text(Lf("dictation.recording", fmtTime(model.recordingElapsed)))
+                        .font(.title3.monospacedDigit().weight(.semibold))
+                }
+            }
+            if model.isStreamingDictation {
+                ScrollView {
+                    (Text(model.dictationConfirmedText)
+                     + Text(model.dictationConfirmedText.isEmpty || model.dictationHypothesisText.isEmpty ? "" : " ")
+                     + Text(model.dictationHypothesisText).foregroundColor(.secondary))
+                        .font(.system(.body, design: .rounded))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 220)
+                .padding(14)
+                .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+            }
+            Button { model.stopAndTranscribeDictation() } label: {
+                Label(L("dictation.stop"), systemImage: "stop.circle.fill").font(.headline)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+        }
+        .padding(32)
     }
 
     // MARK: - Busy / failed / empty (ported from the P1.4b home, unchanged)
