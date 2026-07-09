@@ -20,6 +20,7 @@
 "history.search"      = "Search…";
 "history.empty"       = "Nothing yet";
 "history.notfound"    = "Nothing found";
+"history.detail.placeholder" = "Select a note to read it here";
 "history.delete.help"           = "Delete this note";
 "history.clear.help"            = "Clear all history";
 "history.clear.confirm.title"   = "Clear all history?";

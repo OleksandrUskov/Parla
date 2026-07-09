@@ -20,6 +20,7 @@
 "history.search"      = "Пошук…";
 "history.empty"       = "Поки порожньо";
 "history.notfound"    = "Нічого не знайдено";
+"history.detail.placeholder" = "Виберіть нотатку, щоб прочитати її тут";
 "history.delete.help"           = "Видалити нотатку";
 "history.clear.help"            = "Очистити всю історію";
 "history.clear.confirm.title"   = "Очистити всю історію?";
