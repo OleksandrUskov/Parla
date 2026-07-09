@@ -52,6 +52,8 @@ targets:
         product: opus
       - package: ogg
         product: ogg
+      # Embed the Share Extension into the app bundle (P1.4j). XcodeGen auto-embeds app-extension dependencies.
+      - target: ParlaShareExtension
     # App Group: the shared container the Share Extension (P1.4j) copies incoming voice notes into, and the app
     # drains on foreground. Generated from here by XcodeGen (the .entitlements is a gitignored build artifact).
     entitlements:
@@ -70,6 +72,28 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Parla uses the microphone for on-device voice dictation."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+  # Share Extension (iOS-port P1.4j) — copy-only: shows Parla in the share sheet for audio/video, copies the file
+  # into the App Group inbox, completes. LEAN: no ParlaCore/opus/ogg link (extension memory budget), only UIKit.
+  # The end-to-end share is device-only (needs the provisioned App Group + a real share sheet).
+  ParlaShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Extensions/Share
+    entitlements:
+      path: ParlaShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.parla.ios
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.parla.ios.share
+        SWIFT_VERSION: "5.0"
+        INFOPLIST_FILE: Extensions/Share/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
   # P1.3 runtime proof: a unit-test target (hosted by Parla-iOS) that decodes a real Ogg/Opus fixture on the
   # simulator to prove the Opusfile path works at runtime. `@testable import Parla_iOS` reuses OpusAudioDecoder.
   # The fixture is gitignored (voice never in git); the test XCTSkips when it's absent → never a false red.
