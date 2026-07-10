@@ -6,7 +6,8 @@ on:
   pull_request:
 
 jobs:
-  build-and-test:
+  macos:
+    name: macOS · swift build + test
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -16,3 +17,27 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+
+  ios:
+    name: iOS · xcodebuild (app + extensions)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: apps/ios
+        run: xcodegen generate
+      # Build the app scheme = compiles the app + the Share and Widgets extensions + ParlaCore-for-iOS
+      # (in-process libopus, MLX gated out on iOS). A generic simulator destination needs no booted sim;
+      # -skipMacroValidation trusts the dependency Swift macros (swift-transformers) non-interactively;
+      # CODE_SIGNING_ALLOWED=NO because CI has no provisioning profile (same as the local recipe).
+      - name: Build (app + extensions, simulator)
+        working-directory: apps/ios
+        run: |
+          xcodebuild build \
+            -project Parla-iOS.xcodeproj \
+            -scheme Parla-iOS \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO
