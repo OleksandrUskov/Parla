@@ -1,0 +1,6 @@
+/* Parla — Russian Info.plist localization.
+   Localizes user-facing permission prompts. English is the base/development
+   language (strings live in the target's Info.plist); ru/uk override here. */
+
+/* NSMicrophoneUsageDescription — microphone permission prompt (dictation). */
+"NSMicrophoneUsageDescription" = "Parla использует микрофон только во время диктовки и распознаёт речь прямо на устройстве. Аудио никогда не покидает ваше устройство.";

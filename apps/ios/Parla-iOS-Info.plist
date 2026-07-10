@@ -23,7 +23,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Parla uses the microphone for on-device voice dictation.</string>
+	<string>Parla records your microphone only while you are dictating, and transcribes it on-device. Your audio never leaves your device.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
