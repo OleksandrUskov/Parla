@@ -6,6 +6,7 @@ import SwiftUI
 @main
 struct ParlaWidgetBundle: WidgetBundle {
     var body: some Widget {
-        ParlaTranscriptionLiveActivity()
+        ParlaTranscriptionLiveActivity()   // P2.3b — transcription Live Activity / Dynamic Island
+        ParlaHomeWidget()                  // P2.3c — recent-transcripts glance
     }
 }

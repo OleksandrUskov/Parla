@@ -7,6 +7,7 @@ enum WidgetBrand {
     static let c1 = Color(hex: 0x6D5DF6)   // indigo
     static let c3 = Color(hex: 0xB14AED)   // purple
     static let accent = Color(hex: 0x8B5CF6)   // violet (== Brand.accent)
+    static let background = Color(hex: 0x141220)   // Parla's dark canvas (widget container background)
     static let gradient = LinearGradient(colors: [c1, c3], startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 

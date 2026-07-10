@@ -55,6 +55,10 @@ private struct RootView: View {
         // Reflect the transcription pipeline in a Live Activity / Dynamic Island (best-effort; same observer seam
         // as KeepAwake, so Core is untouched). A phase change carries the batch index → per-chunk updates.
         .onChange(of: model.phase) { _, phase in activityController.sync(phase) }
+        // Keep the Home-widget App-Group snapshot fresh: on launch and on every history change (add/delete/edit/
+        // retitle — TranscriptItem is Hashable so `.onChange` catches them all). A no-op if the App Group is nil.
+        .task { WidgetSnapshotWriter.write(from: model.history) }
+        .onChange(of: model.history) { _, history in WidgetSnapshotWriter.write(from: history) }
         // parla:// deep-links (widget taps, Shortcuts, later Handoff). The pure parser lives in Core; here we
         // just route the verbs iOS supports. A note opens via `pendingOpen` (the History shell drains it), so it
         // works on both the compact and the split shell without either needing to know about URLs.
