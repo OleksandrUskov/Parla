@@ -50,6 +50,17 @@ private struct RootView: View {
         // failing to transcribe with no weights.
         .task { drainShareInbox() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { drainShareInbox() } }
+        // parla:// deep-links (widget taps, Shortcuts, later Handoff). The pure parser lives in Core; here we
+        // just route the verbs iOS supports. A note opens via `pendingOpen` (the History shell drains it), so it
+        // works on both the compact and the split shell without either needing to know about URLs.
+        .onOpenURL { url in
+            switch parseParlaURL(url) {
+            case .note(let id):  model.pendingOpen = id; tab = .history
+            case .dictate:       model.toggleDictation(); tab = .history
+            case .show:          tab = .history
+            default:             break   // desktop-only verbs (transcribe / clipboard / last) — no-op on iOS
+            }
+        }
     }
 
     private func drainShareInbox() {

@@ -52,6 +52,17 @@ struct HistorySplitView: View {
         .onChange(of: model.history.count) { old, new in
             if new > old, model.selection == nil, let top = model.history.first { model.selection = top.id }
         }
+        // Drain a parla://note deep-link (widget/Handoff/Shortcuts): select the note (the detail column shows it).
+        .task { drainPendingOpen() }
+        .onChange(of: model.pendingOpen) { _, _ in drainPendingOpen() }
+    }
+
+    /// Consume `pendingOpen` and select the note if it still exists (consume regardless so a stale id can't stick).
+    private func drainPendingOpen() {
+        guard let id = model.pendingOpen else { return }
+        model.pendingOpen = nil
+        guard model.history.contains(where: { $0.id == id }) else { return }
+        model.selection = id
     }
 
     // MARK: - Sidebar (selectable list bound to model.selection)

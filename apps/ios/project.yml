@@ -66,12 +66,11 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.parla.ios
         TARGETED_DEVICE_FAMILY: "1,2"          # iPhone + iPad
         SWIFT_VERSION: "5.0"                     # spike: app-target sources in Swift-5 mode (ParlaCore stays .v6)
-        GENERATE_INFOPLIST_FILE: YES
+        # Hand-written Info.plist (like the Share Extension) — needed for CFBundleURLTypes (parla:// scheme, P2.3a)
+        # and the coming NSSupportsLiveActivities / NSUserActivityTypes (P2.3b/d) that aren't scalar INFOPLIST_KEY_*.
+        INFOPLIST_FILE: Parla-iOS-Info.plist
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Parla uses the microphone for on-device voice dictation."
-        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
   # Share Extension (iOS-port P1.4j) — copy-only: shows Parla in the share sheet for audio/video, copies the file
   # into the App Group inbox, completes. LEAN: no ParlaCore/opus/ogg link (extension memory budget), only UIKit.
   # The end-to-end share is device-only (needs the provisioned App Group + a real share sheet).

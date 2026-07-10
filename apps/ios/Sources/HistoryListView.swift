@@ -60,6 +60,18 @@ struct HistoryListView: View {
                 try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             }
         }
+        // Drain a parla://note deep-link (widget/Handoff/Shortcuts): push the note. `.task` covers cold launch
+        // (the link arrived before this shell mounted); `.onChange` covers a link while running.
+        .task { drainPendingOpen() }
+        .onChange(of: model.pendingOpen) { _, _ in drainPendingOpen() }
+    }
+
+    /// Consume `pendingOpen` and push the note if it still exists (consume regardless so a stale id can't stick).
+    private func drainPendingOpen() {
+        guard let id = model.pendingOpen else { return }
+        model.pendingOpen = nil
+        guard model.history.contains(where: { $0.id == id }) else { return }
+        if path != [id] { path = [id] }
     }
 
     // MARK: - Content states
