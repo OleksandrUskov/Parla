@@ -33,6 +33,9 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: Sources
+      # Files compiled into BOTH the app and the ParlaWidgets extension (target membership) — the Live Activity
+      # attributes etc. — so they must stay ParlaCore-free (the extension can't link ParlaCore). (P2.3b)
+      - path: Shared
       # Bundle the in-app localization catalogues as folder references so `<lang>.lproj` lands at the app's
       # resource root, where Localization.swift resolves it via `Bundle.main.path(forResource:ofType:"lproj")`.
       # (macOS build_app.sh copies these in; the iOS target must do it here or every L() returns the raw key.)
@@ -54,6 +57,8 @@ targets:
         product: ogg
       # Embed the Share Extension into the app bundle (P1.4j). XcodeGen auto-embeds app-extension dependencies.
       - target: ParlaShareExtension
+      # Embed the Widget Extension (Live Activity now, Home widget + Control in P2.3c). (P2.3b)
+      - target: ParlaWidgets
     # App Group: the shared container the Share Extension (P1.4j) copies incoming voice notes into, and the app
     # drains on foreground. Generated from here by XcodeGen (the .entitlements is a gitignored build artifact).
     entitlements:
@@ -90,6 +95,30 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.parla.ios.share
         SWIFT_VERSION: "5.0"
         INFOPLIST_FILE: Extensions/Share/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+  # Widget Extension (iOS-port P2.3b) — the transcription Live Activity / Dynamic Island now; the Home widget +
+  # iOS-18 Control land in P2.3c. LEAN: NO ParlaCore/opus/ogg link (extension memory budget), only WidgetKit +
+  # ActivityKit + SwiftUI + the Foundation-only Shared/ files. The App Group is ready for the P2.3c widget snapshot;
+  # under CODE_SIGNING_ALLOWED=NO it's an inert no-op on the sim (same as the Share Extension).
+  ParlaWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Extensions/Widgets
+      - path: Shared
+    entitlements:
+      path: ParlaWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.parla.ios
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.parla.ios.widgets
+        SWIFT_VERSION: "5.0"
+        INFOPLIST_FILE: Extensions/Widgets/Info.plist
         TARGETED_DEVICE_FAMILY: "1,2"
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"

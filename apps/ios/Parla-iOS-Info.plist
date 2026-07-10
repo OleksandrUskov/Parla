@@ -22,6 +22,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Parla uses the microphone for on-device voice dictation.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>
