@@ -39,6 +39,12 @@ struct TranscriptDetailView: View {
             }
         }
         .padding(.horizontal)
+        // Handoff (P2.3d): advertise "view this transcript" while it's open so another device (macOS) can continue it.
+        .userActivity(AppModel.viewTranscriptActivityType, isActive: true) { activity in
+            activity.title = item.displayTitle
+            activity.userInfo = ["id": item.id.uuidString]
+            activity.isEligibleForHandoff = true
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { exportMenu }
             ToolbarItem(placement: .topBarTrailing) { actionsMenu }

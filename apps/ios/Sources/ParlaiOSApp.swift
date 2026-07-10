@@ -70,6 +70,12 @@ private struct RootView: View {
             default:             break   // desktop-only verbs (transcribe / clipboard / last) — no-op on iOS
             }
         }
+        // Handoff (P2.3d): continue a transcript opened on another device. Routes through pendingOpen (the History
+        // shell drains it, incl. on cold launch via `.task`) → works on both the compact and split shells.
+        .onContinueUserActivity(AppModel.viewTranscriptActivityType) { activity in
+            model.continueViewTranscript(activity.userInfo)
+            tab = .history
+        }
     }
 
     private func drainShareInbox() {

@@ -118,6 +118,8 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
       <key>CFBundleURLSchemes</key><array><string>parla</string></array>
     </dict>
   </array>
+  <key>NSUserActivityTypes</key>
+  <array><string>com.parla.viewTranscript</string></array>
   <key>NSServices</key>
   <array>
     <dict>

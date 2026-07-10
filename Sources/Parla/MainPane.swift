@@ -582,6 +582,13 @@ struct TranscriptCard: View {
             model.refreshRelatedNotes()      // the open note changed → recompute its doc↔doc "Related"
         }
         .onDisappear { player.stop(); ttsPlayer.stop() }
+        // Handoff (P2.3d): advertise "view this transcript" while it's the open card so another device (iOS) can
+        // continue it. id-only; the other device opens the note locally by id.
+        .userActivity(AppModel.viewTranscriptActivityType, isActive: true) { activity in
+            activity.title = item.displayTitle
+            activity.userInfo = ["id": item.id.uuidString]
+            activity.isEligibleForHandoff = true
+        }
     }
 
     // MARK: Header — meta + actions (different in read vs edit mode)

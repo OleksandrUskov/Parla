@@ -3535,6 +3535,14 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(parseParlaURL(URL(string: "parla://dictate")!), .dictate)
     }
 
+    func testParseViewTranscriptActivity() {
+        let id = UUID()
+        XCTAssertEqual(AppModel.parseViewTranscriptActivity(["id": id.uuidString]), id)   // Handoff (P2.3d)
+        XCTAssertNil(AppModel.parseViewTranscriptActivity(["id": "not-a-uuid"]))
+        XCTAssertNil(AppModel.parseViewTranscriptActivity(["other": id.uuidString]))      // no id key
+        XCTAssertNil(AppModel.parseViewTranscriptActivity(nil))
+    }
+
     // MARK: First-run onboarding (pure decision logic)
 
     func testShouldShowOnboarding() {
