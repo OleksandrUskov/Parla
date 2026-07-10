@@ -36,6 +36,9 @@ targets:
       # Files compiled into BOTH the app and the ParlaWidgets extension (target membership) — the Live Activity
       # attributes etc. — so they must stay ParlaCore-free (the extension can't link ParlaCore). (P2.3b)
       - path: Shared
+      # App icon (concept B — gradient waveform on Parla's near-black canvas). Single-size 1024² appiconset;
+      # Xcode downsamples the rest. Master SVG lives at repo-root assets/icon/ (reproducible; seeds README hero). (P2.4a)
+      - path: Assets.xcassets
       # Bundle the in-app localization catalogues as folder references so `<lang>.lproj` lands at the app's
       # resource root, where Localization.swift resolves it via `Bundle.main.path(forResource:ofType:"lproj")`.
       # (macOS build_app.sh copies these in; the iOS target must do it here or every L() returns the raw key.)
@@ -74,6 +77,7 @@ targets:
         # Hand-written Info.plist (like the Share Extension) — needed for CFBundleURLTypes (parla:// scheme, P2.3a)
         # and the coming NSSupportsLiveActivities / NSUserActivityTypes (P2.3b/d) that aren't scalar INFOPLIST_KEY_*.
         INFOPLIST_FILE: Parla-iOS-Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon     # P2.4a — matches Assets.xcassets/AppIcon.appiconset
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
   # Share Extension (iOS-port P1.4j) — copy-only: shows Parla in the share sheet for audio/video, copies the file
