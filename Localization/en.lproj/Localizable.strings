@@ -84,6 +84,7 @@
 "la.transcribing"     = "Transcribing…";
 "la.preparing"        = "Preparing…";
 "la.loadingmodel"     = "Loading model…";
+"la.downloadingmodel" = "Downloading model…";
 "queue.pending"       = "+%lld queued";
 "transcribe.cancelling" = "Stopping…";
 

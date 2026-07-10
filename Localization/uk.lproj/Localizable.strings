@@ -84,6 +84,7 @@
 "la.transcribing"     = "Розшифровка…";
 "la.preparing"        = "Підготовка…";
 "la.loadingmodel"     = "Завантаження моделі…";
+"la.downloadingmodel" = "Завантаження моделі…";
 "queue.pending"       = "+%lld у черзі";
 "transcribe.cancelling" = "Зупиняю…";
 

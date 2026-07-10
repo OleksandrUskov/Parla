@@ -15,20 +15,23 @@ final class TranscriptionActivityController {
     func sync(_ phase: EnginePhase) {
         switch phase {
         case .preparing(let name, let batch):
-            upsert(label: L("la.preparing"), title: name, batch: batch)
+            upsert(label: L("la.preparing"), title: name, done: batch?.done ?? 0, total: batch?.total ?? 0)
+        case .downloadingModel(let p):
+            // A model download only ever happens INSIDE a transcription job (the standalone model-manager download
+            // uses a separate mechanism, not this phase), so keep the activity ALIVE through it — ending here would
+            // make it vanish during the LONGEST wait, then restart. Encode the 0…1 progress as done/total.
+            upsert(label: L("la.downloadingmodel"), title: "", done: Int((p * 100).rounded()), total: 100)
         case .loadingModel:
-            upsert(label: L("la.loadingmodel"), title: "", batch: nil)
+            upsert(label: L("la.loadingmodel"), title: "", done: 0, total: 0)
         case .transcribing(let name, let batch):
-            upsert(label: L("la.transcribing"), title: name, batch: batch)
-        case .idle, .failed, .downloadingModel:
+            upsert(label: L("la.transcribing"), title: name, done: batch?.done ?? 0, total: batch?.total ?? 0)
+        case .idle, .failed:
             end()
         }
     }
 
-    private func upsert(label: String, title: String, batch: BatchProgress?) {
-        let state = ParlaTranscriptionAttributes.ContentState(
-            label: label, title: title,
-            done: batch?.done ?? 0, total: batch?.total ?? 0)
+    private func upsert(label: String, title: String, done: Int, total: Int) {
+        let state = ParlaTranscriptionAttributes.ContentState(label: label, title: title, done: done, total: total)
         if let activity {
             Task { await activity.update(ActivityContent(state: state, staleDate: nil)) }
             return

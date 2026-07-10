@@ -53,7 +53,11 @@ struct ContentView: View {
     private func drainPendingOpen() {
         guard let id = model.pendingOpen else { return }
         model.pendingOpen = nil
-        if model.history.contains(where: { $0.id == id }) { model.selection = id }
+        guard model.history.contains(where: { $0.id == id }) else { return }
+        // Clear any active search first — selectedItem is scoped to filteredHistory, so a note filtered out by the
+        // query would otherwise show the wrong record or nothing (same fix the Related nav uses).
+        model.searchQuery = ""
+        model.selection = id
     }
 }
 

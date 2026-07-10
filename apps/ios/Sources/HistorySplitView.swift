@@ -62,6 +62,9 @@ struct HistorySplitView: View {
         guard let id = model.pendingOpen else { return }
         model.pendingOpen = nil
         guard model.history.contains(where: { $0.id == id }) else { return }
+        // Clear any active search first: a deep-linked/Handoff note may be filtered OUT of filteredHistory, and
+        // selectedItem is scoped to filteredHistory — so it would show the wrong note. (Same fix the Related nav uses.)
+        model.searchQuery = ""
         model.selection = id
     }
 

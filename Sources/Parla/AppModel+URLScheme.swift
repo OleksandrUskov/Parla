@@ -20,7 +20,7 @@ extension AppModel {
             handleDrop(urls: urls)
         case .transcribeLast: transcribeLast()                 // already sets quickModeRun
         case .clipboard:      quickTranscribeFromClipboard()   // already sets quickModeRun
-        case .note(let id):   selection = id; NSApp.activate()  // deep-link to a note (also reachable on iOS)
+        case .note(let id):   searchQuery = ""; selection = id; NSApp.activate()  // clear search first (selectedItem is scoped to filteredHistory); deep-link to a note
         case .dictate:        toggleDictation()                // start/stop dictation
         case .show:           NSApp.activate()                 // "open Parla" keyword for Alfred/Raycast
         case .unknown:        break                            // ignore silently
