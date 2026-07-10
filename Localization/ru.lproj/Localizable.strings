@@ -81,6 +81,9 @@
 "status.loadingmodel" = "Загружаю модель в память…";
 "status.transcribing" = "Распознаю %@…";
 "status.downloading"  = "Скачиваю модель (один раз)… %lld%%";
+"la.transcribing"     = "Расшифровка…";
+"la.preparing"        = "Подготовка…";
+"la.loadingmodel"     = "Загрузка модели…";
 "queue.pending"       = "+%lld в очереди";
 "transcribe.cancelling" = "Останавливаю…";
 

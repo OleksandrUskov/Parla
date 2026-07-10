@@ -33,6 +33,8 @@ private struct RootView: View {
     @AppStorage("didFirstRunSetup") private var didFirstRun = false
     // Held here (above RootTabView's `.id(uiLanguage)` swap) so the selected tab survives a language switch.
     @State private var tab: RootTab = .history
+    // Drives the transcription Live Activity from the phase stream (P2.3b) — best-effort, Core untouched.
+    @State private var activityController = TranscriptionActivityController()
 
     var body: some View {
         Group {
@@ -50,6 +52,9 @@ private struct RootView: View {
         // failing to transcribe with no weights.
         .task { drainShareInbox() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { drainShareInbox() } }
+        // Reflect the transcription pipeline in a Live Activity / Dynamic Island (best-effort; same observer seam
+        // as KeepAwake, so Core is untouched). A phase change carries the batch index → per-chunk updates.
+        .onChange(of: model.phase) { _, phase in activityController.sync(phase) }
         // parla:// deep-links (widget taps, Shortcuts, later Handoff). The pure parser lives in Core; here we
         // just route the verbs iOS supports. A note opens via `pendingOpen` (the History shell drains it), so it
         // works on both the compact and the split shell without either needing to know about URLs.

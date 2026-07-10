@@ -81,6 +81,9 @@
 "status.loadingmodel" = "Loading the model into memory…";
 "status.transcribing" = "Transcribing %@…";
 "status.downloading"  = "Downloading the model (one-time)… %lld%%";
+"la.transcribing"     = "Transcribing…";
+"la.preparing"        = "Preparing…";
+"la.loadingmodel"     = "Loading model…";
 "queue.pending"       = "+%lld queued";
 "transcribe.cancelling" = "Stopping…";
 
