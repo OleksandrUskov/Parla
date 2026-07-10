@@ -20,34 +20,13 @@ extension AppModel {
             handleDrop(urls: urls)
         case .transcribeLast: transcribeLast()                 // already sets quickModeRun
         case .clipboard:      quickTranscribeFromClipboard()   // already sets quickModeRun
+        case .note(let id):   selection = id; NSApp.activate()  // deep-link to a note (also reachable on iOS)
+        case .dictate:        toggleDictation()                // start/stop dictation
         case .show:           NSApp.activate()                 // "open Parla" keyword for Alfred/Raycast
         case .unknown:        break                            // ignore silently
         }
     }
 }
 
-/// The verbs the `parla://` scheme understands. A pure value type so the parser is unit-testable.
-enum ParlaURLCommand: Equatable {
-    case transcribe(paths: [String], dirs: [String])
-    case transcribeLast
-    case clipboard
-    case show
-    case unknown
-}
-
-/// Pure parser: `parla://<verb>?args` → command. No filesystem access (path validity/expansion is the
-/// caller's job), so it slots straight into the pure-logic test suite. Query values are
-/// percent-decoded by URLComponents.
-func parseParlaURL(_ url: URL) -> ParlaURLCommand {
-    guard url.scheme?.lowercased() == "parla" else { return .unknown }
-    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-    switch url.host?.lowercased() {
-    case "transcribe":
-        return .transcribe(paths: items.filter { $0.name == "path" }.compactMap(\.value),
-                           dirs: items.filter { $0.name == "dir" }.compactMap(\.value))
-    case "transcribe-last": return .transcribeLast
-    case "clipboard":       return .clipboard
-    case "show":            return .show
-    default:                return .unknown
-    }
-}
+// The `parla://` parser + `ParlaURLCommand` moved to ParlaCore (`ParlaURL.swift`, iOS-port P2.3a) so the iOS app
+// parses the same verbs; this file keeps only the macOS-flavoured handler (AppKit activation + path transcription).

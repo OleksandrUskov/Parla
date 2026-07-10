@@ -30,6 +30,7 @@ public final class AppModel {
     public var phase: EnginePhase = .idle
     public var history: [TranscriptItem] = HistoryStore.load()
     public var selection: TranscriptItem.ID?
+    public var pendingOpen: TranscriptItem.ID?        // a deep-link (parla://note / widget / Handoff) asked to open this note; drained by the History shell (iOS-port P2.3)
     public var availableModels: [String] = []
     public var lastCopiedID: TranscriptItem.ID?
     public var lastAttemptedURLs: [URL] = []          // last input passed to transcribe — for «Try again» on failure

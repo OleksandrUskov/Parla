@@ -3527,6 +3527,12 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(parseParlaURL(URL(string: "parla://show")!), .show)
         XCTAssertEqual(parseParlaURL(URL(string: "parla://bogus")!), .unknown)   // unknown verb
         XCTAssertEqual(parseParlaURL(URL(string: "https://evil.com/x")!), .unknown)   // wrong scheme
+        // iOS deep-link verbs (P2.3a): open a note by id, start dictation.
+        let uuid = UUID()
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://note?id=\(uuid.uuidString)")!), .note(id: uuid))
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://note?id=not-a-uuid")!), .unknown)   // malformed id → unknown, no crash
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://note")!), .unknown)                 // missing id
+        XCTAssertEqual(parseParlaURL(URL(string: "parla://dictate")!), .dictate)
     }
 
     // MARK: First-run onboarding (pure decision logic)
