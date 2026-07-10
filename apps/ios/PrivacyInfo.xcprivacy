@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Parla — Apple Privacy Manifest (iOS app target).
+
+  Parla is 100% on-device: it transcribes audio/video to text locally with WhisperKit and never
+  sends user content anywhere. Hence:
+    • NSPrivacyTracking            = false   (no tracking, no ATT)
+    • NSPrivacyTrackingDomains     = []      (no domains contacted for tracking)
+    • NSPrivacyCollectedDataTypes  = []      (we collect NOTHING — no analytics, no accounts)
+    • NSPrivacyAccessedAPITypes    = UserDefaults only
+
+  UserDefaults (CA92.1): the app stores its OWN preferences (selected model, UI language, toggles,
+  dictation options) in UserDefaults.standard — app-private, never read from other apps or the system,
+  never an App Group suite. That is exactly reason CA92.1.
+
+  Required-reason APIs deliberately NOT declared (audited against the code that ships in this bundle —
+  ParlaCore + apps/ios): no FileTimestamp (only .fileSizeKey / directory enumeration for model+cache
+  size — never a modification/creation date), no DiskSpace, no SystemBootTime, no ActiveKeyboards.
+  The bundled xcframeworks (opus, ogg) and WhisperKit's deps (swift-transformers, swift-crypto) carry
+  their OWN PrivacyInfo.xcprivacy inside their frameworks.
+-->
+<plist version="1.0">
+<dict>
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
