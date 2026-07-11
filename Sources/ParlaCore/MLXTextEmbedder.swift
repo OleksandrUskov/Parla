@@ -116,12 +116,14 @@ public actor MLXTextEmbedder: TextEmbedder {
 
     private var container: EmbedderModelContainer?
     private var loadTask: Task<EmbedderModelContainer?, Never>?
+    private var generation = 0   // bumped by unload()/delete → a load in flight won't cache a now-stale model (D5/S3)
 
     /// Get-or-load the container, single-flight. nil if the model isn't downloaded or the load fails.
     private func loaded() async -> EmbedderModelContainer? {
         if let container { return container }
         if let loadTask { return await loadTask.value }
         guard EmbeddingModelSpec.isDownloaded() else { return nil }
+        let gen = generation
         let task = Task { () -> EmbedderModelContainer? in
             try? await EmbedderModelFactory.shared.loadContainer(
                 from: MLXHubDownloader(downloadBase: EmbeddingModelSpec.downloadBase),
@@ -130,15 +132,23 @@ public actor MLXTextEmbedder: TextEmbedder {
         }
         loadTask = task
         let c = await task.value
-        container = c
         loadTask = nil
+        // TOCTOU: if unload()/delete landed during the load, `generation` moved — don't cache a just-deleted model
+        // in RAM (mirrors MLXLLMService.loadContainer's guard; a background semantic refresh racing deleteEmbedModel
+        // could otherwise resurrect ~0.4GB the delete was meant to free). The retrievalEmbedder routes by disk
+        // presence, so ranking is unaffected either way. (Full-review D5/S3)
+        guard gen == generation else { return nil }
+        container = c
         return c
     }
 
-    /// Drop the model from RAM (after a re-embed batch, or on delete). The next embed re-loads on demand.
+    /// Drop the model from RAM (after a re-embed batch, or on delete). The next embed re-loads on demand. Bumps
+    /// `generation` + cancels any in-flight load so a delete-during-load can't cache the deleted model afterward.
     public func unload() {
         container = nil
+        loadTask?.cancel()
         loadTask = nil
+        generation &+= 1
     }
 
     /// Download (or refresh from cache) the model files WITHOUT loading them into memory — the explicit "Download"
