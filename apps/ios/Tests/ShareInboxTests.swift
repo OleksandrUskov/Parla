@@ -30,6 +30,29 @@ final class ShareInboxTests: XCTestCase {
         XCTAssertTrue(ShareInbox.pendingFiles(in: dir).isEmpty)
     }
 
+    /// Full-review D2/S2 + D8: `toRemove` must delete ONLY inbox files that copyIntoContainer actually copied — a
+    /// file it skipped (returned no container URL for) is the user's only copy and MUST be kept to retry. This pins
+    /// the data-loss guard that used to be "remove pending regardless".
+    func testToRemoveKeepsFilesThatFailedToCopy() {
+        let inbox = URL(fileURLWithPath: "/inbox")
+        let a = inbox.appendingPathComponent("a.ogg")
+        let b = inbox.appendingPathComponent("b.ogg")   // this one "failed to copy"
+        let c = inbox.appendingPathComponent("c.m4a")
+        // copyIntoContainer returned container copies for a and c only (b skipped); names are preserved.
+        let container = [URL(fileURLWithPath: "/imports/x/a.ogg"),
+                         URL(fileURLWithPath: "/imports/y/c.m4a")]
+
+        let remove = ShareInbox.toRemove(pending: [a, b, c], containerURLs: container).map(\.lastPathComponent)
+        XCTAssertEqual(remove.sorted(), ["a.ogg", "c.m4a"], "only the copied files are removed")
+        XCTAssertFalse(remove.contains("b.ogg"), "a file that failed to copy stays to retry — never lost")
+    }
+
+    func testToRemoveEmptyWhenNothingCopied() {
+        let a = URL(fileURLWithPath: "/inbox/a.ogg")
+        XCTAssertTrue(ShareInbox.toRemove(pending: [a], containerURLs: []).isEmpty,
+                      "if no copy succeeded, delete nothing — keep every source to retry")
+    }
+
     /// The real App Group container needs the provisioned entitlement — present on device, may be absent on an
     /// unsigned sim build. Informative (skips rather than fails) so the run TELLS us whether the sim resolves it.
     func testAppGroupContainerResolution() throws {

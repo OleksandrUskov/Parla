@@ -35,6 +35,16 @@ enum ShareInbox {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
+    /// Which inbox sources are safe to delete after a copy pass: ONLY those `copyIntoContainer` actually produced a
+    /// container copy for. copyIntoContainer is best-effort per file and an inbox file is the user's ONLY copy of a
+    /// shared note, so a file it couldn't copy must be KEPT to retry on the next foreground — deleting "regardless"
+    /// loses it silently. Inbox filenames are unique (one directory), so matching by lastPathComponent is exact.
+    /// PURE (no I/O) so the data-loss guard is unit-tested. (Full-review D2/S2 + D8)
+    static func toRemove(pending: [URL], containerURLs: [URL]) -> [URL] {
+        let copied = Set(containerURLs.map { $0.lastPathComponent })
+        return pending.filter { copied.contains($0.lastPathComponent) }
+    }
+
     /// Single-flight guard: `drain` is invoked from BOTH the cold-launch `.task` AND every `scenePhase == .active`
     /// change, which can fire together (or back-to-back on a fast background→foreground). Without this, two drains
     /// read the same inbox files before either clears them → the SAME voice note imports + transcribes twice. The
@@ -53,12 +63,9 @@ enum ShareInbox {
             defer { isDraining = false }
             let containerURLs = await Task.detached(priority: .userInitiated) {
                 let urls = ImportCoordinator.copyIntoContainer(pending)   // group files aren't scoped → a plain copy
-                // Remove ONLY the inbox files we actually copied. copyIntoContainer is best-effort per file (a source
-                // it can't copy is skipped), and an inbox file is the ONLY copy of what the user shared — deleting it
-                // "regardless" would lose it silently. Inbox filenames are unique (one directory), so matching by
-                // lastPathComponent is exact; a failed file stays to retry on the next foreground. (Full-review D2/S2)
-                let copied = Set(urls.map { $0.lastPathComponent })
-                for src in pending where copied.contains(src.lastPathComponent) {
+                // Remove ONLY the inbox files we actually copied (see toRemove below): an inbox file is the user's
+                // ONLY copy of what they shared, so a copy failure must not delete it. (Full-review D2/S2)
+                for src in toRemove(pending: pending, containerURLs: urls) {
                     try? FileManager.default.removeItem(at: src)
                 }
                 return urls
