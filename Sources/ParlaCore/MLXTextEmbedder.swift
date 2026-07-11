@@ -132,12 +132,14 @@ public actor MLXTextEmbedder: TextEmbedder {
         }
         loadTask = task
         let c = await task.value
-        loadTask = nil
         // TOCTOU: if unload()/delete landed during the load, `generation` moved — don't cache a just-deleted model
         // in RAM (mirrors MLXLLMService.loadContainer's guard; a background semantic refresh racing deleteEmbedModel
         // could otherwise resurrect ~0.4GB the delete was meant to free). The retrievalEmbedder routes by disk
-        // presence, so ranking is unaffected either way. (Full-review D5/S3)
+        // presence, so ranking is unaffected either way. Clear loadTask ONLY when it's still ours (past the guard) —
+        // if unload cancelled + a concurrent loaded() installed a fresh task, nil-ing here would orphan it → a
+        // duplicate model load. (Full-review D5/S3 + the R4 clobber it opened.)
         guard gen == generation else { return nil }
+        loadTask = nil
         container = c
         return c
     }
