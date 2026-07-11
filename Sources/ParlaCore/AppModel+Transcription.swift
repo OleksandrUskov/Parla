@@ -99,12 +99,22 @@ extension AppModel {
         var failures: [String] = []
         var succeeded = 0
         for (i, url) in files.enumerated() {
-            if Task.isCancelled { break }   // cancelled → stop pulling more files (already-saved ones stay)
+            if Task.isCancelled {   // cancelled → stop pulling more files (already-saved ones stay)
+                // This file + every remaining one in THIS batch were already copied into the iOS import container
+                // (copyIntoContainer runs upfront) but never became a note → prune their leaked copies so a
+                // cancelled batch doesn't grow the container unbounded. No-op on macOS originals (prefix-guarded).
+                // (Full-review D6/S4)
+                files[i...].forEach { Self.pruneImportedSource($0.path) }
+                break
+            }
             // Show the queue position only for a batch (>1 file); a single drop looks like before.
             let batch = total > 1 ? BatchProgress(index: i + 1, total: total, done: i) : nil
             do {
                 let r = try await transcribeOne(url: url, model: selectedModel, batch: batch)
-                if Task.isCancelled { break }   // decode finished but user cancelled → DISCARD this result, don't save
+                if Task.isCancelled {   // decode finished but user cancelled → DISCARD this result, don't save
+                    files[i...].forEach { Self.pruneImportedSource($0.path) }   // this + the rest leak otherwise (D6/S4)
+                    break
+                }
                 let item = TranscriptItem(
                     sourceName: url.lastPathComponent,
                     language: r.language,
@@ -134,6 +144,7 @@ extension AppModel {
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 failures.append("\(url.lastPathComponent) (\(msg))")
+                Self.pruneImportedSource(url.path)   // failed → no note references it → drop its leaked iOS import copy (no-op on macOS) (D6/S4)
             }
         }
         if Task.isCancelled {                 // user hit Cancel: don't beep / notify / show a "done" toast
