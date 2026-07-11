@@ -21,6 +21,12 @@ extension AppModel {
         m.copyToClipboard = { text in UIPasteboard.general.string = text }
         m.isAppActive = { UIApplication.shared.applicationState == .active }
 
+        // Dictation + batch feedback → the iOS toast surface (macOS uses the QuickToast panel). Without this the
+        // seams stay their Core no-op defaults and every dictation message (mic-denied, busy, failed, empty,
+        // done/copied) + the batch-complete toasts are silently invisible on iOS. (Full-review D1/F1.)
+        m.showToast = { text, sticky in ToastCenter.shared.show(text, sticky: sticky) }
+        m.hideToast = { ToastCenter.shared.hide() }
+
         // RAM-adaptive default model — jetsam is the iOS ceiling, so pick the largest tier that fits this
         // device's live memory headroom, but ONLY when the user hasn't already chosen one. The bytes→variant
         // mapping is pure + unit-tested (ModelTierSelector); here we just feed it the live number.

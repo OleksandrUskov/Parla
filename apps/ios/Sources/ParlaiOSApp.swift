@@ -47,6 +47,8 @@ private struct RootView: View {
             }
         }
         .keepAwake(while: model.isBusy)
+        .parlaToast()   // dictation + batch feedback surface (macOS QuickToast counterpart) — D1/F1
+
         // Pick up anything the Share Extension dropped in the App Group inbox — on cold launch and every
         // foreground. Gated on didFirstRun so a shared file waits for the model-download gate instead of
         // failing to transcribe with no weights.
