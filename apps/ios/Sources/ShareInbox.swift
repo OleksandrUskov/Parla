@@ -53,7 +53,14 @@ enum ShareInbox {
             defer { isDraining = false }
             let containerURLs = await Task.detached(priority: .userInitiated) {
                 let urls = ImportCoordinator.copyIntoContainer(pending)   // group files aren't scoped → a plain copy
-                pending.forEach { try? FileManager.default.removeItem(at: $0) }   // clear the inbox regardless
+                // Remove ONLY the inbox files we actually copied. copyIntoContainer is best-effort per file (a source
+                // it can't copy is skipped), and an inbox file is the ONLY copy of what the user shared — deleting it
+                // "regardless" would lose it silently. Inbox filenames are unique (one directory), so matching by
+                // lastPathComponent is exact; a failed file stays to retry on the next foreground. (Full-review D2/S2)
+                let copied = Set(urls.map { $0.lastPathComponent })
+                for src in pending where copied.contains(src.lastPathComponent) {
+                    try? FileManager.default.removeItem(at: src)
+                }
                 return urls
             }.value
             if !containerURLs.isEmpty { model.handleDrop(urls: containerURLs) }
