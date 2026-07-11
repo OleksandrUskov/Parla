@@ -3300,6 +3300,38 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // Full-review D6/S4 + D8: pruneImportedSource does a RECURSIVE removeItem, guarded ONLY by a prefix check that it
+    // stays within Application Support/Parla/imports/. Pin BOTH branches — a weakened guard would delete a dir OUTSIDE
+    // imports/ (a macOS original's parent, an AV-native drop). Not injectable, so this uses the real app-support
+    // imports root under a unique UUID it creates + removes — it never touches real history/imports content.
+    func testPruneImportedSourceOnlyDeletesUnderImports() throws {
+        let fm = FileManager.default
+        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let importsRoot = support.appendingPathComponent("Parla/imports", isDirectory: true)
+
+        // (1) A Parla-managed import dir → the whole <uuid> dir is removed.
+        let importDir = importsRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: importDir, withIntermediateDirectories: true)
+        let importFile = importDir.appendingPathComponent("voice.ogg")
+        try Data("x".utf8).write(to: importFile)
+        defer { try? fm.removeItem(at: importDir) }
+        AppModel.pruneImportedSource(importFile.path)
+        XCTAssertFalse(fm.fileExists(atPath: importDir.path), "a Parla-managed import dir is removed")
+
+        // (2) SAFETY: a source OUTSIDE imports/ (macOS original / AV-native drop) → the dir is NEVER touched.
+        let outside = fm.temporaryDirectory.appendingPathComponent("orig-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        let outsideFile = outside.appendingPathComponent("original.ogg")
+        try Data("x".utf8).write(to: outsideFile)
+        defer { try? fm.removeItem(at: outside) }
+        AppModel.pruneImportedSource(outsideFile.path)
+        XCTAssertTrue(fm.fileExists(atPath: outside.path), "a source outside imports/ is never deleted (guard holds)")
+        XCTAssertTrue(fm.fileExists(atPath: outsideFile.path))
+
+        // (3) nil path → no crash, no-op.
+        AppModel.pruneImportedSource(nil)
+    }
+
     // MARK: History resilience — one corrupt record must NOT wipe the archive (data-loss fix)
 
     private func validRecordJSON(text: String) -> String {
