@@ -27,6 +27,10 @@ extension AppModel {
         m.showToast = { text, sticky in ToastCenter.shared.show(text, sticky: sticky) }
         m.hideToast = { ToastCenter.shared.hide() }
 
+        // Completion cue → system sound (macOS uses NSSound Glass/Basso). Gated by the soundOnComplete toggle
+        // (default on, like macOS); unwired before, so that Settings toggle did nothing on iOS. (Full-review D1/F2.)
+        m.playCompletionSound = { success in success ? CompletionSound.success() : CompletionSound.failure() }
+
         // RAM-adaptive default model — jetsam is the iOS ceiling, so pick the largest tier that fits this
         // device's live memory headroom, but ONLY when the user hasn't already chosen one. The bytes→variant
         // mapping is pure + unit-tested (ModelTierSelector); here we just feed it the live number.
