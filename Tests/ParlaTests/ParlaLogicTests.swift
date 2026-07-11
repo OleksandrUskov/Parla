@@ -3332,6 +3332,31 @@ final class ParlaLogicTests: XCTestCase {
         AppModel.pruneImportedSource(nil)
     }
 
+    // Full-review D6/S4 + D8: the launch orphan sweep removes only UNreferenced import dirs — a saved note's copy is
+    // KEPT (re-transcribe/replay need it), an abandoned failed/cancelled/crashed copy is swept. Recursive delete → pin.
+    func testPruneImportedOrphansRemovesOnlyUnreferenced() throws {
+        let fm = FileManager.default
+        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+
+        let keptDir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let orphanDir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: keptDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: orphanDir, withIntermediateDirectories: true)
+        let keptFile = keptDir.appendingPathComponent("voice.ogg")
+        try Data("x".utf8).write(to: keptFile)
+        try Data("x".utf8).write(to: orphanDir.appendingPathComponent("orphan.ogg"))
+        defer { try? fm.removeItem(at: keptDir); try? fm.removeItem(at: orphanDir) }
+
+        var item = makeItem(text: "t")
+        item.sourcePath = keptFile.path
+
+        AppModel.pruneImportedOrphans(keeping: [item])
+
+        XCTAssertTrue(fm.fileExists(atPath: keptDir.path), "a saved note's import copy is kept")
+        XCTAssertFalse(fm.fileExists(atPath: orphanDir.path), "an unreferenced import copy is swept")
+    }
+
     // MARK: History resilience — one corrupt record must NOT wipe the archive (data-loss fix)
 
     private func validRecordJSON(text: String) -> String {

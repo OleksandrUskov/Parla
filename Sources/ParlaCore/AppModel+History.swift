@@ -74,6 +74,26 @@ extension AppModel {
         try? fm.removeItem(atPath: dir)
     }
 
+    /// Sweep abandoned iOS import copies: remove every `imports/<uuid>/` dir NOT referenced by a saved note's
+    /// sourcePath. A failed transcription keeps its copy so «Try again» works, a crash between copy and save leaves
+    /// one, a cancelled queued job drops one — none of which delete()/clearHistory ever reach. Call at LAUNCH
+    /// (`AppModel.iOS()`), where nothing is in-flight/queued and `lastAttemptedURLs` is empty, so it's race-free and
+    /// never removes a copy still in use. A no-op on macOS (no imports/ dir). Mirrors AudioStore.pruneOrphans.
+    public nonisolated static func pruneImportedOrphans(keeping history: [TranscriptItem]) {
+        let fm = FileManager.default
+        guard let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                        appropriateFor: nil, create: false) else { return }
+        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        guard let dirs = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
+        // Referenced <uuid> dir names (each sourcePath is imports/<uuid>/<name>).
+        let referenced = Set(history.compactMap { $0.sourcePath.map {
+            URL(fileURLWithPath: $0).deletingLastPathComponent().lastPathComponent
+        } })
+        for dir in dirs where !referenced.contains(dir.lastPathComponent) {
+            try? fm.removeItem(at: dir)
+        }
+    }
+
     /// Export the entire history to a markdown file (save dialog). The picker is the `presentSavePanel`
     /// platform seam (macOS: NSSavePanel); the render + write + error handling stay here in Core.
     public func exportHistory() {

@@ -18,6 +18,10 @@ extension AppModel {
         // iOS replacement for the macOS ffmpeg subprocess and closes the drop → decode → WhisperKit pipeline.
         m.decoder = OpusAudioDecoder()
 
+        // Launch-time sweep of abandoned import copies (failed-and-not-retried, cancelled-queued, crashed) — safe
+        // here because nothing is in-flight/queued yet and lastAttemptedURLs is empty. (Full-review D6/S4)
+        AppModel.pruneImportedOrphans(keeping: m.history)
+
         m.copyToClipboard = { text in UIPasteboard.general.string = text }
         m.isAppActive = { UIApplication.shared.applicationState == .active }
 

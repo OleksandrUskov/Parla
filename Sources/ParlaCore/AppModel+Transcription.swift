@@ -44,6 +44,11 @@ extension AppModel {
     /// its result is DISCARDED — nothing partial is saved. Already-completed files in the batch stay. The
     /// folder-watcher is untouched (it has no `currentTranscriptionTask`); only the user's manual run stops.
     public func cancelTranscription() {
+        // Free the import-container copies of every QUEUED job we're dropping (iOS): they were copied upfront and
+        // will never be transcribed now, and — unlike the in-flight batch — they're not referenced by
+        // `lastAttemptedURLs`, so «Try again» can't need them. No-op on macOS originals (imports-root prefix guard).
+        // (Full-review D6/S4/R3 — cancelled queued jobs used to leak their copies.)
+        transcriptionQueue.forEach { $0.urls.forEach { Self.pruneImportedSource($0.path) } }
         transcriptionQueue.removeAll()
         guard let task = currentTranscriptionTask else { return }
         cancelling = true          // "Stopping…" until the current file/chunk finishes and the loop breaks
@@ -99,22 +104,12 @@ extension AppModel {
         var failures: [String] = []
         var succeeded = 0
         for (i, url) in files.enumerated() {
-            if Task.isCancelled {   // cancelled → stop pulling more files (already-saved ones stay)
-                // This file + every remaining one in THIS batch were already copied into the iOS import container
-                // (copyIntoContainer runs upfront) but never became a note → prune their leaked copies so a
-                // cancelled batch doesn't grow the container unbounded. No-op on macOS originals (prefix-guarded).
-                // (Full-review D6/S4)
-                files[i...].forEach { Self.pruneImportedSource($0.path) }
-                break
-            }
+            if Task.isCancelled { break }   // cancelled → stop pulling more files (already-saved ones stay)
             // Show the queue position only for a batch (>1 file); a single drop looks like before.
             let batch = total > 1 ? BatchProgress(index: i + 1, total: total, done: i) : nil
             do {
                 let r = try await transcribeOne(url: url, model: selectedModel, batch: batch)
-                if Task.isCancelled {   // decode finished but user cancelled → DISCARD this result, don't save
-                    files[i...].forEach { Self.pruneImportedSource($0.path) }   // this + the rest leak otherwise (D6/S4)
-                    break
-                }
+                if Task.isCancelled { break }   // decode finished but user cancelled → DISCARD this result, don't save
                 let item = TranscriptItem(
                     sourceName: url.lastPathComponent,
                     language: r.language,
@@ -144,7 +139,9 @@ extension AppModel {
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 failures.append("\(url.lastPathComponent) (\(msg))")
-                Self.pruneImportedSource(url.path)   // failed → no note references it → drop its leaked iOS import copy (no-op on macOS) (D6/S4)
+                // NB: do NOT prune url's iOS import copy here — `lastAttemptedURLs` still points at it and «Try again»
+                // (retryLast) must be able to re-decode it. Abandoned failed copies are swept at next launch by
+                // pruneImportedOrphans (AppModel.iOS()). (Full-review D6/S4 fix of the R5 «Try again» regression.)
             }
         }
         if Task.isCancelled {                 // user hit Cancel: don't beep / notify / show a "done" toast
