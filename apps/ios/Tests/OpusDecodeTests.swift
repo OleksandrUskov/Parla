@@ -25,4 +25,24 @@ final class OpusDecodeTests: XCTestCase {
         print("✅ P1.3 seam decode: \(file.length) frames @ \(Int(file.fileFormat.sampleRate)) Hz "
               + "≈ \(String(format: "%.1f", seconds)) s, ch=\(file.fileFormat.channelCount)")
     }
+
+    // Full-review D1 F3 regression: `renderPlayableWav` must produce an AVAudioPlayer-playable rendition for an
+    // imported Telegram Ogg/Opus (it used to `throw .noDecoderAvailable`, so `AudioStore.makePlayable` returned nil
+    // and in-app playback was a silent no-op on iOS while macOS played the same import). Fixture-gated like above.
+    func testRenderPlayableWavYieldsAPlayableRendition() throws {
+        guard let url = Bundle(for: Self.self).url(forResource: "sample", withExtension: "ogg") else {
+            throw XCTSkip("no local Ogg/Opus fixture bundled (gitignored) — skipping the playback-rendition proof")
+        }
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent("parla-playable-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: dest) }
+
+        try OpusAudioDecoder().renderPlayableWav(from: url, to: dest)
+
+        // The contract AudioStore.makePlayable relies on: a file AVAudioPlayer can actually open (not the raw .ogg).
+        let player = try AVAudioPlayer(contentsOf: dest)
+        XCTAssertGreaterThan(player.duration, 1, "expected > 1 s of playable audio")
+        let file = try AVAudioFile(forReading: dest)
+        XCTAssertEqual(file.fileFormat.channelCount, 1, "rendition must be mono")
+    }
 }

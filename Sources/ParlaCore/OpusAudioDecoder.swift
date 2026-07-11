@@ -29,26 +29,9 @@ public struct OpusAudioDecoder: AudioDecoding {
     // MARK: - AudioDecoding
 
     public func decodeToWav16k(_ src: URL) throws -> URL {
-        let lane = try Self.lane(for: src)
-        guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else {
-            throw AudioDecodingError.noDecoderAvailable
-        }
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent("parla-decode-\(UUID().uuidString).wav")
-        let out = try AVAudioFile(forWriting: dest, settings: format.settings)
-        do {
-            try lane.read(src, format) { try out.write(from: $0) }
-        } catch {
-            try? FileManager.default.removeItem(at: dest)   // drop a partial WAV so it can't masquerade as decoded
-            throw error
-        }
-        // A source that decoded no audio (empty/silent header, or a track that yielded no readable samples) must
-        // NOT return a 0-frame WAV as success — downstream that becomes a silent empty transcript with no error
-        // surfaced. Fail loudly instead (mirrors splitIntoChunks, which already treats an empty split as failure).
-        guard out.length > 0 else {
-            try? FileManager.default.removeItem(at: dest)
-            throw AudioDecodingError.noDecoderAvailable
-        }
+        try Self.writeMonoWav(from: src, to: dest)
         return dest
     }
 
@@ -79,8 +62,15 @@ public struct OpusAudioDecoder: AudioDecoding {
     }
 
     public var isChunkingAvailable: Bool { true }
+
+    /// In-app playback rendition for iOS. Reuses the same decode lanes that feed WhisperKit to write a mono
+    /// Float32 WAV the built-in `AVAudioPlayer` can open — so an imported Telegram Ogg/Opus (or video, whose
+    /// original container AVAudioPlayer can't open) is PLAYABLE on iOS, matching macOS where FFmpegAudioDecoder
+    /// renders a playable .m4a. `renderPlayableM4a` stays unimplemented on purpose: `AudioStore.makePlayable`
+    /// tries M4a first, then falls back to this WAV (larger, but the audio cache is capped/managed). webm is
+    /// scoped out of iOS v1 either way (no in-process decoder → both renditions throw → no player, by design).
     public func renderPlayableM4a(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
-    public func renderPlayableWav(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
+    public func renderPlayableWav(from src: URL, to dest: URL) throws { try Self.writeMonoWav(from: src, to: dest) }
 
     // MARK: - Lane selection
 
@@ -97,6 +87,27 @@ public struct OpusAudioDecoder: AudioDecoding {
 
     private static func monoFloatFormat(sampleRate: Double) -> AVAudioFormat? {
         AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)
+    }
+
+    /// Decode `src` (either lane) → a mono Float32 WAV at `dest` that AVAudioFile/AVAudioPlayer can open. Shared by
+    /// `decodeToWav16k` (temp dest → engine input) and `renderPlayableWav` (cache dest → in-app player). Cleans up a
+    /// partial or 0-frame WAV so a failed/empty decode can't masquerade as a valid (silent) file downstream.
+    private static func writeMonoWav(from src: URL, to dest: URL) throws {
+        let lane = try lane(for: src)
+        guard let format = monoFloatFormat(sampleRate: lane.sampleRate) else {
+            throw AudioDecodingError.noDecoderAvailable
+        }
+        let out = try AVAudioFile(forWriting: dest, settings: format.settings)
+        do {
+            try lane.read(src, format) { try out.write(from: $0) }
+        } catch {
+            try? FileManager.default.removeItem(at: dest)   // drop a partial WAV so it can't masquerade as decoded
+            throw error
+        }
+        guard out.length > 0 else {
+            try? FileManager.default.removeItem(at: dest)
+            throw AudioDecodingError.noDecoderAvailable
+        }
     }
 
     // MARK: - Lane 1 read loop — Ogg/Opus (libopusfile), 48 kHz
