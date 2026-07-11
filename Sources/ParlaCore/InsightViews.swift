@@ -138,10 +138,15 @@ public struct RelatedNotesView: View {
                 }
                 .foregroundStyle(.secondary)
                 ForEach(related) { note in
-                    // Clear any active search first: a related note is a topic match, not a query match, so it
-                    // may be absent from filteredHistory — selectedItem (scoped to filteredHistory) couldn't
-                    // resolve it and the tap would be a no-op. Clearing search makes navigation always land.
-                    Button { model.searchQuery = ""; model.selection = note.id } label: {
+                    // Navigate via the pendingOpen channel — the ONE "open this note" intent every shell drains
+                    // (macOS ContentView, iPad split, AND the iPhone compact NavigationStack, which observes only
+                    // `path`, not `selection`). Routing through selection worked on macOS/split but was DEAD on the
+                    // iPhone compact shell, and bridging selection→path there fought the transcribe loop's own
+                    // `selection = item.id` bookkeeping (yanking a reader on a background/queued insert). pendingOpen
+                    // is the deliberate-navigation signal, kept distinct from that bookkeeping. Clear search first: a
+                    // related note is a TOPIC match, may be absent from filteredHistory, so the drains re-resolve it.
+                    // (Full-review D2/S1)
+                    Button { model.searchQuery = ""; model.pendingOpen = note.id } label: {
                         HStack(spacing: 8) {
                             Text(model.showTitles ? note.displayTitle : note.sourceName)
                                 .font(.callout).lineLimit(1)

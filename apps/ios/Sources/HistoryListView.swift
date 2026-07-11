@@ -59,21 +59,11 @@ struct HistoryListView: View {
                 player.stop()
                 try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             }
-            // Keep model.selection == the note actually on screen (top of the stack, or nil on the list). This
-            // compact shell navigates by `path`, but pruneAudioCache protects `selectedItem?.id`; a stale selection
-            // could evict the VISIBLE note's audio out from under playback. (Full-review D2/S1)
-            if model.selection != new.last { model.selection = new.last }
         }
-        // The SHARED RelatedNotesView (and any Core-driven nav) moves by setting model.selection — which the split /
-        // macOS sidebars observe but this stack didn't, so a "Related" tap was DEAD on iPhone (and left selection
-        // pointing at a note this stack wasn't showing). Mirror the split shell: when selection moves to a real note
-        // not already on top, push it (search cleared by the caller). (Full-review D2/S1)
-        .onChange(of: model.selection) { _, id in
-            guard let id, id != path.last, model.history.contains(where: { $0.id == id }) else { return }
-            path.append(id)
-        }
-        // Drain a parla://note deep-link (widget/Handoff/Shortcuts): push the note. `.task` covers cold launch
-        // (the link arrived before this shell mounted); `.onChange` covers a link while running.
+        // Drain a note-open request (parla:// deep-link, widget/Handoff/Shortcuts, AND a "Related" tap — all route
+        // through the pendingOpen channel, which every shell drains). `.task` covers cold launch (the request arrived
+        // before this shell mounted); `.onChange` covers one while running. (Full-review D2/S1: Related now uses
+        // pendingOpen, so it navigates here without a selection→path bridge that fought the batch auto-push.)
         .task { drainPendingOpen() }
         .onChange(of: model.pendingOpen) { _, _ in drainPendingOpen() }
     }
