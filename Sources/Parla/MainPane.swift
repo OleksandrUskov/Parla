@@ -581,6 +581,12 @@ struct TranscriptCard: View {
             ttsPlayer.stop()                 // switching notes stops any in-progress read-aloud
             model.refreshRelatedNotes()      // the open note changed → recompute its doc↔doc "Related"
         }
+        // The playback rendition is prepared ASYNC after the transcript is shown (transcription inserts the item,
+        // then `keepAudio` renders the .m4a and sets `audioPlayable` a beat later), so also (re)load when the
+        // playable URL first appears — not only on a note switch. Without this the player stays empty on a fresh
+        // transcription and the card shows a misleading "format not supported" until the note is reopened.
+        // `player.load` is idempotent by URL, so the overlap with the id-change load never double-loads.
+        .onChange(of: audioURL) { _, url in player.load(url) }
         .onDisappear { player.stop(); ttsPlayer.stop() }
         // Handoff (P2.3d): advertise "view this transcript" while it's the open card so another device (iOS) can
         // continue it. id-only; the other device opens the note locally by id.
