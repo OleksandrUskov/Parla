@@ -9,9 +9,9 @@ import ParlaCore
 //
 // Full text inference (`engine.transcribe`) is deliberately NOT run here: WhisperKit's CoreML **text-decoder**
 // is unstable on the iOS SIMULATOR (no Apple Neural Engine → it crashes mid-decode, regardless of compute
-// units or clip length — confirmed empirically). It is verified on a real DEVICE (argmax ships WhisperKit on
-// iPhone; our load succeeds + inference *starts* on the sim, so the integration itself is sound). Bringing this
-// on a real device (the sim just lacks the Neural Engine).
+// units or clip length — confirmed empirically). It runs on a real DEVICE (argmax ships WhisperKit on iPhone;
+// our load succeeds + inference *starts* on the sim, so the integration itself is sound). The sim's missing
+// Neural Engine is the only reason this end-to-end test is skipped here.
 //
 // Heavy (downloads ~40 MB on first run) + the fixture is gitignored (voice never in git) → XCTSkips in CI.
 final class EndToEndTranscriptionTests: XCTestCase {

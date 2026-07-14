@@ -7,8 +7,7 @@ import AudioToolbox
 /// is a safe no-op. Wired via `AppModel.iOS()` and gated by the user's `soundOnComplete` toggle (default on, like
 /// macOS). (Full-review D1/F2 — the seam was unwired, so the Settings toggle was a dead control on iOS.)
 ///
-/// The exact SystemSoundIDs (a light positive tick for success, a distinct lower tone for failure) are tunable
-/// and tunable to taste.
+/// The exact SystemSoundIDs (a light positive tick for success, a distinct lower tone for failure) are tunable to taste.
 enum CompletionSound {
     static func success() { AudioServicesPlaySystemSound(1057) }   // "Tink" — light, positive
     static func failure() { AudioServicesPlaySystemSound(1053) }   // distinct lower alert tone

@@ -6,8 +6,8 @@ import ParlaCore
 /// «История» — the COMPACT History shell (iOS-port P1.4e; iPad split is HistorySplitView, P2.2). A
 /// `NavigationStack` + `List` over `model.filteredHistory` (the SAME lexical+lemma filter the macOS sidebar
 /// renders) pushes each row to the shared `TranscriptDetailView`. Import stays in the toolbar (the P1.4b
-/// copy-into-container flow); a finished transcription auto-pushes its result so the flow stays
-/// one-shot — pick → progress → text, no extra tap. Row/state views + import types are shared (HistoryShared).
+/// copy-into-container flow); a finished transcription auto-pushes its result so the flow stays one-shot —
+/// pick → progress → text, no extra tap. Row/state views + import types are shared (HistoryShared).
 /// The `player` is injected from HistoryTab (above the compact↔regular swap) so playback survives an iPad resize.
 struct HistoryListView: View {
     @Environment(AppModel.self) private var model
