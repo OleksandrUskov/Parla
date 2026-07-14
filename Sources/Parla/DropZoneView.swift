@@ -95,8 +95,11 @@ struct DropZoneView: View {
         return model.isBusy ? L("drop.working") : L("drop.prompt")
     }
 
-    /// Reliably extracts a file URL from an NSItemProvider (Finder/any source).
-    nonisolated static func loadFileURL(_ provider: NSItemProvider) async -> URL? {
+    /// Reliably extracts a file URL from an NSItemProvider (Finder/any source). `@MainActor` keeps the
+    /// non-Sendable provider in the drop handler's actor region — handing it to a nonisolated context is a
+    /// cross-isolation send that Swift 6.3's region isolation flags as a data-race risk. The loadObject /
+    /// loadDataRepresentation kickoffs are non-blocking, so running them on the main actor costs nothing.
+    @MainActor static func loadFileURL(_ provider: NSItemProvider) async -> URL? {
         await withCheckedContinuation { cont in
             if provider.canLoadObject(ofClass: URL.self) {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
