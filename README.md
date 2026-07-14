@@ -30,6 +30,14 @@
   <img src="assets/screenshots/hero.gif" alt="Drag a Telegram voice message onto Parla and get clean, copy-ready text in seconds" width="88%">
 </p>
 
+<p align="center">
+  <a href="https://github.com/OleksandrUskov/Parla/releases/latest"><b>⬇︎ Download for macOS</b></a>
+  &nbsp;·&nbsp;
+  <a href="#download-macos">Install guide</a>
+  &nbsp;·&nbsp;
+  <a href="#build--run">Build from source</a>
+</p>
+
 Parla started as a tiny "drag a Telegram `.ogg`, get text" Mac utility and grew into a two-platform,
 single-codebase transcription app. One fat cross-platform Swift library (**ParlaCore**) holds all the
 logic — the actor-based Whisper engine, the audio-decode seams, the on-device AI layer, the whole
@@ -41,7 +49,7 @@ with a Share Extension, Live Activity, Home-screen widgets, and Handoff.
 | | macOS | iOS · iPadOS |
 |---|---|---|
 | **Minimum** | macOS 14 (Sonoma) | iOS / iPadOS 17 |
-| **Get it** | `./build_app.sh` → `Parla.app` | build from source |
+| **Get it** | [**Download the app**](https://github.com/OleksandrUskov/Parla/releases/latest) · or `./build_app.sh` | build from source |
 | **Audio decode** | bundled LGPL **ffmpeg** (Ogg/Opus + video) | **in-process libopus** xcframework + AVAssetReader — no subprocess |
 | **OS integration** | Menu-bar companion · Services menu · `parla://` · Shortcuts/Spotlight/Siri · global hotkey · mic dictation | Share Extension (Telegram → Parla) · **Live Activity / Dynamic Island** · Home widgets · **Handoff** ↔ Mac · `parla://` · Shortcuts/Siri · mic dictation |
 | **iPad** | — | first-class: `NavigationSplitView`, drag & drop, ⌘I |
@@ -154,6 +162,18 @@ ogg / opus / video ──▶ decode → 16 kHz mono ────▶ WhisperKit �
 - Formats AVFoundation can open go **straight to the engine**. Telegram Ogg/Opus (and video) are decoded first — with **zero setup** on either platform.
 - Long recordings (> ~10 min) are split into ~2-min chunks and stitched back into one timeline.
 - History is a plain JSON file in the app's Application Support container; the audio cache is auto-capped (macOS 500 MB, evicts oldest audio — the **transcript text is always kept**).
+
+## Download (macOS)
+
+The quickest way — no Xcode, no build:
+
+1. **[Download the latest `Parla-macOS.zip`](https://github.com/OleksandrUskov/Parla/releases/latest)** and unzip it.
+2. Drag **`Parla.app`** into your **Applications** folder.
+3. **First launch:** Control-click (right-click) `Parla.app` → **Open** → **Open**. If it doesn't open, go to **System Settings → Privacy & Security** and click **Open Anyway** — only needed the first time.
+
+In the app, pick a model — it **downloads once** (~600 MB) and then runs fully offline. Drag a Telegram voice note (or any audio/video) onto the drop zone and you get the text.
+
+> **macOS 14+ · Apple Silicon.** On Intel Macs, build from source below (the bundled `ffmpeg` is arm64).
 
 ## Build & run
 
