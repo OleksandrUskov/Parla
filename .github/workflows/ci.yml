@@ -6,9 +6,13 @@ on:
   pull_request:
 
 jobs:
+  # Full build + test on macOS 26 — the environment Parla is developed and validated on. The RU
+  # morphology search (NLTagger lemmas) and the FoundationModels availability floor are keyed to the
+  # OS's on-device NLP/AI stack, so the suite asserts the macOS-26 behavior; earlier macOS degrades
+  # gracefully at runtime (best-effort), it just isn't the test baseline.
   macos:
-    name: macOS · swift build + test
-    runs-on: macos-15
+    name: macOS 26 · swift build + test
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Swift version
@@ -17,6 +21,19 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+
+  # Compile-compatibility on the current stable Xcode (16.x / Swift 6.1). Build only — tests run on
+  # macos-26 above (Apple-NLP output is OS-versioned). Guards against source that compiles only on the
+  # newer toolchain (e.g. not-yet-Sendable SDK types needing @preconcurrency imports).
+  macos-compat:
+    name: macOS 15 · swift build (stable Xcode)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Build
+        run: swift build
 
   ios:
     name: iOS · xcodebuild (app + extensions)
