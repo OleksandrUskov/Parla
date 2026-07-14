@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications   // UNNotificationSettings isn't Sendable on the Xcode 16.x SDK (Swift 6.1)
 
 /// Thin wrapper over UNUserNotificationCenter + a pure (testable) "should we notify" decision.
 ///

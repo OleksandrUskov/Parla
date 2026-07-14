@@ -1,5 +1,5 @@
 import Foundation
-import WhisperKit
+@preconcurrency import WhisperKit   // WhisperKit isn't Sendable-annotated — mirrors TranscriptionEngine.swift
 
 // Headless check: ParlaSmoke <wav> [model]
 // If the model is already on disk — load it LOCALLY (modelFolder + download:false), just like the app does.

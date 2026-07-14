@@ -1,5 +1,5 @@
 import Foundation
-import WhisperKit
+@preconcurrency import WhisperKit   // WhisperKit isn't Sendable-annotated — mirrors TranscriptionEngine.swift
 
 // ParlaStreamEval — RU/UK streaming-vs-offline WER harness (MIC_DICTATION P3 gate).
 //
