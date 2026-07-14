@@ -26,6 +26,10 @@
 
 ---
 
+<p align="center">
+  <img src="assets/screenshots/hero.gif" alt="Drag a Telegram voice message onto Parla and get clean, copy-ready text in seconds" width="88%">
+</p>
+
 Parla started as a tiny "drag a Telegram `.ogg`, get text" Mac utility and grew into a two-platform,
 single-codebase transcription app. One fat cross-platform Swift library (**ParlaCore**) holds all the
 logic — the actor-based Whisper engine, the audio-decode seams, the on-device AI layer, the whole
@@ -78,6 +82,33 @@ on-device guarantee.
 - 🔲 **Home-screen widgets** — your latest transcripts, one tap to open (deep-linked)
 - 🤝 **Handoff** — start reading a transcript on iPhone, continue on the Mac (and back)
 - 🗂 **First-class iPad** — two-column layout, Files drag & drop, ⌘I to import
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="assets/screenshots/03-long-audio.png" alt="A 90-minute recording transcribed into chapters with an AI summary and a built-in player">
+<br><sub><b>Long recordings → chapters + AI.</b> A 90-minute talk, transcribed on-device and split into navigable chapters — with an auto-generated summary, action items, and keywords, plus a built-in player and tap-to-seek timestamps.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="assets/screenshots/02-voice-note.png" alt="A voice message transcribed with a player and on-device AI insights">
+<br><sub><b>A voice message → text in seconds.</b> Drop a Telegram voice note and read it back with the built-in player, a generative summary, and action items — all computed locally.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="assets/screenshots/04-model-manager.png" alt="The model manager listing the transcription model and the on-device AI stack">
+<br><sub><b>Fully offline — and you control it.</b> Pick, download, or delete the Whisper model and the on-device AI stack (generative insights + semantic search). Nothing leaves your Mac.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="assets/screenshots/01-empty.png" alt="Parla's drop zone on first launch">
+<br><sub><b>One window, one gesture.</b> Drag a Telegram voice note — or any audio/video — onto the drop zone to begin.</sub>
+</td>
+</tr>
+</table>
+
+> Screenshots are from the macOS app (dark theme). The iPhone/iPad app renders the same reading surfaces through the shared **ParlaCore** library.
 
 ## Architecture
 
