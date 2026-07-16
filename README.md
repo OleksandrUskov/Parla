@@ -16,7 +16,7 @@
   <img alt="iOS/iPadOS 17+" src="https://img.shields.io/badge/iOS%20%2F%20iPadOS-17%2B-black?logo=apple">
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-orange?logo=swift">
   <img alt="100% on-device" src="https://img.shields.io/badge/privacy-100%25%20on--device-brightgreen">
-  <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="PolyForm Noncommercial license" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue">
 </p>
 
 <p align="center">
@@ -245,8 +245,8 @@ Everything beyond plain transcription is **opt-in** and asks for the minimum per
 | Live mic dictation *(off by default)* | **Microphone** (+ Accessibility only for optional auto-paste on macOS) | records **only while you dictate**, transcribes on-device — audio never leaves your device |
 | Services · `parla://` · Shortcuts / Siri | **none** | transcribe **existing local files only**, read-only |
 
-The Mac app is **not sandboxed** (it shells out to `ffmpeg`) so it ships outside the Mac App Store — and
-it's open source, so you can read exactly what it does.
+The Mac app is **not sandboxed** (it shells out to `ffmpeg`) so it ships outside the Mac App Store — and the
+full source is available, so you can read exactly what it does.
 
 ## Automation / integrations
 
@@ -286,4 +286,11 @@ build_app.sh           macOS build → Parla.app
 
 ## Author & license
 
-Built by **Oleksandr Uskov**. Released under the **MIT License** — see [LICENSE](LICENSE).
+Built by **Oleksandr Uskov**.
+
+- **v1.0.0 and earlier:** MIT License (perpetual and irrevocable for those releases — see the `v1.0.0` tag).
+- **v1.1.0 and later:** [**PolyForm Noncommercial License 1.0.0**](LICENSE) — source-available, free for any
+  noncommercial use; commercial use (including reselling or republishing) is not permitted, and commercial
+  rights are reserved by the author. This is a source-available license, not an OSI-approved open-source license.
+
+Bundled third-party components keep their own licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
