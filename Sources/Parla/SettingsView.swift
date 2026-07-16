@@ -4,6 +4,7 @@ import KeyboardShortcuts
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @State private var showAcknowledgements = false
 
     var body: some View {
         @Bindable var model = model
@@ -141,8 +142,16 @@ struct SettingsView: View {
                 Text(L("settings.system.audiohint"))
                     .font(.caption).foregroundStyle(.secondary)
             }
+
+            Section(L("settings.section.about")) {
+                LabeledContent(Brand.name) {
+                    Text(Acknowledgements.appVersion).foregroundStyle(.secondary).font(.caption)
+                }
+                Button(L("acknowledgements.title")) { showAcknowledgements = true }
+            }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showAcknowledgements) { AcknowledgementsView() }
         .frame(minHeight: 560)
     }
 }

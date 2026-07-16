@@ -17,6 +17,7 @@ struct SettingsView: View {
 
     @State private var shareItem: ShareItem?      // whole-history backup export (same mechanism as HistoryListView)
     @State private var showClearConfirm = false
+    @State private var showAcknowledgements = false
 
     var body: some View {
         @Bindable var model = model
@@ -104,11 +105,19 @@ struct SettingsView: View {
                     Text(L("settings.system.audiohint"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
+
+                Section(L("settings.section.about")) {
+                    LabeledContent(Brand.name) {
+                        Text(Acknowledgements.appVersion).foregroundStyle(.secondary).font(.caption)
+                    }
+                    Button(L("acknowledgements.title")) { showAcknowledgements = true }
+                }
             }
             .navigationTitle(L("settings.title"))
             .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
+        .sheet(isPresented: $showAcknowledgements) { AcknowledgementsView() }
         .confirmationDialog(L("history.clear.confirm.title"), isPresented: $showClearConfirm,
                             titleVisibility: .visible) {
             Button(L("history.clear.confirm.button"), role: .destructive) { model.clearHistory() }

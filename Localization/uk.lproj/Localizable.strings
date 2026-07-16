@@ -298,3 +298,8 @@
 "onboarding.ios.privacy.body" = "Нічого не вивантажується в мережу. Єдиний мережевий запит — одноразове завантаження моделі, далі все офлайн.";
 "firstrun.later"            = "Пізніше";
 "status.loadingmodel.firstrun" = "Перший запуск довший — компілює модель під Apple Neural Engine (одноразово). Далі компіляція пропускається, лишається тільки завантаження в пам'ять.";
+
+// About / Acknowledgements (in-app licenses screen)
+"settings.section.about"    = "Про застосунок";
+"acknowledgements.title"    = "Подяки";
+"acknowledgements.intro"    = "Зібрано на цих open-source компонентах. Сам застосунок доступний у вихідному коді за ліцензією PolyForm Noncommercial.";

@@ -298,3 +298,8 @@
 "onboarding.ios.privacy.body" = "Nothing is uploaded. The only network use is the one-time model download — after that, fully offline.";
 "firstrun.later"            = "Maybe later";
 "status.loadingmodel.firstrun" = "First run is slower — it compiles the model for the Apple Neural Engine (one-time). Later launches skip that and just load it into memory.";
+
+// About / Acknowledgements (in-app licenses screen)
+"settings.section.about"    = "About";
+"acknowledgements.title"    = "Acknowledgements";
+"acknowledgements.intro"    = "Built with these open-source components. The app itself is source-available under the PolyForm Noncommercial License.";
