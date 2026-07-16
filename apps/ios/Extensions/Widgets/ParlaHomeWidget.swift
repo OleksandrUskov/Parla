@@ -1,7 +1,7 @@
 import WidgetKit
 import SwiftUI
 
-/// Home-screen widget (iOS-port P2.3c): a glance at the latest transcripts, read from the App-Group snapshot the
+/// Home-screen widget: a glance at the latest transcripts, read from the App-Group snapshot the
 /// app writes (ParlaCore-free). Small = the latest note; Medium = up to three, each deep-linking to its note via
 /// `parla://note?id=`. Empty state when there's no snapshot (fresh install, or the unsigned-sim App Group is nil).
 struct ParlaHomeWidget: Widget {

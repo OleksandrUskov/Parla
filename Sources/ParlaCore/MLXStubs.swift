@@ -1,7 +1,7 @@
 import Foundation
 
 #if !os(macOS)
-// MARK: - iOS inert MLX stubs (iOS-port P1)
+// MARK: - iOS inert MLX stubs
 //
 // The MLX generative/embedding backend is macOS-only. `Package.swift` gates the MLX products with
 // `.when(platforms: [.macOS])`; `MLXLLMService.swift` / `MLXTextEmbedder.swift` / `AppModel+MLXModel.swift` /

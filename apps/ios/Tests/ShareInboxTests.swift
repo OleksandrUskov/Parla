@@ -2,7 +2,7 @@ import XCTest
 import ParlaCore
 @testable import Parla_iOS
 
-/// iOS-port P1.4j — the Share-Extension → app handoff. The end-to-end share flow is device-only (the extension
+/// the Share-Extension → app handoff. The end-to-end share flow is device-only (the extension
 /// process + the provisioned App Group), but the app-side drain LOGIC is pure filesystem work, verifiable on the
 /// sim with an injected inbox dir — a repro-gate for the pickup: exactly what would fail if a future edit
 /// regressed the filtering or ordering.

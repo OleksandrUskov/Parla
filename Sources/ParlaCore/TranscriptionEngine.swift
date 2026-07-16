@@ -30,7 +30,7 @@ public enum ModelLoad: Sendable, Equatable {
 public protocol TranscribingEngine: Sendable {
     func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws
     func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult
-    /// Streaming seam (MIC_DICTATION P3): decode an in-memory 16 kHz mono Float buffer — no file round-trip.
+    /// Streaming seam: decode an in-memory 16 kHz mono Float buffer — no file round-trip.
     /// The caller owns windowing + absolute-time bookkeeping; returned segment times are buffer-relative.
     func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult
     func deleteModel(_ name: String) async throws
@@ -188,7 +188,7 @@ public actor TranscriptionEngine {
                             segments: mapped.segments, duration: audioLen)
     }
 
-    /// Streaming seam (MIC_DICTATION P3): transcribe an in-memory 16 kHz mono Float buffer — the live
+    /// Streaming seam: transcribe an in-memory 16 kHz mono Float buffer — the live
     /// dictation loop feeds sliding windows straight from the mic tap, no file round-trip. Always
     /// `.transcribe` (dictation never translates); pass `language` explicitly for RU/UK (auto-detect
     /// degrades and misclassifies UK as RU). Returned segment times are buffer-relative — the caller

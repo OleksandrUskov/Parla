@@ -2,7 +2,7 @@ import XCTest
 import ParlaCore
 @testable import Parla_iOS
 
-/// iOS-port P1.4i — model weights RELOCATED out of Documents (user-visible + iCloud-backed = App Store 2.5)
+/// model weights RELOCATED out of Documents (user-visible + iCloud-backed = App Store 2.5)
 /// into Application Support, excluded from backup. This is device-agnostic filesystem logic (no ANE), so it's
 /// fully verifiable on the sim — a repro-gate for the storage change: the exact assertions that would fail if a
 /// future edit regresses the location or the backup-exclusion flag.

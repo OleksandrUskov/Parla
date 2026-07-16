@@ -1,7 +1,7 @@
 import SwiftUI
 import ParlaCore
 
-/// First-run model-download screen (iOS-port P1.4c) — the App Store **4.2.3** gate: the ~600 MB speech model is
+/// First-run model-download screen — the App Store **4.2.3** gate: the ~600 MB speech model is
 /// NOT bundled and NOT auto-downloaded; this screen names the (RAM-adaptive) model, shows its size, and requires
 /// an explicit tap before the download, with resumable progress. "Maybe later" lets the user in without a model
 /// (a transcribe then downloads on demand). Reuses `AppModel.downloadModel` + `downloadProgress` verbatim.

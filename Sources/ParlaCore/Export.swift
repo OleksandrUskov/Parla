@@ -48,7 +48,7 @@ public enum ExportFormat: String, CaseIterable, Identifiable {
     }
 }
 
-/// What an export includes (AI P4) — the 3-way "Content" picker in the export menu, remembered across launches.
+/// What an export includes — the 3-way "Content" picker in the export menu, remembered across launches.
 public enum ExportContent: String, CaseIterable, Identifiable, Sendable {
     case transcript      // the transcript only (the pre-P4 default)
     case withInsights    // transcript + AI insights + per-chapter digest
@@ -111,7 +111,7 @@ public func subtitleCues(_ item: TranscriptItem) -> [(start: Double, end: Double
         .filter { !$0.text.isEmpty }   // a tokens-only segment becomes empty after cleaning → drop it
 }
 
-// MARK: - Insight header (AI P4 — opt-in via the export menu)
+// MARK: - Insight header (opt-in via the export menu)
 
 /// A human-readable insight header for an exported transcript: title / summary / keywords / action items,
 /// each emitted ONLY when its field is set — so an insight-less note contributes NOTHING and its export stays

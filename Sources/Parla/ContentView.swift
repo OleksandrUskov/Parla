@@ -41,7 +41,7 @@ struct ContentView: View {
         // (Text(L("key")) is verbatim and doesn't depend on environment(\.locale), so .id forces it;
         // model-held state — history/selection/search — survives, only transient @State resets.)
         .id(model.uiLanguage)
-        // Handoff (P2.3d): receive a "view transcript" continuation from another device (iOS) → open the note.
+        // Handoff: receive a "view transcript" continuation from another device (iOS) → open the note.
         // Drains through pendingOpen (the same channel iOS uses), incl. on .task for a cold-launch continuation.
         .onContinueUserActivity(AppModel.viewTranscriptActivityType) { model.continueViewTranscript($0.userInfo) }
         .onChange(of: model.pendingOpen) { _, _ in drainPendingOpen() }

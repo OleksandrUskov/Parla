@@ -3,7 +3,7 @@ import Foundation
 /// One regenerable insight field — drives the granular "Regenerate ▾" menu (regenerate just one field).
 public enum InsightField: Sendable { case title, summary, keywords, actions }
 
-// MARK: - Semantic index orchestration (Local-AI Layer P1c/P1d)
+// MARK: - Semantic index orchestration
 
 extension AppModel {
     /// The sidebar label for an item: the title (AI/extractive or hand-edited, falling back to sourceName)
@@ -51,9 +51,9 @@ extension AppModel {
     ///
     /// IMPORTANT — why doc↔doc and not query→doc: `NLContextualEmbedding` is a *contextual* model; a short
     /// search string embeds to a near-degenerate vector dominated by a constant background direction, so ALL
-    /// short queries collapse together and query→note ranking is no better than noise (empirically verified —
-    /// see LOCAL_AI_LAYER.md §5). Whole-note↔whole-note comparison DOES separate topics, so "Related" attaches
-    /// to the open note rather than the search box. Real query→note semantic search is a download-tier job (P3).
+    /// short queries collapse together and query→note ranking is no better than noise (empirically verified).
+    /// Whole-note↔whole-note comparison DOES separate topics, so "Related" attaches
+    /// to the open note rather than the search box. Real query→note semantic search is a download-tier job.
     ///
     /// Robust to the embedding's anisotropy by mean-centering on the same-script corpus (cross-script vectors
     /// live in a different space). Pure in-memory (`embeddingIndex`); best-effort — no vector / no peers → none.
@@ -94,11 +94,11 @@ extension AppModel {
             .prefix(3).map { pool[$0.index].id }
     }
 
-    /// Min centered doc↔doc cosine to count as "related". Calibrated on real data (LOCAL_AI_LAYER.md §5):
+    /// Min centered doc↔doc cosine to count as "related". Calibrated on real data:
     /// true topic pairs land ≈0.4–0.7, unrelated/noise notes go negative; 0.30 keeps the former, drops the latter.
     public static var relatedFloor: Double { 0.30 }
 
-    // MARK: Semantic search (P3.5) — real query→note retrieval via the download-tier model
+    // MARK: Semantic search — real query→note retrieval via the download-tier model
 
     /// Min query→note cosine to surface a semantic search hit. The probe put in-topic at 0.41–0.73 and off-topic at
     /// 0.23–0.31, but REAL queries are shorter / more abstract than a note and score lower, so 0.40 missed genuine
@@ -454,7 +454,7 @@ extension AppModel {
     /// generative version by PREFIX (never downgrades a v1 note while enrich is about to regenerate it to v2), while
     /// enrich targets notes NOT at the CURRENT exact tag (so a version bump re-runs them). FoundationModels = Backend A.
     public static let foundationTagPrefix = "foundation-"
-    /// MLX (Qwen3) generative — the RU/UK backend (P3).
+    /// MLX (Qwen3) generative — the RU/UK backend.
     public static let mlxTagPrefix = "mlx-qwen3-"
     public static var foundationModelTag: String { foundationTagPrefix + "v2" }   // v2: + generative keywords, stricter+cased actions
     public static var mlxModelTag: String { mlxTagPrefix + "v2" }                  // v2: + generative keywords, stricter+cased actions
@@ -487,7 +487,7 @@ extension AppModel {
         tag == foundationModelTag || tag == mlxModelTag
     }
 
-    // MARK: Retrieval embedder routing (P3.5) — the doc-vector / query producer for "Related" + semantic search.
+    // MARK: Retrieval embedder routing — the doc-vector / query producer for "Related" + semantic search.
 
     /// Active RETRIEVAL embedder: the download-tier `MLXTextEmbedder` once its model is on disk, else the free
     /// `NLEmbedder` (`embedder`). The EXTRACTIVE path (per-token `tokenVectors` → title/summary/keywords) ALWAYS

@@ -2,7 +2,7 @@ import XCTest
 import AVFoundation
 import ParlaCore
 
-// iOS-port P1.3 runtime proof: exercise the REAL `AudioDecoding` seam (`OpusAudioDecoder` in ParlaCore) on a
+// runtime proof: exercise the REAL `AudioDecoding` seam (`OpusAudioDecoder` in ParlaCore) on a
 // real Telegram Ogg/Opus fixture on the iOS simulator, and assert it yields a WAV WhisperKit can read — link ≠
 // works ([[run-manual-verify-paths]]). The fixture is gitignored (voice never in git); when it's absent (CI / a
 // fresh clone) the test XCTSkips, so it is never a false red.

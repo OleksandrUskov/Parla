@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Shared insight UI (iOS-port P1.4g)
+// MARK: - Shared insight UI
 //
 // The AI-layer reading components — keyword tags + a collapsible summary + an action-items checklist, and the
 // "Related notes" doc↔doc semantic footer — extracted VERBATIM from the macOS `TranscriptCard` (MainPane.swift)
@@ -122,7 +122,7 @@ public struct InsightsView: View {
 /// "Related notes" — whole history notes close BY MEANING to the open one (doc↔doc semantic, computed in
 /// `AppModel.refreshRelatedNotes`). A footer suggestion: shown only when something is genuinely related; each
 /// row selects that note. This is where the on-device semantic layer actually helps — note↔note — since
-/// word→note search isn't viable on the free model (that's the download tier; LOCAL_AI_LAYER.md §5).
+/// word→note search isn't viable on the free model (that's the download tier).
 public struct RelatedNotesView: View {
     @Environment(AppModel.self) private var model
 

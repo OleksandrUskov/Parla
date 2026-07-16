@@ -3,9 +3,9 @@ import UniformTypeIdentifiers
 import AVFoundation
 import ParlaCore
 
-/// «История» — the COMPACT History shell (iOS-port P1.4e; iPad split is HistorySplitView, P2.2). A
+/// «История» — the COMPACT History shell (iPad split is HistorySplitView). A
 /// `NavigationStack` + `List` over `model.filteredHistory` (the SAME lexical+lemma filter the macOS sidebar
-/// renders) pushes each row to the shared `TranscriptDetailView`. Import stays in the toolbar (the P1.4b
+/// renders) pushes each row to the shared `TranscriptDetailView`. Import stays in the toolbar (the
 /// copy-into-container flow); a finished transcription auto-pushes its result so the flow stays one-shot —
 /// pick → progress → text, no extra tap. Row/state views + import types are shared (HistoryShared).
 /// The `player` is injected from HistoryTab (above the compact↔regular swap) so playback survives an iPad resize.
@@ -16,7 +16,7 @@ struct HistoryListView: View {
     @State private var importing = false          // copying picks into the container (before handleDrop starts)
     @State private var showClearConfirm = false
     @State private var path: [TranscriptItem.ID] = []   // nav stack: the pushed transcript id(s)
-    @State private var shareItem: ShareItem?            // whole-history backup export (P1.4h)
+    @State private var shareItem: ShareItem?            // whole-history backup export
 
     var body: some View {
         @Bindable var model = model
@@ -51,7 +51,7 @@ struct HistoryListView: View {
         .onChange(of: model.history.count) { old, new in
             if new > old, path.isEmpty, let top = model.history.first { path = [top.id] }
         }
-        // The hoisted player (P2.2) keeps playing across shell swaps, so TranscriptDetailView no longer stops it on
+        // The hoisted player keeps playing across shell swaps, so TranscriptDetailView no longer stops it on
         // disappear. On the compact shell that means we stop it HERE when the user pops back to the list — there's
         // no transport control on the list — and release the audio session so other apps un-duck.
         .onChange(of: path) { old, new in
@@ -177,7 +177,7 @@ struct HistoryListView: View {
         shareItem = ShareItem(url: url)
     }
 
-    // MARK: - Import (P1.4b flow, verbatim)
+    // MARK: - Import
 
     /// Copy the picks into the container OFF the main thread (a large video would freeze the UI otherwise),
     /// showing a spinner via `importing`, then hand the container URLs to the pipeline on the main actor.

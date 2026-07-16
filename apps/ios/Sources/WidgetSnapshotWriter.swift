@@ -1,7 +1,7 @@
 import ParlaCore
 import WidgetKit
 
-/// Writes the Home-widget snapshot from the app's history (iOS-port P2.3c). The `[TranscriptItem]→WidgetSnapshot`
+/// Writes the Home-widget snapshot from the app's history. The `[TranscriptItem]→WidgetSnapshot`
 /// mapping lives HERE (the app), not in the shared file — the widget can't link Core. Called on history change and
 /// on launch; reloads the widget timelines after writing so the glance stays fresh.
 enum WidgetSnapshotWriter {

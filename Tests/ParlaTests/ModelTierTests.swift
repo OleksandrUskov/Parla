@@ -1,7 +1,7 @@
 import XCTest
 @testable import ParlaCore
 
-/// iOS-port P1.4a — the pure RAM-adaptive model-tier mapping. The live `os_proc_available_memory()` read is
+/// the pure RAM-adaptive model-tier mapping. The live `os_proc_available_memory()` read is
 /// iOS-only, but the bytes→variant decision is cross-platform, so it's pinned here on macOS.
 final class ModelTierTests: XCTestCase {
 

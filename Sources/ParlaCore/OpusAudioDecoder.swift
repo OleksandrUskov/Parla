@@ -4,7 +4,7 @@ import AVFoundation
 import CoreMedia
 import opus
 
-/// iOS in-process `AudioDecoding` (iOS-port P1.3). The macOS ffmpeg subprocess is impossible on iOS, so the
+/// iOS in-process `AudioDecoding`. The macOS ffmpeg subprocess is impossible on iOS, so the
 /// transcription pipeline's decode seam is served here by two pure-library lanes that both stream one small
 /// mono Float32 buffer at a time (bounded memory regardless of length):
 ///

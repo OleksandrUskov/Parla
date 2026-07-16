@@ -50,7 +50,7 @@ final class ParlaLogicTests: XCTestCase {
         MLXModelSpec.downloadBase = storeDir.appendingPathComponent("mlx")
         // The embedding-model cache is likewise a separate global path — redirect it so `EmbeddingModelSpec.isDownloaded()`
         // is deterministic (false) in tests; otherwise the retrieval-embedder routing would pick the real downloaded
-        // model over the injected fake (the P3.5 probe already downloaded it on the dev machine).
+        // model over the injected fake (the probe already downloaded it on the dev machine).
         EmbeddingModelSpec.downloadBase = storeDir.appendingPathComponent("embed")
     }
 
@@ -94,7 +94,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(formatBytes(Int64(1.5 * 1024 * 1_048_576)), "1.5 ГБ")
     }
 
-    // MARK: Dictation (MIC_DICTATION P0)
+    // MARK: Dictation
 
     /// The recorder writes WhisperKit's native input format. If this constant drifts, dictation would
     /// silently produce the wrong sample rate / channel count and tank recognition quality. (The live
@@ -107,11 +107,11 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(f.commonFormat, .pcmFormatInt16)
     }
 
-    // MARK: Streaming engine seam (MIC_DICTATION P3a)
+    // MARK: Streaming engine seam
 
     /// The streaming seam decodes an in-memory Float buffer and threads results through the SAME mapping
     /// as the file path. The real WhisperKit decode is manual-only; this pins the seam's shape + that the
-    /// orchestrator (P3c) gets a buffer-sized, canned-result double to drive.
+    /// orchestrator gets a buffer-sized, canned-result double to drive.
     func testStreamingSeamDecodesBufferAndReportsSize() async throws {
         let canned = EngineResult(text: "привет", language: "ru",
                                   segments: [Segment(start: 0, end: 1, text: "привет")], duration: 1)
@@ -152,7 +152,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(AppModel.lockedLanguage(current: "uk", detected: ""), "uk")     // keep current on an empty detect
     }
 
-    // MARK: Streaming reconciler (MIC_DICTATION P3c)
+    // MARK: Streaming reconciler
 
     private func seg(_ start: Double, _ end: Double, _ text: String) -> Segment {
         Segment(start: start, end: end, text: text)
@@ -630,7 +630,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(back.first?.editedAt, Date(timeIntervalSince1970: 1_700_000_000))
     }
 
-    // MARK: - Local-AI Layer P0 — Optional fields, displayTitle, seam gating
+    // MARK: - Optional fields, displayTitle, seam gating
 
     /// T1 (mandatory): a history.json written before the AI layer (no title/summary/actions/aiModel
     /// keys) still decodes; all four are nil; displayTitle falls back to sourceName.
@@ -698,7 +698,7 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     /// Load-bearing language gate: FoundationModels covers English, NOT Russian/Ukrainian — the whole
-    /// reason Parla needs the embedding (P1) + MLX (P3) paths. Case/subtag-insensitive.
+    /// reason Parla needs the embedding + MLX paths. Case/subtag-insensitive.
     func testFoundationModelsLanguageGate() {
         XCTAssertTrue(FoundationModelsService.maySupport(language: "en"))
         XCTAssertTrue(FoundationModelsService.maySupport(language: "EN-US"))
@@ -708,7 +708,7 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     /// T7 (P0 slice): the generative LLM service NEVER serves ru/uk in P0 — true on every OS
-    /// (FoundationModels can't; the MLX RU/UK backend lands in P3). RU/UK get value via SemanticIndex (P1).
+    /// (FoundationModels can't; the MLX RU/UK backend lands). RU/UK get value via SemanticIndex.
     func testDefaultAIServiceNeverReadyForRussianUkrainian() {
         let ai = DefaultAIService()
         XCTAssertNotEqual(ai.availability(forLanguage: "ru"), .ready)
@@ -716,7 +716,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNotEqual(ai.availability(forLanguage: "ru-RU"), .ready)
     }
 
-    // MARK: - MLX backend (AI P3, Backend B)
+    // MARK: - MLX backend
 
     /// Tolerant JSON extraction (MLX has no guided decoding): the model may fence the object or wrap it in
     /// prose, and braces inside string values must not confuse the balance scan.
@@ -816,7 +816,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(mlx.availability(forLanguage: "ru"), .needsModelDownload)
         XCTAssertEqual(mlx.availability(forLanguage: "uk"), .needsModelDownload)
         XCTAssertEqual(mlx.availability(forLanguage: "ru-RU"), .needsModelDownload)
-        XCTAssertEqual(mlx.availability(forLanguage: "en"), .needsModelDownload)    // English = MLX fallback (P4)
+        XCTAssertEqual(mlx.availability(forLanguage: "en"), .needsModelDownload)    // English = MLX fallback
         XCTAssertEqual(mlx.availability(forLanguage: "fr"), .languageUnsupported)   // still not covered
         #else
         XCTAssertEqual(mlx.availability(forLanguage: "ru"), .noAppleSilicon)
@@ -863,7 +863,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(got.actions.first?.text, "позвонить")
     }
 
-    // MARK: - Local-AI Layer P1a — semantic core (cosine / topK / TextRank)
+    // MARK: - Semantic core (cosine / topK / TextRank)
 
     func testCosineSimilarity() {
         XCTAssertEqual(SemanticIndex.cosine([1, 0, 0], [1, 0, 0]), 1.0, accuracy: 1e-9)   // identical
@@ -918,7 +918,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(scores.allSatisfy { $0 > 0 && $0.isFinite })
     }
 
-    // MARK: - Local-AI Layer P1c — EmbeddingStore + embedText + backfill
+    // MARK: - EmbeddingStore + embedText + backfill
 
     @MainActor func testEmbeddingStoreRoundtrip() {
         withTemporaryHistoryStore {
@@ -1064,7 +1064,7 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
-    // MARK: P3.5 — embedding-store provenance tag + re-embed on model switch
+    // MARK: embedding-store provenance tag + re-embed on model switch
 
     func testEmbeddingStoreModelTagRoundtrip() {
         withTemporaryHistoryStore {
@@ -1355,7 +1355,7 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
-    /// The manual "Regenerate" button (P4) FORCES a re-run even on a note already at the current generative tag —
+    /// The manual "Regenerate" button FORCES a re-run even on a note already at the current generative tag —
     /// which enrich would otherwise SKIP. The force is a provenance clear, so the item re-enters both passes; a
     /// hand-edited title survives, the other fields are re-generated, a prior failure block clears, and the per-note
     /// spinner flag is gone when the await returns.
@@ -1397,7 +1397,7 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
-    // MARK: AI P4 piece 3 — per-chapter summaries (on-demand, generative-only)
+    // MARK: per-chapter summaries (on-demand, generative-only)
 
     /// A chapter's text source strips WhisperKit tokens (cleanText), drops empties, space-joins.
     func testChapterJoinedText() {
@@ -1820,7 +1820,7 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
-    // MARK: - Local-AI Layer P1d — extractive title/summary
+    // MARK: - Extractive title/summary
 
     func testConciseTitle() {
         XCTAssertEqual(conciseTitle(from: "  Короткий   заголовок  "), "Короткий заголовок")   // trim + collapse
@@ -2104,7 +2104,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).body, "Готово: 1 розшифровка")
     }
 
-    // MARK: Audio-cache prune protection — TOCTOU (P0.2)
+    // MARK: Audio-cache prune protection — TOCTOU
 
     /// Pins the exact bug the review found: the displayed/playing entry is never evicted, and the
     /// re-check is a pure function applied after the off-main pass.
@@ -2118,7 +2118,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(AudioStore.applyProtection([a, b, c], evicting: b).contains(b))
     }
 
-    // MARK: Transcribe orchestration with a fake engine (P0.1)
+    // MARK: Transcribe orchestration with a fake engine
 
     @MainActor func testTranscribeSingleFileInsertsHistory() async {
         await withTemporaryHistoryStoreAsync {
@@ -2370,7 +2370,7 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
-    // MARK: Dictation orchestration (MIC_DICTATION P1)
+    // MARK: Dictation orchestration
 
     @MainActor func testDictationInsertsHistoryRecord() async {
         await withTemporaryHistoryStoreAsync {
@@ -2688,7 +2688,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(DictationMode.allCases.count, 2)
     }
 
-    // MARK: VAD silence detector (MIC_DICTATION P3 part 2)
+    // MARK: VAD silence detector
 
     func testSilenceDetectorArmsAfterSpeechThenStops() {
         var d = SilenceDetector(threshold: 0.01, silenceToStop: 1.0, minSpeechToArm: 0.5)
@@ -2939,7 +2939,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(md.contains("---"))             // no between-records separator for a single item
     }
 
-    // MARK: AI P4 piece 2 — insights in export (opt-in; SRT skipped, JSON already carries them)
+    // MARK: insights in export (opt-in; SRT skipped, JSON already carries them)
 
     /// The insight header is fully Optional-gated: a note with NO insight fields contributes nothing, so an
     /// insight-less export stays byte-identical to pre-P4 (this is what keeps the existing byte-pin tests valid).
@@ -3244,7 +3244,7 @@ final class ParlaLogicTests: XCTestCase {
                                                   systemCandidates: ["/also/nope"]))
     }
 
-    // MARK: FolderWatcher teardown stress (P1.1)
+    // MARK: FolderWatcher teardown stress
 
     /// Exercises the passRetained/release teardown deterministically (no event-timing dependency):
     /// a UAF or over-release in start()/stop() would trap, so reaching the end is the assertion.
@@ -3271,7 +3271,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(true)
     }
 
-    // MARK: AudioStore round-trip (P1.2)
+    // MARK: AudioStore round-trip
 
     func testAudioStorePlayableURLPrefersRendition() {
         withTemporaryHistoryStore {
@@ -3597,7 +3597,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(parseParlaURL(URL(string: "parla://show")!), .show)
         XCTAssertEqual(parseParlaURL(URL(string: "parla://bogus")!), .unknown)   // unknown verb
         XCTAssertEqual(parseParlaURL(URL(string: "https://evil.com/x")!), .unknown)   // wrong scheme
-        // iOS deep-link verbs (P2.3a): open a note by id, start dictation.
+        // iOS deep-link verbs: open a note by id, start dictation.
         let uuid = UUID()
         XCTAssertEqual(parseParlaURL(URL(string: "parla://note?id=\(uuid.uuidString)")!), .note(id: uuid))
         XCTAssertEqual(parseParlaURL(URL(string: "parla://note?id=not-a-uuid")!), .unknown)   // malformed id → unknown, no crash
@@ -3607,7 +3607,7 @@ final class ParlaLogicTests: XCTestCase {
 
     func testParseViewTranscriptActivity() {
         let id = UUID()
-        XCTAssertEqual(AppModel.parseViewTranscriptActivity(["id": id.uuidString]), id)   // Handoff (P2.3d)
+        XCTAssertEqual(AppModel.parseViewTranscriptActivity(["id": id.uuidString]), id)   // Handoff
         XCTAssertNil(AppModel.parseViewTranscriptActivity(["id": "not-a-uuid"]))
         XCTAssertNil(AppModel.parseViewTranscriptActivity(["other": id.uuidString]))      // no id key
         XCTAssertNil(AppModel.parseViewTranscriptActivity(nil))
@@ -4069,7 +4069,7 @@ final class ParlaLogicTests: XCTestCase {
     }
 }
 
-// MARK: - Test double for the transcription backend (P0.1 seam)
+// MARK: - Test double for the transcription backend
 
 /// Fake `TranscribingEngine`: returns canned results (or throws), counting calls. Single-flight in
 /// tests (each engine call is awaited in turn), so the unchecked Sendable is safe.
@@ -4122,7 +4122,7 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     func deleteModel(_ name: String) async throws { deletedModels.append(name) }
 }
 
-// MARK: - Test double for the AudioDecoding seam (iOS-port P0.0)
+// MARK: - Test double for the AudioDecoding seam
 
 /// Fake `AudioDecoding`: closures stand in for the ffmpeg subprocess so a test can script the decode
 /// (return a sentinel path, or throw) without touching ffmpeg. Defaults are inert (passthrough / no chunking).
@@ -4138,7 +4138,7 @@ private struct ClosureAudioDecoder: AudioDecoding {
     func renderPlayableWav(from src: URL, to dest: URL) throws { try render(src, dest) }
 }
 
-// MARK: - Test double for the Local-AI seam (P0)
+// MARK: - Test double for the Local-AI seam
 
 /// Fake `LocalLLMService`: reports a fixed availability and returns canned insights (or throws).
 /// Value type → trivially Sendable, like the seam it stands in for.

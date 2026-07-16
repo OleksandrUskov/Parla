@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// A transcription-model tier row (iOS-port P1.4i) — radio-select + download / delete / progress. Relocated
+/// A transcription-model tier row — radio-select + download / delete / progress. Relocated
 /// VERBATIM from the macOS `MainPane.swift` into ParlaCore as `public` SwiftUI so both the macOS ModelManagerView
 /// and the iOS ModelManagerView render the same row (true parity, zero dup). Tapping the row selects that tier —
-/// which is also the iOS "recover from a mis-picked RAM tier" path (the P1.4 review debt). Depends only on
+/// which is also the iOS "recover from a mis-picked RAM tier" path (the review debt). Depends only on
 /// `AppModel` / `ModelTier` / `Brand` / `formatBytes` — all already in Core.
 public struct ModelRow: View {
     @Environment(AppModel.self) private var model

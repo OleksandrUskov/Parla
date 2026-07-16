@@ -1,4 +1,4 @@
-# XcodeGen spec for the Parla iOS app (iOS-port P1.4).
+# XcodeGen spec for the Parla iOS app.
 #
 # ADDITIVE: the macOS app stays a pure SwiftPM build (`build_app.sh`); this only stands up the NEW iOS app
 # target on top of the same cross-platform `ParlaCore` package (referenced as a local package at `../..`).
@@ -16,7 +16,7 @@ options:
 packages:
   ParlaCore:
     path: ../..
-  # In-process Ogg/Opus decode (iOS-port P1.3, IOS_PORT §2). BSD, SPM .binaryTarget, iOS 15+, self-contained
+  # In-process Ogg/Opus decode. BSD, SPM .binaryTarget, iOS 15+, self-contained
   # (bundles libopus + Opusfile + libogg). Replaces the macOS ffmpeg subprocess (dead on iOS) for Telegram voice.
   opus:
     url: https://github.com/sbooth/opus-binary-xcframework
@@ -34,13 +34,13 @@ targets:
     sources:
       - path: Sources
       # Files compiled into BOTH the app and the ParlaWidgets extension (target membership) — the Live Activity
-      # attributes etc. — so they must stay ParlaCore-free (the extension can't link ParlaCore). (P2.3b)
+      # attributes etc. — so they must stay ParlaCore-free (the extension can't link ParlaCore).
       - path: Shared
       # App icon (concept B — gradient waveform on Parla's near-black canvas). Single-size 1024² appiconset;
-      # Xcode downsamples the rest. Master SVG lives at repo-root assets/icon/ (reproducible; seeds README hero). (P2.4a)
+      # Xcode downsamples the rest. Master SVG lives at repo-root assets/icon/ (reproducible; seeds README hero).
       - path: Assets.xcassets
       # Apple Privacy Manifest (App Store required). No tracking, no data collection, one required-reason API
-      # (UserDefaults / CA92.1 — app-private prefs). Audited against ParlaCore + apps/ios. (P2.4b)
+      # (UserDefaults / CA92.1 — app-private prefs). Audited against ParlaCore + apps/ios.
       # The two extensions carry their own PrivacyInfo.xcprivacy inside their Extensions/{Share,Widgets} folders.
       - path: PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -63,11 +63,11 @@ targets:
         product: opus
       - package: ogg
         product: ogg
-      # Embed the Share Extension into the app bundle (P1.4j). XcodeGen auto-embeds app-extension dependencies.
+      # Embed the Share Extension into the app bundle. XcodeGen auto-embeds app-extension dependencies.
       - target: ParlaShareExtension
-      # Embed the Widget Extension (Live Activity now, Home widget + Control in P2.3c). (P2.3b)
+      # Embed the Widget Extension (Live Activity now, Home widget + Control).
       - target: ParlaWidgets
-    # App Group: the shared container the Share Extension (P1.4j) copies incoming voice notes into, and the app
+    # App Group: the shared container the Share Extension copies incoming voice notes into, and the app
     # drains on foreground. Generated from here by XcodeGen (the .entitlements is a gitignored build artifact).
     entitlements:
       path: Parla-iOS.entitlements
@@ -79,13 +79,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.parla.ios
         TARGETED_DEVICE_FAMILY: "1,2"          # iPhone + iPad
         SWIFT_VERSION: "5.0"                     # spike: app-target sources in Swift-5 mode (ParlaCore stays .v6)
-        # Hand-written Info.plist (like the Share Extension) — needed for CFBundleURLTypes (parla:// scheme, P2.3a)
-        # and the coming NSSupportsLiveActivities / NSUserActivityTypes (P2.3b/d) that aren't scalar INFOPLIST_KEY_*.
+        # Hand-written Info.plist (like the Share Extension) — needed for CFBundleURLTypes (parla:// scheme)
+        # and the coming NSSupportsLiveActivities / NSUserActivityTypes that aren't scalar INFOPLIST_KEY_*.
         INFOPLIST_FILE: Parla-iOS-Info.plist
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon     # P2.4a — matches Assets.xcassets/AppIcon.appiconset
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon     # matches Assets.xcassets/AppIcon.appiconset
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
-  # Share Extension (iOS-port P1.4j) — copy-only: shows Parla in the share sheet for audio/video, copies the file
+  # Share Extension — copy-only: shows Parla in the share sheet for audio/video, copies the file
   # into the App Group inbox, completes. LEAN: no ParlaCore/opus/ogg link (extension memory budget), only UIKit.
   # The end-to-end share is device-only (needs the provisioned App Group + a real share sheet).
   ParlaShareExtension:
@@ -107,9 +107,9 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
-  # Widget Extension (iOS-port P2.3b) — the transcription Live Activity / Dynamic Island now; the Home widget +
-  # iOS-18 Control land in P2.3c. LEAN: NO ParlaCore/opus/ogg link (extension memory budget), only WidgetKit +
-  # ActivityKit + SwiftUI + the Foundation-only Shared/ files. The App Group is ready for the P2.3c widget snapshot;
+  # Widget Extension — the transcription Live Activity / Dynamic Island now; the Home widget +
+  # iOS-18 Control land later. LEAN: NO ParlaCore/opus/ogg link (extension memory budget), only WidgetKit +
+  # ActivityKit + SwiftUI + the Foundation-only Shared/ files. The App Group is ready for the widget snapshot;
   # under CODE_SIGNING_ALLOWED=NO it's an inert no-op on the sim (same as the Share Extension).
   ParlaWidgets:
     type: app-extension
@@ -131,7 +131,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
-  # P1.3 runtime proof: a unit-test target (hosted by Parla-iOS) that decodes a real Ogg/Opus fixture on the
+  # Runtime proof: a unit-test target (hosted by Parla-iOS) that decodes a real Ogg/Opus fixture on the
   # simulator to prove the Opusfile path works at runtime. `@testable import Parla_iOS` reuses OpusAudioDecoder.
   # The fixture is gitignored (voice never in git); the test XCTSkips when it's absent → never a false red.
   Parla-iOSTests:

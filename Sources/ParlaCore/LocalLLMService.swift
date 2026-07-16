@@ -3,13 +3,13 @@ import Foundation
 // FoundationModels = macOS-only for Parla (Backend A, EN, macOS 26). The `&& os(macOS)` is LOAD-BEARING
 // for the iOS build: the iOS-26 SDK satisfies `canImport(FoundationModels)`, so without it the `@Generable`
 // macro on `GeneratedInsights` expands into iOS-26-only symbols (`GenerationSchema`/`GeneratedContent`/…)
-// under the iOS-17 deployment floor → "only available in iOS 26.0 or newer" (iOS-port P1.0). iOS has no
+// under the iOS-17 deployment floor → "only available in iOS 26.0 or newer". iOS has no
 // generative Apple-Intelligence backend in v1; it degrades to `.unsupportedOS` + the extractive path.
 #if canImport(FoundationModels) && os(macOS)
 import FoundationModels
 #endif
 
-// MARK: - Local-AI Layer seam (P0)
+// MARK: - Local-AI Layer seam
 //
 // One capability-gated seam over on-device AI backends, mirroring `TranscribingEngine`: a `Sendable`
 // protocol with an injectable default on `AppModel` + a test double. The selector picks the best
@@ -18,8 +18,7 @@ import FoundationModels
 //
 // P0 ships the seam + gating only — no generation runs yet. `FoundationModelsService` (English,
 // macOS 26) is wired in P2; the MLX RU/UK backend in P3; RU/UK extractive title/summary + semantic
-// search ride a *separate* `SemanticIndex` (P1), not this LLM service. See
-// `LOCAL_AI_LAYER.md`.
+// search ride a *separate* `SemanticIndex`, not this LLM service.
 
 /// Which on-device backend produced an insight. Drives provenance tagging when a language can be served by more
 /// than one backend — EN is FoundationModels normally, but falls back to MLX/Qwen when Apple Intelligence is off

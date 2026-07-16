@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pure segment-level streaming reconciliation (MIC_DICTATION P3).
+/// Pure segment-level streaming reconciliation.
 ///
 /// The live dictation loop decodes a sliding window of the growing audio every ~1.5–2 s. This core takes
 /// each window's segments and splits them into a **stable confirmed prefix** and a **dimmed hypothesis

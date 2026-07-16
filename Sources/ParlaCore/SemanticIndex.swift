@@ -1,13 +1,12 @@
 import Foundation
 
-// MARK: - Semantic core (Local-AI Layer P1a)
+// MARK: - Semantic core
 //
 // The pure ranking math behind semantic search + extractive title/summary: cosine similarity, top-K
 // nearest, and TextRank centrality over a sentence-similarity matrix. No framework, no I/O —
-// deterministic and unit-tested. The `NLContextualEmbedding` vector producer (P1b), the persisted
-// `EmbeddingStore` (P1c), and the UI (P1d+) build on top. RU/UK-capable on the macOS-14 floor with no
-// model download (the whole reason this lands before the LLM tiers). See
-// `LOCAL_AI_LAYER.md` §2c.
+// deterministic and unit-tested. The `NLContextualEmbedding` vector producer, the persisted
+// `EmbeddingStore`, and the UI (P1d+) build on top. RU/UK-capable on the macOS-14 floor with no
+// model download (the whole reason this lands before the LLM tiers).
 
 /// An embedding vector. `Double` matches `NLContextualEmbedding`'s output; the math stays exact.
 public typealias Embedding = [Double]

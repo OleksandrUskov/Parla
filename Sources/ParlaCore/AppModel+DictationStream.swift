@@ -1,6 +1,6 @@
 import Foundation
 
-/// Live segment-level streaming preview (MIC_DICTATION P3).
+/// Live segment-level streaming preview.
 ///
 /// While a dictation records in streaming mode, a loop decodes a sliding window of the captured audio every
 /// `streamingInterval` and feeds it to a `StreamingReconciler`, publishing a confirmed prefix + dimmed

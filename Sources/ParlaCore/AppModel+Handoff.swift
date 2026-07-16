@@ -1,6 +1,6 @@
 import Foundation
 
-/// Handoff (NSUserActivity continuity) — "view this transcript on another device" (iOS-port P2.3d). Pure
+/// Handoff (NSUserActivity continuity) — "view this transcript on another device". Pure
 /// Foundation, so Core stays UIKit/AppKit-free. Advertised on the reading surface (iOS `TranscriptDetailView` +
 /// macOS `TranscriptCard`) and received on both roots; the type is declared in both apps' Info.plists
 /// (NSUserActivityTypes). id-only, no payload — the note is opened locally by id.

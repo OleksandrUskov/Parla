@@ -1,7 +1,7 @@
 import SwiftUI
 import ParlaCore
 
-/// The History tab shell selector (iOS-port P2.2). Owns the `PlaybackController` HERE — ABOVE the compact↔regular
+/// The History tab shell selector. Owns the `PlaybackController` HERE — ABOVE the compact↔regular
 /// layout swap — so audio playback survives an iPad rotate / Split-View resize that tears down and rebuilds the
 /// History subtree (a `@State` player inside the swapped shell would reset on every resize). Picks the compact
 /// `HistoryListView` (iPhone, iPad narrow multitasking) vs the two-column `HistorySplitView` (iPad regular width).

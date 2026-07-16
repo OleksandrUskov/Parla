@@ -1,7 +1,7 @@
 import SwiftUI
 import ParlaCore
 
-/// iOS Settings tab (iOS-port P2.1b). Mirrors the macOS `SettingsView` section-for-section, reusing the SAME
+/// iOS Settings tab. Mirrors the macOS `SettingsView` section-for-section, reusing the SAME
 /// `L()` keys (no new L10n except the tab title). Backing props are all Core `@Observable` didSet-persisted, so
 /// a toggle here drives the shared reading views live and survives relaunch — exactly like the Mac.
 ///

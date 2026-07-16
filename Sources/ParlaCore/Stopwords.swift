@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - Keyword-extraction stopwords (Local-AI Layer P1)
+// MARK: - Keyword-extraction stopwords
 //
 // A definitive, set-and-forget closed-class FUNCTION-WORD list for RU/UK/EN, compiled + curated from
 // canonical sources (stopwords-iso, NLTK, spaCy) plus Russian/Ukrainian filler-word («слова-паразиты»)

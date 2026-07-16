@@ -3,7 +3,7 @@ import Foundation
 /// The verbs the `parla://` URL scheme understands. A pure value type so the parser is unit-testable.
 /// Shared by the macOS handler (desktop automation — transcribe paths / clipboard) and the iOS handler
 /// (deep-links — open a note, start dictation); each platform acts only on the verbs it supports. Relocated
-/// into ParlaCore (iOS-port P2.3a) from the macOS-only `AppModel+URLScheme.swift` so both apps parse identically.
+/// into ParlaCore from the macOS-only `AppModel+URLScheme.swift` so both apps parse identically.
 public enum ParlaURLCommand: Equatable, Sendable {
     case transcribe(paths: [String], dirs: [String])   // macOS: transcribe the named file/dir paths
     case transcribeLast                                 // macOS: re-run the last transcription

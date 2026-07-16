@@ -3,7 +3,7 @@ import ParlaCore
 
 /// macOS `AudioDecoding`: forwards to the vendored LGPL ffmpeg via `AudioConverter`. Stays in the macOS app
 /// target (ffmpeg is a spawned subprocess, unavailable on iOS) — iOS ships its own in-process decoder that
-/// conforms to the same seam instead (see IOS_PORT.md §2).
+/// conforms to the same seam instead.
 struct FFmpegAudioDecoder: AudioDecoding {
     func decodeToWav16k(_ src: URL) throws -> URL { try AudioConverter.toWav16k(src) }
 

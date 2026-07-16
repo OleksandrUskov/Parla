@@ -2,7 +2,7 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-/// The transcription Live Activity / Dynamic Island (iOS-port P2.3b). Renders the shared
+/// The transcription Live Activity / Dynamic Island. Renders the shared
 /// `ParlaTranscriptionAttributes` the app drives (per-chunk updates). ParlaCore-free — brand colours via
 /// `WidgetBrand`, the status line arrives already-localized in the state. Tapping it opens Parla (`parla://show`).
 struct ParlaTranscriptionLiveActivity: Widget {

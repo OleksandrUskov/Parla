@@ -7,7 +7,7 @@ import KeyboardShortcuts
 @main
 struct ParlaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel.mac()   // macOS platform seams wired in (Core stays AppKit-free — IOS_PORT.md §1)
+    @State private var model = AppModel.mac()   // macOS platform seams wired in (Core stays AppKit-free)
     @State private var hotkeyInstalled = false
     @AppStorage("didOnboard") private var didOnboard = false   // first-run sheet gate (UI pref, not history)
     @State private var showOnboarding = false
@@ -39,7 +39,7 @@ struct ParlaApp: App {
                     model.prewarmDictationModel()        // load the model into memory now if the user dictates → instant first dictation
                     await model.pruneAudioCache()        // remove orphans + old audio beyond the limit
                     await model.refreshModels()
-                    Task { await model.refreshSemanticIndex() }   // extractive titles/summaries + search embeddings (P1)
+                    Task { await model.refreshSemanticIndex() }   // extractive titles/summaries + search embeddings
                 }
                 .onChange(of: model.globalHotkeyEnabled) { _, _ in syncHotkey() }
                 .onChange(of: model.dictationHotkeyEnabled) { _, _ in syncHotkey() }

@@ -2,7 +2,7 @@ import SwiftUI
 import AVFoundation
 import ParlaCore
 
-/// The rich reading surface (iOS-port P1.4d) — a pinned player + Transcript/Digest picker on top, the scrolling
+/// The rich reading surface — a pinned player + Transcript/Digest picker on top, the scrolling
 /// transcript below (tap-to-seek segments, or collapsible chapters for long audio, or the per-chapter digest).
 /// Composed ENTIRELY from the SHARED ParlaCore views (`TransportBar`/`SegmentList`/`ChapterListView`/
 /// `ChapterDigestView`) the Mac app also renders → true cross-platform parity. Chrome (background/title/toolbar)
@@ -11,12 +11,12 @@ struct TranscriptDetailView: View {
     @Environment(AppModel.self) private var model
     let item: TranscriptItem
     /// Injected by the History shell (owned in HistoryTab, ABOVE the compact↔regular layout swap) so playback
-    /// survives an iPad rotate / Split-View resize that tears down and rebuilds this subtree (P2.2).
+    /// survives an iPad rotate / Split-View resize that tears down and rebuilds this subtree.
     let player: PlaybackController
     @State private var showDigest = false
     @State private var shareItem: ShareItem?
-    @State private var editing = false          // edit-in-place sheet (P2.1c)
-    @State private var ttsPlayer = PlaybackController()   // read-aloud (TTS P2.1d) — separate from the source player
+    @State private var editing = false          // edit-in-place sheet
+    @State private var ttsPlayer = PlaybackController()   // read-aloud — separate from the source player
     @State private var synthesizingTTS = false            // brief spinner while the voice synthesizes the transcript
     @State private var ttsTask: Task<Void, Never>?        // in-flight synth job — cancel on nav-away so it can't reactivate the session
 
@@ -28,7 +28,7 @@ struct TranscriptDetailView: View {
             pinnedTop
             ScrollView {
                 // Insights above, transcript/chapters/digest in the middle, Related below — the macOS
-                // TranscriptCard reading stack, 1:1, via the same shared Core views (P1.4g).
+                // TranscriptCard reading stack, 1:1, via the same shared Core views.
                 VStack(alignment: .leading, spacing: 12) {
                     InsightsView(item: item)
                     readingBody
@@ -39,7 +39,7 @@ struct TranscriptDetailView: View {
             }
         }
         .padding(.horizontal)
-        // Handoff (P2.3d): advertise "view this transcript" while it's open so another device (macOS) can continue it.
+        // Handoff: advertise "view this transcript" while it's open so another device (macOS) can continue it.
         .userActivity(AppModel.viewTranscriptActivityType, isActive: true) { activity in
             activity.title = item.displayTitle
             activity.userInfo = ["id": item.id.uuidString]
@@ -116,9 +116,9 @@ struct TranscriptDetailView: View {
         }
     }
 
-    // MARK: - Reading actions (P2.1c) — Copy · Edit-in-place · Re-transcribe · Regenerate, mirroring the macOS
+    // MARK: - Reading actions — Copy · Edit-in-place · Re-transcribe · Regenerate, mirroring the macOS
     // TranscriptCard `readActions` bar 1:1, folded into a single toolbar menu (per-chapter regenerate already
-    // ships in the shared ChapterDigestView). Every backing API is already public in Core. Read-aloud → P2.1d.
+    // ships in the shared ChapterDigestView). Every backing API is already public in Core. Read-aloud.
 
     private var actionsMenu: some View {
         let regenerating = model.regeneratingIDs.contains(item.id)
@@ -186,7 +186,7 @@ struct TranscriptDetailView: View {
         if changed { Task { await model.refreshSemanticIndex() } }
     }
 
-    // MARK: - Read-aloud (TTS P2.1d) — mirrors the macOS TranscriptCard read-aloud button 1:1. SIM-VERIFIABLE
+    // MARK: - Read-aloud — mirrors the macOS TranscriptCard read-aloud button 1:1. SIM-VERIFIABLE
     // (SystemTTSService is AVSpeechSynthesizer, not gated); its own PlaybackController so it never fights the
     // note's source player. Best-effort + additive — off the isBusy lane, so it works even mid-transcription.
 
@@ -224,7 +224,7 @@ struct TranscriptDetailView: View {
         }
     }
 
-    // MARK: - Export (P1.4h) — mirrors the macOS TranscriptCard menu 1:1, delivering via the system share sheet
+    // MARK: - Export — mirrors the macOS TranscriptCard menu 1:1, delivering via the system share sheet
     // instead of NSSavePanel. Rendering is the pure Core layer (exportString / exportJSON).
 
     private var exportMenu: some View {
@@ -268,7 +268,7 @@ struct TranscriptDetailView: View {
     }
 }
 
-/// Edit-in-place sheet (P2.1c). A modal `Form` — the iOS idiom the macOS inline editor maps to — editing the
+/// Edit-in-place sheet. A modal `Form` — the iOS idiom the macOS inline editor maps to — editing the
 /// title and the raw transcript text at once; the keyboard-avoidance comes free from Form. On Done it hands both
 /// drafts back to the parent, which applies them via Core `setTitle`/`saveEdit` and kicks the re-embed. Editing
 /// the text marks the note `isEdited` (segments collapse to plain text — same as the Mac).

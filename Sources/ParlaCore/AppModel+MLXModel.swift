@@ -1,7 +1,7 @@
-#if os(macOS)  // MLX generative-model management = macOS-only (iOS-port P1); no Core caller on iOS.
+#if os(macOS)  // MLX generative-model management = macOS-only; no Core caller on iOS.
 import Foundation
 
-/// MLX RU/UK generative model (AI P3): opt-in download / delete / on-disk state — parallel to, and independent
+/// MLX RU/UK generative model: opt-in download / delete / on-disk state — parallel to, and independent
 /// of, the WhisperKit transcription catalog (`AppModel+Models.swift`). Downloading the model IS the opt-in:
 /// once present, `MLXLLMService` reports `.ready` for ru/uk and `enrichInsights` upgrades those notes.
 extension AppModel {

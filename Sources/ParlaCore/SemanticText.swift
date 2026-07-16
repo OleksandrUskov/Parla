@@ -1,7 +1,7 @@
 import Foundation
 import NaturalLanguage
 
-// MARK: - Text utilities for the Local-AI Layer (P1d) — sentence split + keyword phrase
+// MARK: - Text utilities for the Local-AI Layer — sentence split + keyword phrase
 //
 // NaturalLanguage tokenizers/taggers — on-device, deterministic, NO asset download (unlike the
 // contextual-embedding model). The output QUALITY varies by language (best for RU/EN; UK is thinner),
@@ -48,7 +48,7 @@ public func searchLemmaSet(of text: String) -> Set<String> {
     // EN lemma is inconsistent (verified — «meeting»→«meet» conflates the verb, while «meeting»/«meetings» split
     // to different lemmas), producing wrong/missed matches not worth it for a secondary language. UK has no
     // on-device lemma model, so RU-routing reduces it only partially (робота/роботу→робот, but not роботі) — a
-    // best-effort tool limit; a real multilingual lemmatizer is a P3 download-tier option. (LOCAL_AI_LAYER.md §5b)
+    // best-effort tool limit; a real multilingual lemmatizer is a P3 download-tier option.
     guard dominantScript(text) == "cyrillic" else { return [] }
     return lemmaSet(of: text, language: "ru")
 }
@@ -67,7 +67,7 @@ public let lemmaOverrides: [String: String] = ["деньги": "деньга", "
 /// would be wasteful). NLTagger's RU lemmatizer isn't self-consistent for a few irregulars (nom ≠ oblique lemma);
 /// those are corrected via the closed `lemmaOverrides` table applied below (e.g. «деньги»→«деньга»,
 /// «матерь»→«мать») so all forms collapse and match. NOT semantic search: matches word FORMS literally present,
-/// not meaning (that's the download-tier; LOCAL_AI_LAYER.md §5).
+/// not meaning (that's the download-tier).
 public func lemmaSet(of text: String, language: String = "") -> Set<String> {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return [] }

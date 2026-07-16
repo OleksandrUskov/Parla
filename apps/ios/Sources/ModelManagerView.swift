@@ -1,11 +1,11 @@
 import SwiftUI
 import ParlaCore
 
-/// «Модели» tab (iOS-port P1.4i) — the real model manager, replacing the P1.4a placeholder. Lists the
+/// «Модели» tab — the real model manager, replacing the placeholder. Lists the
 /// transcription tiers via the shared Core `ModelRow` (download / delete / on-disk size / progress) over the
 /// same `model.modelTiers` the macOS manager uses. Tapping a tier selects it — the iOS way to override the
-/// RAM-adaptive default or recover from a momentary-pressure mis-tier (the P1.4 review debt). No MLX/embed rows
-/// (gated out of iOS in P1.1), so disk usage is just the WhisperKit weights. The weights themselves now live
+/// RAM-adaptive default or recover from a momentary-pressure mis-tier (the review debt). No MLX/embed rows
+/// (gated out of iOS), so disk usage is just the WhisperKit weights. The weights themselves now live
 /// under Application Support, excluded from backup (the sibling storage-relocation commit).
 struct ModelManagerView: View {
     @Environment(AppModel.self) private var model

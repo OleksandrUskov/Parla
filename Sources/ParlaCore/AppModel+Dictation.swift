@@ -1,6 +1,6 @@
 import Foundation
 
-/// Live mic dictation (MIC_DICTATION v1): record the microphone → 16 kHz mono WAV (`MicRecorder`) →
+/// Live mic dictation: record the microphone → 16 kHz mono WAV (`MicRecorder`) →
 /// transcribe it locally, reusing the same result handling as a file drop but **bypassing the `decoder` seam**
 /// (the WAV is already in WhisperKit's input format — `.wav` ∈ `avDecodable`). Clipboard-only in v1
 /// (paste-into-frontmost is P2). 100% on-device — the only new permission is the Microphone.
@@ -235,7 +235,7 @@ extension AppModel {
             history.insert(item, at: 0)
             selection = item.id
             HistoryStore.save(history)
-            Task { await refreshSemanticIndex() }   // extractive title/summary + search embedding (P1)
+            Task { await refreshSemanticIndex() }   // extractive title/summary + search embedding
             // Paste-into-frontmost (opt-in) needs the text on the clipboard for the synthetic ⌘V.
             if autoCopy || dictationPasteIntoFrontmost { copy(item.text) }
             if keepDictationAudio { await keepDictationAudioFor(item.id, wav: wav) }

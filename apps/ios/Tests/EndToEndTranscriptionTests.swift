@@ -2,7 +2,7 @@ import XCTest
 import AVFoundation
 import ParlaCore
 
-// iOS-port P1.3-B integration proof — as far as the SIMULATOR allows. On the iOS simulator this exercises the
+// integration proof — as far as the SIMULATOR allows. On the iOS simulator this exercises the
 // two real integration risks beyond a plain compile: (1) a real Telegram Ogg/Opus DECODES via the Core
 // `AudioDecoding` seam (`OpusAudioDecoder`), and (2) the WhisperKit CoreML model DOWNLOADS + LOADS via
 // `TranscriptionEngine.ensureLoaded`.

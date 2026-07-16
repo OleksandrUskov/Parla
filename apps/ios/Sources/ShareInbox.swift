@@ -1,7 +1,7 @@
 import Foundation
 import ParlaCore
 
-/// The shared "inbox" bridging the Share Extension → the app (iOS-port P1.4j). The extension is a separate,
+/// The shared "inbox" bridging the Share Extension → the app. The extension is a separate,
 /// memory-limited process that can't run WhisperKit, so it only COPIES incoming voice notes into the App Group
 /// container; the app drains that inbox on foreground, moves each file into its own import container, and
 /// transcribes — the copy-only handoff. All the App-Group I/O lives here; `pendingFiles` is pure so it's

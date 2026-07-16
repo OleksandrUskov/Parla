@@ -1,7 +1,7 @@
 import SwiftUI
 import ParlaCore
 
-/// The iPad-regular History shell (iOS-port P2.2b) — a two-column `NavigationSplitView`: a searchable, selectable
+/// The iPad-regular History shell — a two-column `NavigationSplitView`: a searchable, selectable
 /// sidebar list (bound to `model.selection`, the same selection the macOS sidebar drives) and a detail column
 /// that routes exactly like the compact `content` MINUS the list (failed/recording/busy → the selected
 /// `TranscriptDetailView` → a placeholder). Reuses the shared HistoryShared leaf views; the compact iPhone/narrow

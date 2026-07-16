@@ -28,5 +28,5 @@ extension AppModel {
     }
 }
 
-// The `parla://` parser + `ParlaURLCommand` moved to ParlaCore (`ParlaURL.swift`, iOS-port P2.3a) so the iOS app
+// The `parla://` parser + `ParlaURLCommand` moved to ParlaCore (`ParlaURL.swift`) so the iOS app
 // parses the same verbs; this file keeps only the macOS-flavoured handler (AppKit activation + path transcription).

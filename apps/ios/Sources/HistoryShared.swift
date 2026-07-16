@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import ParlaCore
 
-// Shell-agnostic History pieces (iOS-port P2.2a) reused by BOTH the compact shell (HistoryListView, a
+// Shell-agnostic History pieces reused by BOTH the compact shell (HistoryListView, a
 // NavigationStack) and the iPad split shell (HistorySplitView, a NavigationSplitView) — extracted so the two
 // shells share ONE definition of the row, the busy/recording/failed/empty state views, and the import machinery
 // instead of duplicating them. Pure presentation over the shared Core model; no navigation assumptions.

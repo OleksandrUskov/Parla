@@ -1,7 +1,7 @@
 import AppIntents
 import ParlaCore
 
-/// App Intents → Siri / Shortcuts / Spotlight (iOS-port P1.4l). A lean iOS subset of the macOS intents: the two
+/// App Intents → Siri / Shortcuts / Spotlight. A lean iOS subset of the macOS intents: the two
 /// that port cleanly (transcribe a handed-in file; read the last transcript). The macOS `TranscribeLastIntent`
 /// is skipped — it depends on `transcribeLast()`, which lives in the macOS-only quick-actions layer. These live
 /// in the app target (not ParlaCore) so the AppIntents metadata processor registers them for THIS app.

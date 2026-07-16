@@ -1,12 +1,12 @@
 import Foundation
 import NaturalLanguage
 
-// MARK: - Text embedder (Local-AI Layer P1b)
+// MARK: - Text embedder
 //
 // Turns text into one on-device embedding vector. Graceful by contract: returns nil when the language's
 // assets aren't downloaded yet, the language is unsupported, or the text is empty — the caller degrades
 // silently (no semantic features) and never blocks the transcript. Sendable seam + (later) a fake double,
-// mirroring `TranscribingEngine`. See `LOCAL_AI_LAYER.md` §2c.
+// mirroring `TranscribingEngine`.
 
 /// Retrieval models embed a QUERY differently from a DOCUMENT (Qwen3-Embedding prepends a query instruction; e5
 /// uses `query:`/`passage:` prefixes). Symmetric encoders (NLContextualEmbedding) ignore `kind`.

@@ -2,7 +2,7 @@ import XCTest
 @testable import Parla_iOS
 import ParlaCore
 
-// iOS-port P1.3-B — `AppModel.iOS()` factory proof. Closes the decode pipeline: it asserts the app factory
+// `AppModel.iOS()` factory proof. Closes the decode pipeline: it asserts the app factory
 // injects the in-process `OpusAudioDecoder` (libopusfile + AVAssetReader) into the Core view-model's decode
 // seam, so a real iOS `AppModel` can decode Ogg/Opus + mp4/mov/flac and chunk long audio — no ffmpeg.
 @MainActor

@@ -46,7 +46,7 @@ extension ActionItem {
     }
 }
 
-/// One per-chapter summary for a long recording (AI P4). Persisted on `TranscriptItem.chapterSummaries`,
+/// One per-chapter summary for a long recording. Persisted on `TranscriptItem.chapterSummaries`,
 /// keyed by the chapter's time window `(startSec,endSec)` — a STABLE key (the window is `bucket * chapterSizeSec`,
 /// deterministic from the segments), so it survives re-bucketing / renumbering that a bare positional index would not.
 public struct ChapterSummary: Codable, Hashable, Sendable {
@@ -98,7 +98,7 @@ public struct TranscriptItem: Identifiable, Codable, Hashable, Sendable {
     public var aiModel: String?       = nil  // which backend/model produced the insights (provenance / regeneration)
     public var titleEdited: Bool?     = nil  // user renamed the title by hand → never overwrite it on regeneration
     public var keywords: [String]?    = nil  // embedding-ranked topic tags (KeyBERT-style); nil = none/legacy
-    public var chapterSummaries: [ChapterSummary]? = nil  // per-chapter generative summaries for LONG notes (P4); nil = none/short/legacy
+    public var chapterSummaries: [ChapterSummary]? = nil  // per-chapter generative summaries for LONG notes; nil = none/short/legacy
 
     public init(id: UUID = UUID(), date: Date = Date(), sourceName: String, language: String, durationSec: Double,
                 model: String, text: String, segments: [Segment], edited: Bool? = nil, editedAt: Date? = nil,

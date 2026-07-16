@@ -1,10 +1,10 @@
 import SwiftUI
 import ParlaCore
 
-/// First-run intro (iOS-port P1.4l) — what Parla does + the on-device privacy promise, shown once before the
+/// First-run intro — what Parla does + the on-device privacy promise, shown once before the
 /// model-download screen. Uses iOS-neutral copy (`onboarding.ios.*`; the macOS `onboarding.*` strings say
 /// "Mac" / "drag"). The macOS model-picker + ffmpeg steps are dropped — iOS decodes in-process, and the
-/// RAM-adaptive first-run screen (P1.4c) names + downloads the model on the next step.
+/// RAM-adaptive first-run screen names + downloads the model on the next step.
 struct OnboardingView: View {
     let onDone: () -> Void
 

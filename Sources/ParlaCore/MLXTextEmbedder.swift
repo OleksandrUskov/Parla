@@ -1,14 +1,14 @@
-#if os(macOS)  // MLX download-tier embedder = macOS-only (iOS-port P1). iOS gets an inert stub in MLXStubs.swift.
+#if os(macOS)  // MLX download-tier embedder = macOS-only. iOS gets an inert stub in MLXStubs.swift.
 import Foundation
 import MLX
 import MLXEmbedders
 import MLXLMCommon
 
-// MARK: - Download-tier embedder (Local-AI Layer P3.5 — real query→note semantic search)
+// MARK: - Download-tier embedder (real query→note semantic search)
 //
 // A proper multilingual SENTENCE-EMBEDDING model (default Qwen3-Embedding-0.6B) for query→note retrieval — the
 // thing NLContextualEmbedding can't do (short queries collapse; see the embedder-retrieval lesson). Validated
-// empirically by the P3.5 probe: RU/UK/EN query↔query separation 0.13–0.26 (no collapse), every query ranks its
+// empirically by the probe: RU/UK/EN query↔query separation 0.13–0.26 (no collapse), every query ranks its
 // topic note #1, cross-lingual EN→RU / UK→RU works.
 //
 // SWAPPABLE BY DESIGN: the active model is a single `EmbeddingModelSpec.active`. If Qwen ever underperforms on
@@ -17,7 +17,7 @@ import MLXLMCommon
 // (`EmbeddingModelSpec.active.tag`) then triggers a one-time re-embed of history into the new space; no rebuild.
 // Two PARALLEL models would fragment the space and kill cross-lingual query→note, so we SWAP, never add a second.
 //
-// Reuses the P3 `MLXHubDownloader` / `MLXTokenizerLoader` (same module). Best-effort: any failure → nil (graceful,
+// Reuses the `MLXHubDownloader` / `MLXTokenizerLoader` (same module). Best-effort: any failure → nil (graceful,
 // mirrors `NLEmbedder`); the model + container stay actor-internal. MLX → the .app must be built via xcodebuild.
 
 /// How a model decorates query vs document text, and whether it's an XLM-R encoder (needs explicit positionIds).

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The data the Home-screen widget shows, written by the app into the App Group so the ParlaCore-free widget can
-/// read it without linking Core (iOS-port P2.3c). Foundation-only. The `[TranscriptItem]→WidgetSnapshot` mapping
+/// read it without linking Core. Foundation-only. The `[TranscriptItem]→WidgetSnapshot` mapping
 /// runs in the APP (`WidgetSnapshotWriter`), since the widget can't see Core types.
 struct WidgetSnapshot: Codable {
     var notes: [Note]

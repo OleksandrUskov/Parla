@@ -3,7 +3,7 @@ import AVFoundation
 
 /// Seam over audio decoding/transcoding for the transcription pipeline. macOS drives the vendored LGPL
 /// ffmpeg (`FFmpegAudioDecoder` → `AudioConverter`); iOS will inject an in-process opusfile + AVAssetReader
-/// implementation (see IOS_PORT.md §2). Keeping `AppModel` and `TranscriptionEngine`
+/// implementation. Keeping `AppModel` and `TranscriptionEngine`
 /// free of any subprocess dependency is what lets the whole transcription path port to iOS unchanged.
 public protocol AudioDecoding: Sendable {
     /// Decode any source container to a 16 kHz mono WAV the engine can read. macOS: an ffmpeg re-encode;

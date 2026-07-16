@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import WhisperKit   // WhisperKit isn't Sendable-annotated — mirrors TranscriptionEngine.swift
 
-// ParlaStreamEval — RU/UK streaming-vs-offline WER harness (MIC_DICTATION P3 gate).
+// ParlaStreamEval — RU/UK streaming-vs-offline WER harness.
 //
 // For each audio file in a directory, decode it two ways with the SAME model + explicit language:
 //   (a) OFFLINE  — one full-utterance decode (what finishDictation saves today).

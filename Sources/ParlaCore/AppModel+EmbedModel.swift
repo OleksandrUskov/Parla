@@ -1,7 +1,7 @@
-#if os(macOS)  // Embedding-model management = macOS-only (iOS-port P1); no Core caller on iOS.
+#if os(macOS)  // Embedding-model management = macOS-only; no Core caller on iOS.
 import Foundation
 
-/// Embedding model (AI P3.5): opt-in download / delete / on-disk state for query→note SEMANTIC SEARCH — parallel
+/// Embedding model: opt-in download / delete / on-disk state for query→note SEMANTIC SEARCH — parallel
 /// to the MLX generative model (`AppModel+MLXModel.swift`) and the WhisperKit catalog. Downloading it switches the
 /// retrieval embedder from NLContextualEmbedding to the download-tier model; on success the whole history re-embeds
 /// into the new (better, cross-lingual) space (`backfillEmbeddings`) and search goes semantic.

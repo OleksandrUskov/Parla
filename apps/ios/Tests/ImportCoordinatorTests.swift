@@ -1,7 +1,7 @@
 import XCTest
 @testable import Parla_iOS
 
-/// iOS-port P1.4b — the security-scoped import copy. The full import→transcribe→text flow is device-only
+/// the security-scoped import copy. The full import→transcribe→text flow is device-only
 /// (WhisperKit text inference crashes on the sim), but the copy-into-container step — the load-bearing sandbox
 /// bit — is verifiable here: a local temp file stands in for a picked URL (`startAccessingSecurityScopedResource`
 /// returns false for a non-scoped URL, but the copy still runs), so this pins the copy + naming + container path.

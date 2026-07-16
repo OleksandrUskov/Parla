@@ -3,7 +3,7 @@ import AVFoundation
 import CoreMedia
 import ParlaCore
 
-// iOS-port P1.3-B — Lane-2 (`AVAssetReader`) decode proof. Exercises the SECOND decode lane of the iOS
+// Lane-2 (`AVAssetReader`) decode proof. Exercises the SECOND decode lane of the iOS
 // `AudioDecoding` seam: a non-Ogg/Opus container (here an AAC `.mp4`) → a 16 kHz mono WAV the engine can read.
 //
 // Fixture-free + committable: the source is SYNTHESIZED in-process (AVAssetWriter encodes a short 440 Hz sine to

@@ -36,7 +36,7 @@ public let whisperLanguages: [(code: String, name: String)] = [
     ("hy", "Հայերէն"),
 ]
 
-// MARK: - Pure text/language helpers (shared across the Core + app; iOS-port P0.2b)
+// MARK: - Pure text/language helpers (shared across the Core + app)
 
 /// Russian pluralization (1 файл / 2 файла / 5 файлов).
 public func pluralRu(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Shared reading UI (iOS-port P1.4d)
+// MARK: - Shared reading UI
 //
 // The player transport + tap-to-seek segment list + long-audio chapters + digest — relocated VERBATIM from the
 // macOS `MainPane.swift` into ParlaCore as `public` SwiftUI, so the macOS and iOS apps render the SAME views
@@ -227,7 +227,7 @@ public struct ChapterSection: View {
 
             if expanded {
                 VStack(alignment: .leading, spacing: 2) {
-                    // The chapter's AI summary (P4) — when generated — sits above its segments, marked with the
+                    // The chapter's AI summary — when generated — sits above its segments, marked with the
                     // insight glyph so it reads as a digest, not another transcript line.
                     if let summary, !summary.isEmpty {
                         HStack(alignment: .firstTextBaseline, spacing: 5) {

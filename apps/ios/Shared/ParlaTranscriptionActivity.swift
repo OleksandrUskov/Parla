@@ -1,7 +1,7 @@
 import ActivityKit
 import Foundation
 
-/// Live Activity attributes for an in-progress transcription (iOS-port P2.3b). Compiled into BOTH the app and the
+/// Live Activity attributes for an in-progress transcription. Compiled into BOTH the app and the
 /// `ParlaWidgets` extension via target membership — NOT through ParlaCore, which the extension must not link (its
 /// ~30 MB memory budget). Foundation + ActivityKit only. The APP owns localization: it puts an already-localized
 /// `label` into the state, so the widget (which can't reach `L()`) simply renders the string.

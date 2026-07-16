@@ -1,7 +1,7 @@
 import ActivityKit
 import ParlaCore
 
-/// Drives the transcription Live Activity from the app (iOS-port P2.3b). Best-effort + additive: EVERY ActivityKit
+/// Drives the transcription Live Activity from the app. Best-effort + additive: EVERY ActivityKit
 /// call is wrapped so a disabled-authorization / throw can NEVER disrupt a transcription (mirrors the AI-layer
 /// invariant). Wired from RootView via `.onChange(of: model.phase)` — the same observer seam as KeepAwake — so
 /// Core stays untouched. Updates PER-CHUNK (a phase change carries the batch index); the system throttles Live

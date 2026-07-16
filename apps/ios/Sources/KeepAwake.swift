@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Keep the display awake while a job is running (iOS-port P1.4f — long-audio robustness).
+/// Keep the display awake while a job is running (long-audio robustness).
 ///
 /// A long on-device transcription runs for minutes (a 70-min recording chunks into ~35 passes). If the screen
 /// auto-locks, iOS suspends the app and the job is killed — or jetsam'd — mid-chunk, and the user loses the

@@ -588,7 +588,7 @@ struct TranscriptCard: View {
         // `player.load` is idempotent by URL, so the overlap with the id-change load never double-loads.
         .onChange(of: audioURL) { _, url in player.load(url) }
         .onDisappear { player.stop(); ttsPlayer.stop() }
-        // Handoff (P2.3d): advertise "view this transcript" while it's the open card so another device (iOS) can
+        // Handoff: advertise "view this transcript" while it's the open card so another device (iOS) can
         // continue it. id-only; the other device opens the note locally by id.
         .userActivity(AppModel.viewTranscriptActivityType, isActive: true) { activity in
             activity.title = item.displayTitle
@@ -643,11 +643,11 @@ struct TranscriptCard: View {
     }
 
     /// AI insight fields under the header — the shared Core `InsightsView` (keyword tags + collapsible summary +
-    /// action-items checklist). Relocated verbatim into ParlaCore (P1.4g) so the iOS app renders it identically.
+    /// action-items checklist). Relocated verbatim into ParlaCore so the iOS app renders it identically.
     private var insights: some View { InsightsView(item: item) }
 
     /// "Related notes" — the shared Core `RelatedNotesView` (doc↔doc semantic footer). Relocated verbatim into
-    /// ParlaCore (P1.4g) so the iOS app renders it identically.
+    /// ParlaCore so the iOS app renders it identically.
     private var relatedNotes: some View { RelatedNotesView() }
 
     private var readActions: some View {
@@ -673,7 +673,7 @@ struct TranscriptCard: View {
                     .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
-            // Read-aloud (TTS P1a): speak the transcript with a system voice, play via its own PlaybackController.
+            // Read-aloud: speak the transcript with a system voice, play via its own PlaybackController.
             // Best-effort + additive — off the isBusy lane; a synth spinner then a stop toggle while it plays.
             Button { readAloud() } label: {
                 Group {
@@ -754,7 +754,7 @@ struct TranscriptCard: View {
         }
     }
 
-    /// Speak the raw transcript aloud with a system voice (TTS P1a). Best-effort — TTS never disrupts the note:
+    /// Speak the raw transcript aloud with a system voice. Best-effort — TTS never disrupts the note:
     /// any failure silently no-ops. Toggles play↔stop; picks a voice for the note's language, falling back to any
     /// system voice. Runs off the isBusy lane (additive), so it works even mid-transcription.
     private func readAloud() {

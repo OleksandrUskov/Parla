@@ -1,7 +1,7 @@
 import SwiftUI
 import ParlaCore
 
-/// iOS app entry (iOS-port P1.4a). Builds the real `AppModel.iOS()` (in-process decoder + UIKit seams + a
+/// iOS app entry. Builds the real `AppModel.iOS()` (in-process decoder + UIKit seams + a
 /// RAM-adaptive default model) once and injects it into the SwiftUI environment for the whole app.
 @main
 struct ParlaiOSApp: App {
@@ -25,7 +25,7 @@ struct ParlaiOSApp: App {
 
 /// First-run gate: show the 4.2.3 model-download screen until the user downloads (or defers), then the main UI.
 /// Keeps the display awake while any job is in flight (model download or transcription) — a long on-device run
-/// must survive the screen not locking (P1.4f).
+/// must survive the screen not locking.
 private struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
@@ -33,7 +33,7 @@ private struct RootView: View {
     @AppStorage("didFirstRunSetup") private var didFirstRun = false
     // Held here (above RootTabView's `.id(uiLanguage)` swap) so the selected tab survives a language switch.
     @State private var tab: RootTab = .history
-    // Drives the transcription Live Activity from the phase stream (P2.3b) — best-effort, Core untouched.
+    // Drives the transcription Live Activity from the phase stream — best-effort, Core untouched.
     @State private var activityController = TranscriptionActivityController()
 
     var body: some View {
@@ -72,7 +72,7 @@ private struct RootView: View {
             default:             break   // desktop-only verbs (transcribe / clipboard / last) — no-op on iOS
             }
         }
-        // Handoff (P2.3d): continue a transcript opened on another device. Routes through pendingOpen (the History
+        // Handoff: continue a transcript opened on another device. Routes through pendingOpen (the History
         // shell drains it, incl. on cold launch via `.task`) → works on both the compact and split shells.
         .onContinueUserActivity(AppModel.viewTranscriptActivityType) { activity in
             model.continueViewTranscript(activity.userInfo)

@@ -1,7 +1,7 @@
 import UIKit
 import UniformTypeIdentifiers
 
-/// Parla Share Extension (iOS-port P1.4j) — COPY-ONLY. A share extension is a separate, memory-limited process
+/// Parla Share Extension — COPY-ONLY. A share extension is a separate, memory-limited process
 /// that can't run WhisperKit, so it just copies the shared voice note(s) into the App Group inbox and completes;
 /// the main app drains that inbox and transcribes on its next foreground (see `ShareInbox`). Deliberately lean:
 /// it does NOT link ParlaCore — only Foundation/UIKit — so it stays well under the extension memory budget. The

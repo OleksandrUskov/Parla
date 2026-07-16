@@ -1,4 +1,4 @@
-#if os(macOS)  // MLX generative backend = macOS-only (iOS-port P1). iOS gets an inert stub in MLXStubs.swift.
+#if os(macOS)  // MLX generative backend = macOS-only. iOS gets an inert stub in MLXStubs.swift.
 import Foundation
 import Hub          // swift-transformers (WhisperKit's 1.1.x): HubApi — backs our Downloader
 import Tokenizers   // swift-transformers: AutoTokenizer + Tokenizer — backs our TokenizerLoader/bridge
@@ -17,8 +17,7 @@ import MLX           // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cach
 // WhisperKit already brings (Hub.HubApi + Tokenizers.AutoTokenizer) and call the non-macro `loadModelContainer`.
 // Best-effort: ANY failure throws `AIError`; `enrichInsights` catches it and keeps the extractive insights — the
 // transcript is never touched. Model + container stay actor-internal (mirror `NLEmbedder`/`TranscriptionEngine`).
-// Build note: MLX ships Metal shaders → the .app must be built via xcodebuild (see build_app.sh). See
-// `LOCAL_AI_LAYER_P3.md` ("## SPIKE RESULTS").
+// Build note: MLX ships Metal shaders → the .app must be built via xcodebuild (see build_app.sh).
 
 // MARK: Model spec + on-disk location (§6: in-app non-gated download, cache under Application Support)
 

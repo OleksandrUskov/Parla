@@ -6,9 +6,9 @@ import ParlaCore
 /// bouncing the user out of Settings the moment they change the language there).
 enum RootTab: Hashable { case history, models, settings }
 
-/// iOS root shell (iOS-port P1.4a; Settings tab P2.1b). A `TabView` fuses what macOS splits across a sidebar
+/// iOS root shell. A `TabView` fuses what macOS splits across a sidebar
 /// window + MenuBarExtra + Settings scene (IOS_P1_4_UI §2): History (import + list + reading detail), the model
-/// Manager (P1.4i), and Settings (P2.1b).
+/// Manager, and Settings.
 struct RootTabView: View {
     @Environment(AppModel.self) private var model
     @Binding var selection: RootTab

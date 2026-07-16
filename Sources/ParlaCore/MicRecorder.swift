@@ -34,7 +34,7 @@ public final class MicRecorder {
     private let vad: SilenceDetector?                 // nil = VAD off (zero overhead on the audio thread)
     private var onAutoStop: (@MainActor () -> Void)?  // stored so the VAD silence hook can route to it
 
-    // Streaming (MIC_DICTATION P3): the live 16 kHz mono Float buffer WhisperKit consumes, shared between
+    // Streaming: the live 16 kHz mono Float buffer WhisperKit consumes, shared between
     // the audio-thread sink (appends) and the main actor (snapshots) via an OSAllocatedUnfairLock — the
     // same Sendable cross-thread discipline as the VAD hook. nil when not streaming → zero overhead.
     private let liveBuffer: OSAllocatedUnfairLock<[Float]>?
@@ -160,7 +160,7 @@ public final class MicRecorder {
     /// Route the VAD silence signal to the same auto-stop handler the 120 s cap uses. Always on the main actor.
     private func fireAutoStop() { onAutoStop?() }
 
-    // MARK: Streaming (MIC_DICTATION P3) — live Float buffer access
+    // MARK: Streaming — live Float buffer access
 
     /// Number of 16 kHz mono Float samples captured so far (0 when not streaming) — drives the orchestrator's
     /// window cadence. Lock-guarded; safe to read from the main actor while the audio thread appends.

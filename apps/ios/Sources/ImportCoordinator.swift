@@ -1,11 +1,11 @@
 import Foundation
 
-/// Bridges iOS document-picker URLs into Parla's transcription pipeline (iOS-port P1.4b; folds in P1.2b).
+/// Bridges iOS document-picker URLs into Parla's transcription pipeline.
 ///
 /// Picked files are **security-scoped** and live OUTSIDE the app sandbox, so we copy each into the container
 /// while holding the scope. The container copy is then freely readable by the later async decode AND persists
 /// across launches — so `TranscriptItem.sourcePath` points at the container copy and re-transcribe / replay work
-/// with NO security-scoped-bookmark machinery (the copy IS the persistence). IOS_PORT §1/§6.
+/// with NO security-scoped-bookmark machinery (the copy IS the persistence).
 enum ImportCoordinator {
     /// Copy each picked URL into `Application Support/Parla/imports/<uuid>/<name>` (a per-item subdir keeps the
     /// original filename clean) and return the container URLs. Best-effort: a file that can't be accessed or

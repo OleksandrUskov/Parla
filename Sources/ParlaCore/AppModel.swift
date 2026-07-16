@@ -30,7 +30,7 @@ public final class AppModel {
     public var phase: EnginePhase = .idle
     public var history: [TranscriptItem] = HistoryStore.load()
     public var selection: TranscriptItem.ID?
-    public var pendingOpen: TranscriptItem.ID?        // a deep-link (parla://note / widget / Handoff) asked to open this note; drained by the History shell (iOS-port P2.3)
+    public var pendingOpen: TranscriptItem.ID?        // a deep-link (parla://note / widget / Handoff) asked to open this note; drained by the History shell
     public var availableModels: [String] = []
     public var lastCopiedID: TranscriptItem.ID?
     public var lastAttemptedURLs: [URL] = []          // last input passed to transcribe — for «Try again» on failure
@@ -38,20 +38,20 @@ public final class AppModel {
     public var downloadProgress: Double = 0
     public var searchQuery: String = ""
     public var relatedIDs: [UUID] = []                         // "Related notes" to the OPEN item (doc↔doc semantic, P1) — recomputed on selection
-    public var semanticHitIDs: [UUID] = []                     // download-tier query→note matches (P3.5) — blended into filteredHistory below the lexical hits
+    public var semanticHitIDs: [UUID] = []                     // download-tier query→note matches — blended into filteredHistory below the lexical hits
     @ObservationIgnored public var searchDebounce: Task<Void, Never>?   // debounces the semantic search on each keystroke
     @ObservationIgnored public var embeddingIndex: [UUID: Embedding] = [:]   // in-memory mirror of embeddings.json (doc↔doc related reads it; effect flows through observable relatedIDs)
     @ObservationIgnored public var enrichFailedIDs: Set<UUID> = []           // items whose generative enrich hard-failed this session — don't re-submit to the slow model every refresh (cleared on edit / next launch)
     public var lemmaIndex: [UUID: Set<String>] = [:]                         // per-item lemma set for morphology search; OBSERVED — filteredHistory depends on it, so it must re-evaluate when the index builds
     public var downloadedSet: Set<String> = []        // which models are on disk (reactive)
     public var modelSizes: [String: Int64] = [:]      // size of each downloaded model
-    // MLX RU/UK generative model (AI P3) — separate opt-in download, distinct from the WhisperKit variants.
+    // MLX RU/UK generative model — separate opt-in download, distinct from the WhisperKit variants.
     public var mlxModelDownloaded: Bool = false       // RU/UK AI model present on disk (reactive)
     public var mlxModelBytes: Int64 = 0               // its on-disk size (for the "disk used" line)
     public var mlxDownloading: Bool = false           // single-flight + busy guard for the MLX download
     public var mlxDownloadProgress: Double = 0
     public var mlxDownloadError: String?              // last MLX download error — shown inline in the model row (cleared on retry/success)
-    // Embedding model (AI P3.5) — opt-in download for query→note semantic search; distinct from the MLX LLM above.
+    // Embedding model — opt-in download for query→note semantic search; distinct from the MLX LLM above.
     public var embedModelDownloaded: Bool = false     // semantic-search model present on disk (reactive)
     public var embedModelBytes: Int64 = 0             // its on-disk size (for the "disk used" line)
     public var embedDownloading: Bool = false         // single-flight + busy guard for the embed-model download
@@ -75,14 +75,14 @@ public final class AppModel {
     public var watchWriteSidecar: Bool { didSet { UserDefaults.standard.set(watchWriteSidecar, forKey: Keys.watchSidecar) } }
     public var globalHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(globalHotkeyEnabled, forKey: Keys.hotkey) } }
 
-    // Dictation (feature MIC_DICTATION) — opt-in hotkey + whether to keep the recorded audio.
+    // Dictation — opt-in hotkey + whether to keep the recorded audio.
     public var dictationHotkeyEnabled: Bool { didSet { UserDefaults.standard.set(dictationHotkeyEnabled, forKey: Keys.dictationHotkey) } }
     public var keepDictationAudio: Bool { didSet { UserDefaults.standard.set(keepDictationAudio, forKey: Keys.keepDictationAudio) } }
     /// Paste the dictation result into the frontmost app (the ONLY Accessibility feature — off by default).
     public var dictationPasteIntoFrontmost: Bool { didSet { UserDefaults.standard.set(dictationPasteIntoFrontmost, forKey: Keys.dictationPaste) } }
     /// Hotkey behavior: press-to-toggle (default) vs hold-to-talk.
     public var dictationMode: DictationMode { didSet { UserDefaults.standard.set(dictationMode.rawValue, forKey: Keys.dictationMode) } }
-    // AI insights, shown as editable fields in the card (P1). Each is independently toggleable; ON by default.
+    // AI insights, shown as editable fields in the card. Each is independently toggleable; ON by default.
     public var showTitles: Bool { didSet { UserDefaults.standard.set(showTitles, forKey: Keys.showTitles) } }
     public var showKeywords: Bool { didSet { UserDefaults.standard.set(showKeywords, forKey: Keys.showKeywords) } }
     public var showSummaries: Bool { didSet { UserDefaults.standard.set(showSummaries, forKey: Keys.showSummaries) } }
@@ -139,16 +139,16 @@ public final class AppModel {
     public var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     public var processedKeys: [String] = []                   // FIFO order of processed dedupKeys
     public var processedSet: Set<String> = []                 // = Set(processedKeys), for O(1) lookups
-    public var semanticRefreshInFlight = false                // single-flight guard for the semantic backfill (P1)
+    public var semanticRefreshInFlight = false                // single-flight guard for the semantic backfill
     public var semanticRefreshPending = false                 // a change arrived mid-refresh → run once more after
 
     public let engine: any TranscribingEngine                 // +Models (delete) / +Transcription (load+run) — injectable (test seam)
-    public let ai: any LocalLLMService                         // Local-AI Layer seam (P0) — injectable; unused until P2 wires enrich
-    public let embedder: any TextEmbedder                      // semantic-embedding seam (P1) — injectable; NLContextualEmbedding default
+    public let ai: any LocalLLMService                         // Local-AI Layer seam — injectable; unused until P2 wires enrich
+    public let embedder: any TextEmbedder                      // semantic-embedding seam — injectable; NLContextualEmbedding default
     public let tts: any TTSService                              // TTS seam (voice synthesis P1a) — injectable; SystemTTSService default (system voice)
 
     /// Audio decoding (platform + test seam): the inert Core default has no ffmpeg dependency; the macOS app
-    /// wires `FFmpegAudioDecoder` via `AppModel.mac()` and iOS an in-process decoder (IOS_PORT.md §2). Tests
+    /// wires `FFmpegAudioDecoder` via `AppModel.mac()` and iOS an in-process decoder. Tests
     /// inject a stub to script the decode.
     public var decoder: any AudioDecoding = UnavailableAudioDecoder()
 
@@ -172,10 +172,10 @@ public final class AppModel {
     /// `PasteService.requestAccessibility`; inert default is a no-op.
     public var requestPasteAccessibility: @MainActor () -> Void = { }
 
-    // MARK: Platform seams (iOS-port P0.1)
+    // MARK: Platform seams
     // AppModel is Core-bound — it must stay AppKit-free so it ports to iOS. Each platform behavior below is an
     // injectable closure with an INERT Foundation-only default; the macOS app installs the real AppKit behavior
-    // through `AppModel.mac()` (see AppModel+PlatformMac.swift). iOS will wire UIKit equivalents (IOS_PORT.md §1).
+    // through `AppModel.mac()` (see AppModel+PlatformMac.swift). iOS will wire UIKit equivalents.
 
     /// Clipboard write: macOS wires `NSPasteboard`; inert default is a no-op (Core + tests stay AppKit-free).
     public var copyToClipboard: @MainActor (String) -> Void = { _ in }
