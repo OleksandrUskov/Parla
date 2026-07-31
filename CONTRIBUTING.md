@@ -76,4 +76,15 @@ Use the issue templates. For anything security-related, see [SECURITY.md](SECURI
 
 ## License
 
-By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
+Parla's source is offered publicly under the [PolyForm Noncommercial License 1.0.0](LICENSE) (from v1.1.0 onward;
+the v1.0.0 release remains under the MIT License), while the maintainer distributes official builds under separate
+commercial terms. To keep that possible, contributions are accepted under a permissive inbound grant:
+
+> By submitting a contribution (e.g. a pull request), you certify that you wrote it or otherwise have the right to
+> submit it, and you grant the project maintainer, Oleksandr Uskov, a perpetual, worldwide, non-exclusive,
+> royalty-free, irrevocable license to use, reproduce, modify, distribute, sublicense, and relicense your
+> contribution as part of Parla — including under the PolyForm Noncommercial License 1.0.0 and under separate
+> commercial terms for official distribution.
+
+Contributions are certified under the [Developer Certificate of Origin](https://developercertificate.org/); please
+sign off your commits with `git commit -s`.
