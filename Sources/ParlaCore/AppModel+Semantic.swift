@@ -118,6 +118,7 @@ extension AppModel {
     public func onSearchQueryChanged() {
         searchDebounce?.cancel()
         semanticHitIDs = []
+        guard isProUser() else { return }   // download-tier semantic search is Pro (mirrors refreshRelatedNotes)
         guard EmbeddingModelSpec.isDownloaded() else { return }
         searchDebounce = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
@@ -131,7 +132,8 @@ extension AppModel {
     /// Best-effort; gated on the model being present AND the corpus re-embedded into its space (store tag matches).
     public func refreshSemanticSearch() async {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2,
+        guard isProUser(),                                  // Pro-only (mirrors refreshRelatedNotes); no free semantic search
+              query.count >= 2,
               EmbeddingModelSpec.isDownloaded(),
               EmbeddingStore.loadModelTag() == EmbeddingModelSpec.active.tag,
               let qvec = await retrievalEmbedder.embed(query, language: "", kind: .query)

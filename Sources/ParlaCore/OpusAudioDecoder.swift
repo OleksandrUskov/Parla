@@ -92,6 +92,11 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// "decode by content, not by name" behavior and stops an extension-less Ogg/Opus from wrongly falling to the
     /// AVAssetReader lane (which can't demux Ogg → "no audio decoder available"). Non-Ogg files read 4 bytes and
     /// route to Lane 2 as before. `internal` for unit testing.
+    ///
+    /// LIMITATION (accepted, like webm/mkv/amr/wma): opusfile decodes ONLY Ogg-**Opus**. An Ogg-Vorbis or Ogg-FLAC
+    /// file (also `.ogg`) routes here and `op_open_file` returns `OP_ENOTFORMAT` → a clean decode error (no leak, no
+    /// crash). There's no native Vorbis/FLAC-in-Ogg decoder — a general Ogg decoder would mean re-adding ffmpeg,
+    /// which Phase 2c deliberately removed. Telegram voice (the target) is always Ogg-Opus, so this is a rare edge.
     static func looksLikeOgg(_ src: URL) -> Bool {
         if opusExtensions.contains(src.pathExtension.lowercased()) { return true }
         guard let fh = try? FileHandle(forReadingFrom: src) else { return false }

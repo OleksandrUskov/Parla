@@ -2308,6 +2308,33 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(m.paywallReason, "Related absence must NOT pop the paywall (it's auto-called on open)")
     }
 
+    /// Folder-watch is Pro even after a refund: a persisted/running watcher's files are DROPPED for a non-Pro user
+    /// at the drain (no transcribe, no paywall). Closes the review's launch-re-arm gate gap.
+    @MainActor func testFolderWatchDrainDropsFilesForFreeUser() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "x", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }; m.soundOnComplete = false; m.history = []
+            m.isProUser = { false }
+            m.watchQueue = [URL(fileURLWithPath: "/tmp/parla-watched.m4a")]
+            m.watchQueueCount = 1
+            m.drainQueue()
+            XCTAssertTrue(m.watchQueue.isEmpty, "a free user's watched files are dropped, not transcribed")
+            XCTAssertEqual(m.watchQueueCount, 0)
+            XCTAssertEqual(fake.transcribeCalls, 0)
+        }
+    }
+
+    /// Download-tier semantic search is Pro (mirrors Related): a free user gets no semantic hits even if the embed
+    /// model is still on disk (e.g. post-refund).
+    @MainActor func testSemanticSearchClearedForFreeUser() async {
+        let m = AppModel(engine: FakeEngine())
+        m.isProUser = { false }
+        m.semanticHitIDs = [UUID()]
+        await m.refreshSemanticSearch()
+        XCTAssertTrue(m.semanticHitIDs.isEmpty, "a free user gets no semantic search hits")
+    }
+
     // MARK: Audio-cache prune protection — TOCTOU
 
     /// Pins the exact bug the review found: the displayed/playing entry is never evicted, and the

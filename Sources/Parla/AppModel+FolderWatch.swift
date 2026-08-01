@@ -6,9 +6,11 @@ import AppKit
 /// queue that shares a «lane» with manual drop via `isBusy`.
 extension AppModel {
     /// Resume watching on launch (called from ParlaApp). Resolves the saved folder.
+    /// Folder-watch is Pro → don't re-arm a persisted watch for a non-Pro (e.g. refunded) user. Best-effort at
+    /// launch (the entitlement may still be resolving); `drainQueue` is the reliable gate once files actually arrive.
     func startWatchingIfEnabled() {
         watchedFolderURL = resolveBookmarkedFolder()
-        if watchEnabled { startWatching() }
+        if watchEnabled, isProUser() { startWatching() }
     }
 
     /// Pick a folder via the system dialog and remember it (the bookmark survives restarts).
@@ -82,6 +84,10 @@ extension AppModel {
     /// after a dictation releases the lane.)
     func drainQueue() {
         guard !isBusy, downloadingModel == nil, !watchQueue.isEmpty else { return }
+        // Folder-watch is Pro: a free/refunded user's watched files are DROPPED — no transcribe, no paywall (this is
+        // a background feature; a paywall on an auto-detected file would be intrusive). This is the reliable gate
+        // (entitlements have resolved by the time files arrive); `startWatchingIfEnabled` is the best-effort one.
+        guard isProUser() else { watchQueue.removeAll(); watchQueueCount = 0; return }
         let next = watchQueue.removeFirst()
         watchQueueCount = watchQueue.count
         phase = .preparing(next.lastPathComponent)   // claim the phase synchronously → closes the double-start race
