@@ -2135,6 +2135,46 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(ProGate.proProductID.hasPrefix("com.parla."), "product ID stays in the placeholder namespace pre-rebrand")
     }
 
+    // MARK: Native decode routing (Phase 2c regression)
+
+    /// The Opus lane must be chosen by CONTENT (Ogg magic "OggS"), not only by extension — Telegram voice
+    /// messages are often saved with no extension, and routing them to the AVAssetReader lane (which can't demux
+    /// Ogg) is exactly the "No audio decoder available" regression this fixes.
+    func testOpusDecoderRoutesOggByContentNotJustExtension() throws {
+        let tmp = FileManager.default.temporaryDirectory
+        let oggNoExt = tmp.appendingPathComponent("voice_\(UUID().uuidString)")   // no extension, Ogg content
+        try Data("OggS\u{01}\u{00}\u{00}\u{00}".utf8).write(to: oggNoExt)
+        defer { try? FileManager.default.removeItem(at: oggNoExt) }
+        XCTAssertTrue(OpusAudioDecoder.looksLikeOgg(oggNoExt), "an extension-less OggS file must route to the Opus lane")
+
+        let byExt = tmp.appendingPathComponent("x.ogg")                            // extension wins even w/o content
+        try Data("whatever".utf8).write(to: byExt)
+        defer { try? FileManager.default.removeItem(at: byExt) }
+        XCTAssertTrue(OpusAudioDecoder.looksLikeOgg(byExt))
+
+        let notOgg = tmp.appendingPathComponent("clip_\(UUID().uuidString)")        // WAV-ish header, no ogg ext → Lane 2
+        try Data("RIFF....WAVE".utf8).write(to: notOgg)
+        defer { try? FileManager.default.removeItem(at: notOgg) }
+        XCTAssertFalse(OpusAudioDecoder.looksLikeOgg(notOgg))
+
+        XCTAssertFalse(OpusAudioDecoder.looksLikeOgg(tmp.appendingPathComponent("missing-\(UUID().uuidString)")))
+    }
+
+    /// Runtime proof that the Opus lane actually decodes a real extension-less Ogg/Opus on this machine (the
+    /// native decoder is hard to exercise hermetically). Set PARLA_OGG_FIXTURE to a real file to run it.
+    func testDecodeRealOggFixtureIfProvided() throws {
+        guard let path = ProcessInfo.processInfo.environment["PARLA_OGG_FIXTURE"] else {
+            throw XCTSkip("PARLA_OGG_FIXTURE not set")
+        }
+        let f = URL(fileURLWithPath: path)
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: f.path), "fixture missing")
+        XCTAssertTrue(OpusAudioDecoder.looksLikeOgg(f), "fixture should be recognized as Ogg by content")
+        let wav = try OpusAudioDecoder().decodeToWav16k(f)
+        defer { try? FileManager.default.removeItem(at: wav) }
+        let dur = AudioDuration.seconds(ofFileAt: wav.path) ?? 0
+        XCTAssertGreaterThan(dur, 1, "opusfile should decode the fixture to a non-trivial WAV")
+    }
+
     /// The export split: TXT/Markdown are free, SRT/VTT/JSON are Pro.
     func testProExportFormatSplit() {
         XCTAssertFalse(ProGate.isProExportFormat(.txt))

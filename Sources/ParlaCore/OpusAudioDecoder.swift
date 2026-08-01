@@ -80,10 +80,23 @@ public struct OpusAudioDecoder: AudioDecoding {
                                      _ sink: (AVAudioPCMBuffer) throws -> Void) throws -> Void
 
     private static func lane(for src: URL) throws -> (read: FrameReader, sampleRate: Double) {
-        if opusExtensions.contains(src.pathExtension.lowercased()) {
+        if looksLikeOgg(src) {
             return (readOpusFrames, opusSampleRate)
         }
         return (readAVAssetFrames, avAssetSampleRate)
+    }
+
+    /// Route to the Opus lane when the extension says so (ogg/oga/opus) OR the file's header carries the Ogg
+    /// magic bytes "OggS". Telegram voice messages are frequently saved WITHOUT an extension, and `op_open_file`
+    /// parses the container by content anyway (extension-agnostic) — so sniffing restores the ffmpeg-era
+    /// "decode by content, not by name" behavior and stops an extension-less Ogg/Opus from wrongly falling to the
+    /// AVAssetReader lane (which can't demux Ogg → "no audio decoder available"). Non-Ogg files read 4 bytes and
+    /// route to Lane 2 as before. `internal` for unit testing.
+    static func looksLikeOgg(_ src: URL) -> Bool {
+        if opusExtensions.contains(src.pathExtension.lowercased()) { return true }
+        guard let fh = try? FileHandle(forReadingFrom: src) else { return false }
+        defer { try? fh.close() }
+        return ((try? fh.read(upToCount: 4)) ?? Data()) == Data("OggS".utf8)
     }
 
     private static func monoFloatFormat(sampleRate: Double) -> AVAudioFormat? {
