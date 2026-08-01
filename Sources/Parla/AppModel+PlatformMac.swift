@@ -13,8 +13,10 @@ extension AppModel {
     @MainActor static func mac() -> AppModel {
         let m = AppModel()
 
-        // Audio decode / playback rendition → vendored ffmpeg (Process). macOS-only; iOS injects its own.
-        m.decoder = FFmpegAudioDecoder()
+        // Audio decode / playback rendition → the in-process native decoder (Phase 2c native-first: opusfile +
+        // AVAssetReader, same as iOS; no ffmpeg subprocess). webm/mkv/exotic containers are dropped by design
+        // (AVFoundation can't demux Matroska). `FFmpegAudioDecoder` stays in the tree but is no longer wired in.
+        m.decoder = OpusAudioDecoder()
 
         m.copyToClipboard = { text in
             NSPasteboard.general.clearContents()

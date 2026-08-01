@@ -1,12 +1,13 @@
-#if os(iOS)
+#if os(iOS) || os(macOS)
 import Foundation
 import AVFoundation
 import CoreMedia
 import opus
 
-/// iOS in-process `AudioDecoding`. The macOS ffmpeg subprocess is impossible on iOS, so the
-/// transcription pipeline's decode seam is served here by two pure-library lanes that both stream one small
-/// mono Float32 buffer at a time (bounded memory regardless of length):
+/// In-process `AudioDecoding` for iOS and the macOS Mac-App-Store build (Phase 2c native-first — replaces the
+/// vendored ffmpeg subprocess in the main decode path). The transcription pipeline's decode seam is served here
+/// by two pure-library lanes that both stream one small mono Float32 buffer at a time (bounded memory regardless
+/// of length):
 ///
 /// - **LANE-1 — Ogg/Opus (`libopusfile`):** Telegram `.ogg`/`.opus` → 48 kHz mono. AVFoundation can't demux
 ///   Ogg/Opus, hence the dedicated Opusfile path.

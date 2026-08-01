@@ -31,9 +31,9 @@ let package = Package(
         // Уже в графе транзитивно через WhisperKit (Hub/Tokenizers). Объявляем прямо, чтобы импортировать
         // их в MLXLLMService; диапазон совпадает с пином WhisperKit (1.1.6..<1.2.0) → конфликта нет.
         .package(url: "https://github.com/huggingface/swift-transformers.git", "1.1.6" ..< "1.2.0"),
-        // In-process Ogg/Opus decode for iOS (iOS-port P1.3, IOS_PORT §2) — replaces the macOS ffmpeg subprocess,
-        // impossible on iOS. BSD, SPM .binaryTarget, iOS 15+. Linked into ParlaCore for iOS ONLY (macOS keeps
-        // ffmpeg). opus's opusfile.h #includes <ogg/ogg.h>, which lives in the separate ogg xcframework.
+        // In-process Ogg/Opus decode. BSD, SPM .binaryTarget. Linked into ParlaCore for iOS AND macOS
+        // (Phase 2c: macOS goes native-first, dropping the ffmpeg subprocess from the main decode path — both
+        // xcframeworks ship a macos-arm64_x86_64 slice). opus's opusfile.h #includes <ogg/ogg.h> (separate ogg xcframework).
         .package(url: "https://github.com/sbooth/opus-binary-xcframework", from: "0.3.0"),
         .package(url: "https://github.com/sbooth/ogg-binary-xcframework", from: "0.1.3"),
     ],
@@ -56,10 +56,10 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift", condition: .when(platforms: [.macOS])),
                 .product(name: "Tokenizers", package: "swift-transformers"),
                 .product(name: "Hub", package: "swift-transformers"),
-                // iOS-only: the in-process Opus decoder (OpusAudioDecoder.swift, `#if os(iOS)`). macOS uses ffmpeg
-                // instead, so these are excluded there. opus needs ogg (opusfile.h → <ogg/ogg.h>).
-                .product(name: "opus", package: "opus-binary-xcframework", condition: .when(platforms: [.iOS])),
-                .product(name: "ogg", package: "ogg-binary-xcframework", condition: .when(platforms: [.iOS])),
+                // The in-process Opus decoder (OpusAudioDecoder.swift) — now on macOS too (Phase 2c native-first:
+                // the Mac-App-Store build drops the ffmpeg subprocess). opus needs ogg (opusfile.h → <ogg/ogg.h>).
+                .product(name: "opus", package: "opus-binary-xcframework", condition: .when(platforms: [.iOS, .macOS])),
+                .product(name: "ogg", package: "ogg-binary-xcframework", condition: .when(platforms: [.iOS, .macOS])),
             ],
             path: "Sources/ParlaCore",
             swiftSettings: [.swiftLanguageMode(.v6)]
