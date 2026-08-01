@@ -135,3 +135,32 @@ public struct PaywallView: View {
         return Lf("paywall.length.body", minutes)
     }
 }
+
+/// A drop-in Settings section (macOS + iOS) for the Pro entitlement: for a free user, an "Unlock Pro" button
+/// (opens the paywall) + Restore; for a Pro user, an active-status line. Self-contained — it presents its own
+/// paywall sheet, so both apps' Settings just place `ProSettingsSection()` inside their `Form`. Reads the
+/// injected `PurchaseManager` (must be in the environment, which both app roots provide).
+public struct ProSettingsSection: View {
+    @Environment(PurchaseManager.self) private var purchases
+    @State private var showPaywall = false
+    public init() {}
+
+    public var body: some View {
+        Section(L("settings.section.pro")) {
+            if purchases.isPro {
+                LabeledContent(L("settings.pro.active")) {
+                    Image(systemName: "checkmark.seal.fill").foregroundStyle(Brand.accent)
+                }
+                Text(L("settings.pro.thanks")).font(.caption).foregroundStyle(.secondary)
+            } else {
+                Button(L("settings.pro.unlock")) { showPaywall = true }
+                Button(L("paywall.restore")) { Task { await purchases.restore() } }
+                    .disabled(purchases.purchasing)
+                Text(L("settings.pro.hint")).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView().environment(purchases)
+        }
+    }
+}

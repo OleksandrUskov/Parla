@@ -19,6 +19,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            ProSettingsSection()   // Parla Pro: unlock / restore / status (shared, self-contained paywall)
+
             Section(L("settings.section.model")) {
                 Picker(L("settings.section.model"), selection: $model.selectedModel) {
                     ForEach(model.availableModels, id: \.self) { name in

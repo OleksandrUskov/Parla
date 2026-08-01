@@ -320,3 +320,10 @@
 "paywall.restore"                 = "Відновити покупку";
 "paywall.reassure"                = "Разова покупка · Без підписки · Без акаунта";
 "paywall.unavailable.note"        = "Магазин зараз недоступний. Перевір з'єднання та спробуй ще раз.";
+
+/* Settings — Pro */
+"settings.section.pro" = "Parla Pro";
+"settings.pro.active"  = "Pro — активний";
+"settings.pro.thanks"  = "Дякую за Pro ❤️";
+"settings.pro.unlock"  = "Відкрити Pro";
+"settings.pro.hint"    = "Без обмеження тривалості та всі Pro-функції — разова покупка, без підписки.";

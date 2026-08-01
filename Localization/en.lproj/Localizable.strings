@@ -320,3 +320,10 @@
 "paywall.restore"                 = "Restore purchase";
 "paywall.reassure"                = "One-time purchase · No subscription · No account";
 "paywall.unavailable.note"        = "The store is unavailable right now. Check your connection and try again.";
+
+/* Settings — Pro */
+"settings.section.pro" = "Parla Pro";
+"settings.pro.active"  = "Pro — active";
+"settings.pro.thanks"  = "Thanks for going Pro ❤️";
+"settings.pro.unlock"  = "Unlock Pro";
+"settings.pro.hint"    = "Unlimited length and every Pro feature — a one-time purchase, no subscription.";

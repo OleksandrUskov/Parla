@@ -33,6 +33,8 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
+                ProSettingsSection()   // Parla Pro: unlock / restore / status (shared, self-contained paywall)
+
                 // Read-only current model + on-disk size; management lives in the Models tab (no duplicate picker).
                 Section(L("settings.section.model")) {
                     LabeledContent(L("settings.section.model")) {
