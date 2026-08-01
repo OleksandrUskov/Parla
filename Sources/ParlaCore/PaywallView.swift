@@ -12,6 +12,8 @@ import StoreKit
 public struct PaywallView: View {
     @Environment(PurchaseManager.self) private var purchases
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var showRedeem = false   // iOS offer-code redeem sheet
 
     /// Why the paywall opened — drives the contextual line (nil = a generic upgrade, e.g. from Settings).
     let reason: PaywallReason?
@@ -56,8 +58,11 @@ public struct PaywallView: View {
         #endif
         .preferredColorScheme(.dark)
         .onAppear { purchases.clearError() }   // don't greet a fresh open with a stale error from a prior attempt
-        .onChange(of: purchases.isPro) { _, pro in if pro { dismiss() } }   // purchase / restore succeeded → close
+        .onChange(of: purchases.isPro) { _, pro in if pro { dismiss() } }   // purchase / restore / redeem succeeded → close
         .task { if purchases.proProduct == nil { await purchases.loadProduct() } }
+        #if os(iOS)
+        .offerCodeRedemption(isPresented: $showRedeem) { _ in }   // a redeemed code arrives via Transaction.updates → isPro flips → auto-dismiss
+        #endif
     }
 
     private var header: some View {
@@ -108,9 +113,20 @@ public struct PaywallView: View {
             .buttonStyle(.borderedProminent).controlSize(.large).tint(Brand.accent)
             .disabled(purchases.proProduct == nil || purchases.purchasing)
 
-            Button(L("paywall.restore")) { Task { await purchases.restore() } }
-                .buttonStyle(.plain).font(.subheadline).foregroundStyle(Brand.accent)
-                .disabled(purchases.purchasing)
+            HStack(spacing: 16) {
+                Button(L("paywall.restore")) { Task { await purchases.restore() } }
+                    .disabled(purchases.purchasing)
+                // Offer-code redemption (the "first 100 free" mechanic). iOS gets the in-app sheet; macOS 14 has
+                // none → open the App Store, where the user redeems (Account → Redeem).
+                Button(L("paywall.redeem")) {
+                    #if os(iOS)
+                    showRedeem = true
+                    #else
+                    openURL(URL(string: "macappstore://apps.apple.com/redeem?ctx=offercodes")!)
+                    #endif
+                }
+            }
+            .buttonStyle(.plain).font(.subheadline).foregroundStyle(Brand.accent)
 
             Text(L("paywall.reassure")).font(.caption2).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
