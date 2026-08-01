@@ -8,6 +8,7 @@ import KeyboardShortcuts
 struct ParlaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel.mac()   // macOS platform seams wired in (Core stays AppKit-free)
+    @State private var purchases = PurchaseManager()   // StoreKit-2 Pro entitlement (drives the free-tier gate + paywall)
     @State private var hotkeyInstalled = false
     @AppStorage("didOnboard") private var didOnboard = false   // first-run sheet gate (UI pref, not history)
     @State private var showOnboarding = false
@@ -17,14 +18,25 @@ struct ParlaApp: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(model)
+                .environment(purchases)
                 .environment(\.locale, model.resolvedLocale)   // reading resolvedLocale in App.body → re-render on language change
                 .sheet(isPresented: $showOnboarding) {
                     OnboardingView { didOnboard = true; showOnboarding = false }
                         .environment(model)
                 }
+                // Free-tier length gate → up-front paywall. `.sheet(item:)` (distinct from the onboarding
+                // isPresented sheet) presents when the gate sets `paywallReason` and clears it on dismiss.
+                .sheet(item: Binding(get: { model.paywallReason }, set: { model.paywallReason = $0 })) { reason in
+                    PaywallView(reason: reason)
+                        .environment(purchases)
+                        .environment(\.locale, model.resolvedLocale)
+                        .preferredColorScheme(.dark)
+                }
                 .onOpenURL { model.handleParlaURL($0) }   // parla:// scheme (Raycast/Alfred/terminal/Shortcuts)
                 .task {
                     appDelegate.model = model            // let the terminate-guard see in-flight work
+                    model.isProUser = { [purchases] in purchases.isPro }   // live entitlement drives the free-tier gate
+                    Task { await purchases.start() }     // load product + resolve entitlement + start the Transaction.updates listener
                     if Onboarding.shouldShowOnboarding(didOnboard: didOnboard, hasHistory: !model.history.isEmpty) {
                         showOnboarding = true            // fresh start only — upgraders with history skip it
                     }
@@ -50,6 +62,7 @@ struct ParlaApp: App {
         MenuBarExtra("Parla", systemImage: model.isBusy ? "waveform.circle.fill" : "waveform") {
             MenuBarView()
                 .environment(model)
+                .environment(purchases)
                 .environment(\.locale, model.resolvedLocale)
         }
         .menuBarExtraStyle(.window)
@@ -57,6 +70,7 @@ struct ParlaApp: App {
         Settings {
             SettingsView()
                 .environment(model)
+                .environment(purchases)
                 .environment(\.locale, model.resolvedLocale)
                 .frame(width: 500)
                 .preferredColorScheme(.dark)

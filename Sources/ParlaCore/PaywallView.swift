@@ -1,0 +1,137 @@
+import SwiftUI
+import StoreKit
+
+/// The Pro paywall — ONE shared view for macOS + iOS, presented as a sheet by the free-tier length gate (with a
+/// `reason`, giving a contextual up-front line) or opened directly from Settings (`reason == nil`, a generic
+/// upgrade). Reads the injected `PurchaseManager` for the product/price + the purchase/restore flow, and
+/// auto-dismisses the moment the entitlement flips to Pro.
+///
+/// Server-less by design: no account, no receipt server — the buy/restore is pure StoreKit 2. Degrades
+/// gracefully when the store is unreachable (ad-hoc build / offline): the CTA disables and an "unavailable"
+/// note shows instead of a dead button.
+public struct PaywallView: View {
+    @Environment(PurchaseManager.self) private var purchases
+    @Environment(\.dismiss) private var dismiss
+
+    /// Why the paywall opened — drives the contextual line (nil = a generic upgrade, e.g. from Settings).
+    let reason: PaywallReason?
+    public init(reason: PaywallReason? = nil) { self.reason = reason }
+
+    private struct Feature: Identifiable { let id = UUID(); let icon: String; let title: String; let detail: String }
+    private var features: [Feature] {
+        [
+            .init(icon: "infinity",              title: L("paywall.feature.length"),   detail: L("paywall.feature.length.detail")),
+            .init(icon: "list.bullet.rectangle", title: L("paywall.feature.chapters"), detail: L("paywall.feature.chapters.detail")),
+            .init(icon: "square.stack.3d.up",    title: L("paywall.feature.batch"),    detail: L("paywall.feature.batch.detail")),
+            .init(icon: "captions.bubble",       title: L("paywall.feature.export"),   detail: L("paywall.feature.export.detail")),
+            .init(icon: "sparkles",              title: L("paywall.feature.ai"),       detail: L("paywall.feature.ai.detail")),
+        ]
+    }
+
+    public var body: some View {
+        ZStack {
+            AuroraBackground()
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        header
+                        if let line = contextLine {
+                            Text(line)
+                                .font(.callout).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        VStack(spacing: 16) { ForEach(features) { featureRow($0) } }
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                footer
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 440, minHeight: 620)
+        #endif
+        .preferredColorScheme(.dark)
+        .onChange(of: purchases.isPro) { _, pro in if pro { dismiss() } }   // purchase / restore succeeded → close
+        .task { if purchases.proProduct == nil { await purchases.loadProduct() } }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill").font(.title2).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("common.cancel"))
+            }
+            Image(systemName: "crown.fill").font(.system(size: 34)).foregroundStyle(Brand.gradient)
+            Text(L("paywall.title"))
+                .font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(Brand.gradient)
+            Text(L("paywall.subtitle"))
+                .font(.title3).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func featureRow(_ f: Feature) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: f.icon).font(.title3).foregroundStyle(Brand.accent).frame(width: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(f.title).font(.headline)
+                Text(f.detail).font(.subheadline).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var footer: some View {
+        VStack(spacing: 10) {
+            if let err = purchases.lastError {
+                Text(err).font(.caption).foregroundStyle(.red).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button {
+                Task { await purchases.purchase() }
+            } label: {
+                Group {
+                    if purchases.purchasing { ProgressView() }
+                    else { Text(ctaLabel) }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent).controlSize(.large).tint(Brand.accent)
+            .disabled(purchases.proProduct == nil || purchases.purchasing)
+
+            Button(L("paywall.restore")) { Task { await purchases.restore() } }
+                .buttonStyle(.plain).font(.subheadline).foregroundStyle(Brand.accent)
+                .disabled(purchases.purchasing)
+
+            Text(L("paywall.reassure")).font(.caption2).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            if purchases.proProduct == nil {
+                Text(L("paywall.unavailable.note")).font(.caption2).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+    }
+
+    private var ctaLabel: String {
+        if let price = purchases.proProduct?.displayPrice { return Lf("paywall.cta.price", price) }
+        return L("paywall.cta.unavailable")
+    }
+
+    /// The contextual up-front line for a length-gated open ("This recording runs about 12 min…").
+    private var contextLine: String? {
+        guard case .lengthExceeded(_, let dur)? = reason else { return nil }
+        let minutes = max(1, Int((dur / 60).rounded()))
+        return Lf("paywall.length.body", minutes)
+    }
+}

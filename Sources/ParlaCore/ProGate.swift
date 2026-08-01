@@ -30,9 +30,14 @@ public enum ProGate {
 }
 
 /// Why the paywall is being presented — set by the gate, observed by the UI (which presents the paywall and
-/// clears this on dismiss). Grows more cases as feature gating expands (e.g. a locked Pro-only feature).
-public enum PaywallReason: Equatable, Sendable {
+/// clears this on dismiss). `Identifiable` so it drives a `.sheet(item:)`. Grows more cases as feature gating
+/// expands (e.g. a locked Pro-only feature).
+public enum PaywallReason: Equatable, Sendable, Identifiable {
     /// A free user tried to transcribe a file longer than `ProGate.freeLimitSec`. Carries the file name + its
     /// length so the upsell can say "This 12-minute recording needs Pro".
     case lengthExceeded(fileName: String, durationSec: Double)
+
+    public var id: String {
+        switch self { case .lengthExceeded(let name, let dur): return "length:\(name):\(Int(dur))" }
+    }
 }

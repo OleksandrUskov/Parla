@@ -6,6 +6,7 @@ import ParlaCore
 @main
 struct ParlaiOSApp: App {
     @State private var model: AppModel
+    @State private var purchases = PurchaseManager()   // StoreKit-2 Pro entitlement (drives the free-tier gate + paywall)
 
     init() {
         // App.init is @MainActor-isolated → safe to build the @MainActor AppModel here.
@@ -16,6 +17,7 @@ struct ParlaiOSApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                .environment(purchases)
                 .environment(\.locale, model.resolvedLocale)   // reading resolvedLocale here → re-render on language change (mirrors macOS scene root)
                 .preferredColorScheme(.dark)   // Parla is dark-theme only, like the Mac app
                 .task { ParlaRuntime.model = model }   // app-bound App Intents (Siri/Shortcuts) reach the live model
@@ -28,6 +30,7 @@ struct ParlaiOSApp: App {
 /// must survive the screen not locking.
 private struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(PurchaseManager.self) private var purchases
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("didOnboardIOS") private var didOnboard = false
     @AppStorage("didFirstRunSetup") private var didFirstRun = false
@@ -48,6 +51,19 @@ private struct RootView: View {
         }
         .keepAwake(while: model.isBusy)
         .parlaToast()   // dictation + batch feedback surface (macOS QuickToast counterpart) — D1/F1
+
+        // Pro entitlement: wire the live isPro into the free-tier gate + start StoreKit (load product,
+        // resolve the current entitlement, listen for Transaction.updates). Idempotent.
+        .task {
+            model.isProUser = { purchases.isPro }
+            await purchases.start()
+        }
+        // Free-tier length gate → up-front paywall (presents when the gate sets paywallReason; cleared on dismiss).
+        .sheet(item: Binding(get: { model.paywallReason }, set: { model.paywallReason = $0 })) { reason in
+            PaywallView(reason: reason)
+                .environment(purchases)
+                .environment(\.locale, model.resolvedLocale)
+        }
 
         // Pick up anything the Share Extension dropped in the App Group inbox — on cold launch and every
         // foreground. Gated on didFirstRun so a shared file waits for the model-download gate instead of

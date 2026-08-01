@@ -300,3 +300,23 @@
 "settings.section.about"    = "Про застосунок";
 "acknowledgements.title"    = "Подяки";
 "acknowledgements.intro"    = "Зібрано на цих open-source компонентах. Сам застосунок доступний у вихідному коді за ліцензією PolyForm Noncommercial.";
+
+/* Paywall (Pro) */
+"paywall.title"                   = "Parla Pro";
+"paywall.subtitle"                = "Разова покупка. Купив один раз — твоє назавжди, без підписки.";
+"paywall.length.body"             = "Цей запис триває близько %d хв. Безкоштовно — до 5 хвилин на файл, Pro знімає обмеження.";
+"paywall.feature.length"          = "Без обмеження тривалості";
+"paywall.feature.length.detail"   = "Розшифровуй зустрічі, подкасти та лекції — будь-якої тривалості.";
+"paywall.feature.chapters"        = "Розділи та зведення";
+"paywall.feature.chapters.detail" = "Автоматичні розділи та зведення по кожному розділу для довгих записів.";
+"paywall.feature.batch"           = "Пакет і стеження за текою";
+"paywall.feature.batch.detail"    = "Додавай у чергу багато файлів одразу або розшифровуй теку автоматично.";
+"paywall.feature.export"          = "Експорт субтитрів";
+"paywall.feature.export.detail"   = "Експорт у SRT, VTT та JSON, а не лише простий текст.";
+"paywall.feature.ai"              = "ШІ на пристрої (RU/UK)";
+"paywall.feature.ai.detail"       = "Генеративні заголовки та зведення локальною моделлю.";
+"paywall.cta.price"               = "Відкрити Pro — %@";
+"paywall.cta.unavailable"         = "Тимчасово недоступно";
+"paywall.restore"                 = "Відновити покупку";
+"paywall.reassure"                = "Разова покупка · Без підписки · Без акаунта";
+"paywall.unavailable.note"        = "Магазин зараз недоступний. Перевір з'єднання та спробуй ще раз.";

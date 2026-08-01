@@ -300,3 +300,23 @@
 "settings.section.about"    = "О приложении";
 "acknowledgements.title"    = "Благодарности";
 "acknowledgements.intro"    = "Собрано на этих open-source компонентах. Само приложение доступно в исходниках по лицензии PolyForm Noncommercial.";
+
+/* Paywall (Pro) */
+"paywall.title"                   = "Parla Pro";
+"paywall.subtitle"                = "Разовая покупка. Купил один раз — твоё навсегда, без подписки.";
+"paywall.length.body"             = "Эта запись длится около %d мин. Бесплатно — до 5 минут на файл, Pro снимает ограничение.";
+"paywall.feature.length"          = "Без ограничения длины";
+"paywall.feature.length.detail"   = "Расшифровывай встречи, подкасты и лекции — любой длины.";
+"paywall.feature.chapters"        = "Главы и сводки";
+"paywall.feature.chapters.detail" = "Автоматические главы и сводки по каждой главе для длинных записей.";
+"paywall.feature.batch"           = "Пакет и слежение за папкой";
+"paywall.feature.batch.detail"    = "Ставь в очередь много файлов сразу или расшифровывай папку автоматически.";
+"paywall.feature.export"          = "Экспорт субтитров";
+"paywall.feature.export.detail"   = "Экспорт в SRT, VTT и JSON, а не только простой текст.";
+"paywall.feature.ai"              = "ИИ на устройстве (RU/UK)";
+"paywall.feature.ai.detail"       = "Генеративные заголовки и сводки локальной моделью.";
+"paywall.cta.price"               = "Открыть Pro — %@";
+"paywall.cta.unavailable"         = "Временно недоступно";
+"paywall.restore"                 = "Восстановить покупку";
+"paywall.reassure"                = "Разовая покупка · Без подписки · Без аккаунта";
+"paywall.unavailable.note"        = "Магазин сейчас недоступен. Проверь подключение и попробуй снова.";
