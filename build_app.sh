@@ -31,6 +31,18 @@ echo "▶ Сборка $APP (release, via xcodebuild)…"
 # линкует нормально, но .app падает в рантайме («Failed to load the default metallib»). xcodebuild
 # собирает ТОТ ЖЕ Package.swift (без .xcodeproj) через авто-схему «Parla». Юнит-тесты остаются на
 # `swift test` (MLX выключен под XCTest → ни одной Metal-операции). DerivedData кладём под .build/ (gitignored).
+# `--store`: build the OFFICIAL App-Store variant — freemium gate + StoreKit ON, flagged by a `ParlaStoreBuild`
+# Info.plist key (read at runtime, so no fragile global compile-condition override). The DEFAULT build OMITS the
+# key → the FULL app with NO gate: that's what someone who clones this public repo gets (the self-compiled build
+# is the immaterial honor-system "leak"; StoreKit security is Apple-side, not code secrecy). Test with `--store`.
+STORE_PLIST=""
+if [[ " $* " == *" --store "* ]]; then
+  STORE_PLIST="<key>ParlaStoreBuild</key><true/>"
+  echo "▶ STORE build: freemium gate ON (Pro + paywall active)"
+else
+  echo "▶ FULL build: no gate (open-source / dev). Use --store for the gated App-Store variant."
+fi
+
 DERIVED="$PWD/.build/xcode"
 xcodebuild build \
   -scheme "$APP" \
@@ -149,6 +161,7 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
   </array>
   <key>NSMicrophoneUsageDescription</key><string>Parla records your microphone only while you are dictating, and transcribes it on-device. Audio never leaves your Mac.</string>
   $ICON_LINE
+  $STORE_PLIST
 </dict>
 </plist>
 PLIST

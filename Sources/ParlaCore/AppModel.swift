@@ -212,9 +212,17 @@ public final class AppModel {
 
     // MARK: Monetization seams (Phase 3)
 
-    /// Whether the user owns Pro (the monetization entitlement). Injected: both apps wire it to the live
-    /// `PurchaseManager.isPro`; the inert Core/test default is `true` — fail-OPEN, so a wiring gap can never
-    /// wrongly block a paying/free user's transcription. A test that exercises the free tier sets `{ false }`.
+    /// True ONLY in an official store build (the freemium gate + Pro upsell UI are enabled). A from-source / dev
+    /// build leaves this false → the FULL app: no length cap, no feature gating, no Pro/paywall UI, no StoreKit.
+    /// Set by the app factory (`mac()`/`iOS()`) from the `ParlaStoreBuild` Info.plist key (`./build_app.sh --store`
+    /// / iOS adds it; the default macOS build omits it). Per the repo decision that a self-compiled build is the
+    /// immaterial honor-system "leak" (normal users buy from the store; open-source builders get the full app), so
+    /// nothing is crippled for someone who clones + builds the public repo.
+    public var isStoreBuild = false
+
+    /// Whether the user owns Pro (the monetization entitlement). Injected: in a STORE build both apps wire it to
+    /// the live `PurchaseManager` entitlement; otherwise it stays `true` — the inert Core/test default, fail-OPEN,
+    /// so a from-source build (or a wiring gap) is the FULL app. A test that exercises the free tier sets `{ false }`.
     public var isProUser: @MainActor () -> Bool = { true }
 
     /// Cheap container-duration probe for the free-tier length gate (reads the media index, no decode). Ogg/Opus

@@ -13,6 +13,11 @@ extension AppModel {
     @MainActor static func mac() -> AppModel {
         let m = AppModel()
 
+        // Freemium gate + StoreKit only in an official store build (`./build_app.sh --store` / Mac App Store add
+        // the `ParlaStoreBuild` Info.plist key). A plain `./build_app.sh` (what someone who clones the public repo
+        // runs) omits it → the FULL, ungated app.
+        m.isStoreBuild = (Bundle.main.object(forInfoDictionaryKey: "ParlaStoreBuild") as? Bool) ?? false
+
         // Audio decode / playback rendition → the in-process native decoder (Phase 2c native-first: opusfile +
         // AVAssetReader, same as iOS; no ffmpeg subprocess). webm/mkv/exotic containers are dropped by design
         // (AVFoundation can't demux Matroska).

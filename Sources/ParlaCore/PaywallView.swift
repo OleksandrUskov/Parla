@@ -171,11 +171,13 @@ public struct PaywallView: View {
 /// injected `PurchaseManager` (must be in the environment, which both app roots provide).
 public struct ProSettingsSection: View {
     @Environment(PurchaseManager.self) private var purchases
+    @Environment(AppModel.self) private var model
     @State private var showPaywall = false
     public init() {}
 
     public var body: some View {
-        Section(L("settings.section.pro")) {
+        if model.isStoreBuild {   // no Pro upsell in a from-source / full build
+            Section(L("settings.section.pro")) {
             if purchases.isPro {
                 LabeledContent(L("settings.pro.active")) {
                     Image(systemName: "checkmark.seal.fill").foregroundStyle(Brand.accent)
@@ -188,8 +190,9 @@ public struct ProSettingsSection: View {
                 Text(L("settings.pro.hint")).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView().environment(purchases)
+            .sheet(isPresented: $showPaywall) {
+                PaywallView().environment(purchases)
+            }
         }
     }
 }
@@ -205,7 +208,7 @@ public struct TipJarView: View {
 
     public var body: some View {
         let heavyFree = model.history.count >= 10
-        if (purchases.isPro || heavyFree), (!purchases.tipProducts.isEmpty || purchases.tipThanks) {
+        if model.isStoreBuild, (purchases.isPro || heavyFree), (!purchases.tipProducts.isEmpty || purchases.tipThanks) {
             Section(L("tip.section")) {
                 if purchases.tipThanks {
                     Text(L("tip.thanks")).font(.callout)

@@ -45,5 +45,8 @@
 	<array>
 		<string>com.parla.viewTranscript</string>
 	</array>
+	<!-- iOS ships only via the App Store → a store build: freemium gate + StoreKit ON. Remove for a full dev build. -->
+	<key>ParlaStoreBuild</key>
+	<true/>
 </dict>
 </plist>

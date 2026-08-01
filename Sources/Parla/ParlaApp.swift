@@ -29,8 +29,10 @@ struct ParlaApp: App {
                 .onOpenURL { model.handleParlaURL($0) }   // parla:// scheme (Raycast/Alfred/terminal/Shortcuts)
                 .task {
                     appDelegate.model = model            // let the terminate-guard see in-flight work
-                    model.isProUser = { [purchases] in purchases.grantsUnlimited }   // fail-open until the entitlement resolves (never gate a payer mid-cold-launch)
-                    Task { await purchases.start() }     // load product + resolve entitlement + start the Transaction.updates listener
+                    if model.isStoreBuild {              // freemium gate + StoreKit only in an official store build; a from-source build stays FULL
+                        model.isProUser = { [purchases] in purchases.grantsUnlimited }   // fail-open until the entitlement resolves (never gate a payer mid-cold-launch)
+                        Task { await purchases.start() } // load product + resolve entitlement + start the Transaction.updates listener
+                    }
                     if Onboarding.shouldShowOnboarding(didOnboard: didOnboard, hasHistory: !model.history.isEmpty) {
                         showOnboarding = true            // fresh start only — upgraders with history skip it
                     }

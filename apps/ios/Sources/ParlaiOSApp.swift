@@ -55,8 +55,10 @@ private struct RootView: View {
         // Pro entitlement: wire the live isPro into the free-tier gate + start StoreKit (load product,
         // resolve the current entitlement, listen for Transaction.updates). Idempotent.
         .task {
-            model.isProUser = { purchases.grantsUnlimited }   // fail-open until the entitlement resolves (never gate a payer on a cold-launch share)
-            await purchases.start()
+            if model.isStoreBuild {   // freemium gate + StoreKit only in a store build; a from-source build stays FULL
+                model.isProUser = { purchases.grantsUnlimited }   // fail-open until the entitlement resolves (never gate a payer on a cold-launch share)
+                await purchases.start()
+            }
         }
         // Free-tier length gate → up-front paywall (presents when the gate sets paywallReason; cleared on dismiss).
         .sheet(item: Binding(get: { model.paywallReason }, set: { model.paywallReason = $0 })) { reason in
