@@ -81,6 +81,23 @@ for b in "$DERIVED/Build/Products/Release/"*.bundle; do
 done
 shopt -u nullglob
 
+# In-process Opus decoder frameworks (Phase 2c: the macOS app links opus + ogg for native Ogg/Opus decode,
+# replacing the old ffmpeg subprocess). The binary references them via @rpath and the only LC_RPATH is
+# @executable_path/../lib → embed the macOS framework slices under Contents/lib, or the .app fails to LAUNCH
+# with dyld "Library not loaded: @rpath/opus.framework" (the build SUCCEEDS regardless — this only bites at
+# run time, which is why it slipped through until the .app was actually launched). The trailing codesign --deep
+# signs them along with the bundle.
+mkdir -p "$APPDIR/Contents/lib"
+for fw in opus ogg; do
+  FWSRC="$DERIVED/Build/Products/Release/$fw.framework"
+  if [ -d "$FWSRC" ]; then
+    cp -R "$FWSRC" "$APPDIR/Contents/lib/"
+    echo "• Вшит фреймворк: $fw.framework → Contents/lib/"
+  else
+    echo "❌ $fw.framework не найден ($FWSRC) — нативный декод сломан, не отгружаю .app"; exit 1
+  fi
+done
+
 ICON_LINE=""
 if [ -f "Resources/AppIcon.icns" ]; then
   cp "Resources/AppIcon.icns" "$APPDIR/Contents/Resources/AppIcon.icns"
