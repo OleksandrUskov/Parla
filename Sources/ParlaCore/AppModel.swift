@@ -347,17 +347,19 @@ public final class AppModel {
     public var lastTranscriptText: String { history.first?.text ?? "" }
 
     // «What counts as audio» — a cross-domain utility (used by transcription, watching, and the buffer).
+    // Phase 2c (native-first decode) dropped webm/amr/wma — AVFoundation can't demux Matroska/WebM and has no
+    // reliable AMR/WMA decoder — so they're no longer advertised as importable (they'd only hard-fail on decode).
     public nonisolated static let audioExts: Set<String> = [
         "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac",
-        "mp4", "mov", "m4v", "webm", "3gp", "amr", "wma", "aiff", "aif", "caf",
+        "mp4", "mov", "m4v", "3gp", "aiff", "aif", "caf",
     ]
 
     /// Formats AVFoundation opens directly — WhisperKit loads audio via `AVAudioFile(forReading:)` and
     /// resamples to 16 kHz itself, so these can go straight to the engine with NO ffmpeg re-encode.
     /// Conservative v1 = the EXACT mirror of the prod-proven `AudioStore.directlyPlayable` (pure-audio
-    /// containers). Video containers (mp4/mov/m4v) deliberately stay on the ffmpeg path — `AVAudioFile`
-    /// is unreliable for them. Must remain a strict subset of `audioExts` (pinned by test): a format
-    /// wrongly listed here would hard-fail instead of routing through ffmpeg.
+    /// containers). Video containers (mp4/mov/m4v) deliberately stay OFF this list — they route through the
+    /// decoder's AVAssetReader lane (Phase 2c: native in-process; was ffmpeg). Must remain a strict subset of
+    /// `audioExts` (pinned by test): a format wrongly listed here would hard-fail instead of routing through the decoder.
     public nonisolated static let avDecodable: Set<String> = ["m4a", "mp3", "wav", "aac", "caf", "aiff", "aif"]
     public nonisolated static func audioFiles(in dir: URL) -> [URL] {
         let fm = FileManager.default

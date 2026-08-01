@@ -189,8 +189,9 @@ extension AppModel {
         phase = .preparing(url.lastPathComponent, batch: batch)
 
         // AVFoundation opens these containers directly (WhisperKit loads via AVAudioFile + resamples to
-        // 16 kHz itself) → hand the engine the ORIGINAL file and skip the ffmpeg re-encode entirely.
-        // Everything else (Ogg/Opus, amr, webm, flac, video, …) still goes through ffmpeg as before.
+        // 16 kHz itself) → hand the engine the ORIGINAL file and skip decode entirely.
+        // Everything else (Ogg/Opus, flac, mp4/mov/m4v, 3gp) goes through the in-process native decoder
+        // (opusfile / AVAssetReader — Phase 2c; iOS + macOS, no ffmpeg subprocess).
         // NOTE: `wavPath:` is a historical name — for an AVFoundation format it's the source path, not a WAV.
         let decodePath: String
         let tempWav: URL?
@@ -209,7 +210,7 @@ extension AppModel {
 
         // A long recording → chunked pipeline: bounded memory + real per-chunk progress, EVEN inside a
         // folder batch (a long file mustn't bypass chunking just because it was dropped with others).
-        // Needs ffmpeg to split; the no-ffmpeg / unknown-duration cases fall through to single-pass.
+        // Splitting needs a chunking-capable decoder (native in-process now); unavailable / unknown-duration → single-pass.
         // The duration probe opens the file via AVAudioFile → run it off the main actor.
         let dur = await Task.detached(priority: .userInitiated) { AudioDuration.seconds(ofFileAt: decodePath) }.value
         if let dur, AudioChunker.shouldChunk(durationSec: dur, ffmpegAvailable: decoder.isChunkingAvailable) {

@@ -514,12 +514,14 @@ final class ParlaLogicTests: XCTestCase {
         let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? fm.removeItem(at: tmp) }
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
-        for name in ["A.OGG", "b.M4A", "c.Opus", "d.flac", "e.webm", "f.mp4", "skip.txt"] {
+        for name in ["A.OGG", "b.M4A", "c.Opus", "d.flac", "f.mp4", "skip.txt", "drop.webm"] {
             try Data("x".utf8).write(to: tmp.appendingPathComponent(name))
         }
         let found = Set(AppModel.audioFiles(in: tmp).map { $0.lastPathComponent })
-        XCTAssertTrue(found.isSuperset(of: ["A.OGG", "b.M4A", "c.Opus", "d.flac", "e.webm", "f.mp4"]))
+        XCTAssertTrue(found.isSuperset(of: ["A.OGG", "b.M4A", "c.Opus", "d.flac", "f.mp4"]))
         XCTAssertFalse(found.contains("skip.txt"))
+        // Phase 2c (native-first decode) dropped webm/amr/wma → no longer recognized as importable audio.
+        XCTAssertFalse(found.contains("drop.webm"))
     }
 
     func testAudioFilesEmptyAndMissing() throws {
