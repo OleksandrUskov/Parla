@@ -2106,6 +2106,35 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).body, "Готово: 1 розшифровка")
     }
 
+    // MARK: Monetization — free/Pro length gate (Phase 3)
+
+    /// The stateless per-file length gate: FREE covers "up to 5 minutes" (inclusive); a longer file gates a
+    /// non-Pro user; Pro is always unlimited; a zero/unknown duration never gates.
+    func testProGateLengthBoundaries() {
+        XCTAssertEqual(ProGate.freeLimitSec, 300, "free cap is 5 minutes")
+        // Free user, at/under the cap → allowed.
+        XCTAssertFalse(ProGate.exceedsFreeLimit(durationSec: 1,     isPro: false))
+        XCTAssertFalse(ProGate.exceedsFreeLimit(durationSec: 299,   isPro: false))
+        XCTAssertFalse(ProGate.exceedsFreeLimit(durationSec: 300,   isPro: false), "exactly 5 min is still free (inclusive)")
+        // Free user, over the cap → gated.
+        XCTAssertTrue(ProGate.exceedsFreeLimit(durationSec: 300.5,  isPro: false))
+        XCTAssertTrue(ProGate.exceedsFreeLimit(durationSec: 301,    isPro: false))
+        XCTAssertTrue(ProGate.exceedsFreeLimit(durationSec: 7200,   isPro: false))
+        // Pro user → never gated, at any length.
+        XCTAssertFalse(ProGate.exceedsFreeLimit(durationSec: 7200,  isPro: true))
+        XCTAssertFalse(ProGate.exceedsFreeLimit(durationSec: 301,   isPro: true))
+        // Unknown / non-positive duration → never gated (we don't block what we can't measure).
+        XCTAssertFalse(ProGate.exceedsFreeLimit(durationSec: 0,     isPro: false))
+        XCTAssertFalse(ProGate.exceedsFreeLimit(durationSec: -1,    isPro: false))
+    }
+
+    /// The placeholder product ID stays in the `com.parla.*` namespace until the app's final reserved namespace
+    /// is flipped in (alongside the bundle IDs). Pins that no premature production-namespace ID leaked into code.
+    func testProProductIDIsPlaceholderNamespace() {
+        XCTAssertEqual(ProGate.proProductID, "com.parla.pro.lifetime")
+        XCTAssertTrue(ProGate.proProductID.hasPrefix("com.parla."), "product ID stays in the placeholder namespace pre-rebrand")
+    }
+
     // MARK: Audio-cache prune protection — TOCTOU
 
     /// Pins the exact bug the review found: the displayed/playing entry is never evicted, and the
