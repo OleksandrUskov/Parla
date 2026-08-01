@@ -327,3 +327,6 @@
 "settings.pro.thanks"  = "Thanks for going Pro ❤️";
 "settings.pro.unlock"  = "Unlock Pro";
 "settings.pro.hint"    = "Unlimited length and every Pro feature — a one-time purchase, no subscription.";
+
+/* Pro toast (windowless quick-run gate) */
+"toast.pro.needed" = "This recording needs Pro (over 5 min)";

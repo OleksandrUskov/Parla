@@ -24,18 +24,12 @@ struct ParlaApp: App {
                     OnboardingView { didOnboard = true; showOnboarding = false }
                         .environment(model)
                 }
-                // Free-tier length gate → up-front paywall. `.sheet(item:)` (distinct from the onboarding
-                // isPresented sheet) presents when the gate sets `paywallReason` and clears it on dismiss.
-                .sheet(item: Binding(get: { model.paywallReason }, set: { model.paywallReason = $0 })) { reason in
-                    PaywallView(reason: reason)
-                        .environment(purchases)
-                        .environment(\.locale, model.resolvedLocale)
-                        .preferredColorScheme(.dark)
-                }
+                // NB: the paywall sheet lives INSIDE ContentView (not here) — two sheets on the same view can
+                // collide, so the onboarding sheet stays here and the paywall attaches one level down.
                 .onOpenURL { model.handleParlaURL($0) }   // parla:// scheme (Raycast/Alfred/terminal/Shortcuts)
                 .task {
                     appDelegate.model = model            // let the terminate-guard see in-flight work
-                    model.isProUser = { [purchases] in purchases.isPro }   // live entitlement drives the free-tier gate
+                    model.isProUser = { [purchases] in purchases.grantsUnlimited }   // fail-open until the entitlement resolves (never gate a payer mid-cold-launch)
                     Task { await purchases.start() }     // load product + resolve entitlement + start the Transaction.updates listener
                     if Onboarding.shouldShowOnboarding(didOnboard: didOnboard, hasHistory: !model.history.isEmpty) {
                         showOnboarding = true            // fresh start only — upgraders with history skip it

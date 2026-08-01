@@ -21,6 +21,16 @@ public final class PurchaseManager {
     /// override wins when set — for manually verifying the gate + paywall in the built app before a real IAP exists.
     public var isPro: Bool { devOverride ?? storeEntitled }
 
+    /// Whether it's safe to treat the user as unlimited FOR GATING: they own Pro, OR the entitlement hasn't
+    /// resolved yet. During the brief cold-launch window before `start()`'s first `currentEntitlements` scan
+    /// completes we fail OPEN — so a paying customer who drops a long file the instant the app launches is never
+    /// wrongly length-gated. (A free user could slip one over-cap file through in that sub-second window; that's
+    /// acceptable vs. blocking a payer.) The apps wire `isProUser` to THIS; UI/status reads plain `isPro`.
+    public var grantsUnlimited: Bool { isPro || !entitlementsResolved }
+
+    /// False until `refreshEntitlements()` has run once (i.e. StoreKit has reported the current entitlements).
+    public private(set) var entitlementsResolved = false
+
     /// The purchasable Pro product once loaded (nil until `start()` loads it, or if the store is unreachable).
     public private(set) var proProduct: Product?
 
@@ -107,6 +117,10 @@ public final class PurchaseManager {
         }
     }
 
+    /// Clear a lingering purchase/restore error. The paywall calls this on open so a stale error from an earlier
+    /// attempt doesn't greet a fresh presentation (the manager is one app-lifetime instance).
+    public func clearError() { lastError = nil }
+
     /// Explicit "Restore Purchases" (an App-Store review requirement). Syncs with the App Store — which may
     /// prompt for the Apple-ID password — then re-resolves the entitlement.
     public func restore() async {
@@ -132,6 +146,7 @@ public final class PurchaseManager {
             if t.productID == ProGate.proProductID, t.revocationDate == nil { owned = true }
         }
         storeEntitled = owned
+        entitlementsResolved = true   // first scan done → the gate stops failing open
     }
 
     /// Handle a transaction delivered by `Transaction.updates`: finish it, then re-resolve the entitlement.

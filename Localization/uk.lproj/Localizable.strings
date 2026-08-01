@@ -327,3 +327,6 @@
 "settings.pro.thanks"  = "Дякую за Pro ❤️";
 "settings.pro.unlock"  = "Відкрити Pro";
 "settings.pro.hint"    = "Без обмеження тривалості та всі Pro-функції — разова покупка, без підписки.";
+
+/* Pro toast (windowless quick-run gate) */
+"toast.pro.needed" = "Цей запис потребує Pro (більше 5 хв)";

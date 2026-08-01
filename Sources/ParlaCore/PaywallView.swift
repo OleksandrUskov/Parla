@@ -55,6 +55,7 @@ public struct PaywallView: View {
         .frame(minWidth: 440, minHeight: 620)
         #endif
         .preferredColorScheme(.dark)
+        .onAppear { purchases.clearError() }   // don't greet a fresh open with a stale error from a prior attempt
         .onChange(of: purchases.isPro) { _, pro in if pro { dismiss() } }   // purchase / restore succeeded → close
         .task { if purchases.proProduct == nil { await purchases.loadProduct() } }
     }

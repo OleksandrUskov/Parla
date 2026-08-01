@@ -168,7 +168,9 @@ extension AppModel {
         if succeeded == 0, failures.isEmpty, !gated.isEmpty {
             refreshDownloaded()
             phase = .idle
-            if quickModeRun { quickModeRun = false; hideToast() }
+            // A quick-mode run (menu bar / Services / Shortcuts) may have no open window to host the paywall
+            // sheet → give it a toast (replaces the sticky "Recognizing…") so the upsell isn't a silent no-op.
+            if quickModeRun { quickModeRun = false; showToast(L("toast.pro.needed"), false) }
             paywallReason = gated.first.map { .lengthExceeded(fileName: $0.name, durationSec: $0.dur) }
             await pruneAudioCache()
             return

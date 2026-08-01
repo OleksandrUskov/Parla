@@ -3,6 +3,7 @@ import ParlaCore
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    @Environment(PurchaseManager.self) private var purchases
     private let sidebarWidth: CGFloat = 268
     // Fixed reserve for the traffic-light strip. We deliberately DON'T rely on the window's title-bar
     // safe-area inset: SwiftUI resolves it asynchronously after the window attaches (~1s), so the content
@@ -46,6 +47,14 @@ struct ContentView: View {
         .onContinueUserActivity(AppModel.viewTranscriptActivityType) { model.continueViewTranscript($0.userInfo) }
         .onChange(of: model.pendingOpen) { _, _ in drainPendingOpen() }
         .task { drainPendingOpen() }
+        // Free-tier length gate → up-front paywall. Attached HERE (not on the ContentView() call site, which
+        // already hosts the onboarding sheet) so the two sheets never collide.
+        .sheet(item: Binding(get: { model.paywallReason }, set: { model.paywallReason = $0 })) { reason in
+            PaywallView(reason: reason)
+                .environment(purchases)
+                .environment(\.locale, model.resolvedLocale)
+                .preferredColorScheme(.dark)
+        }
     }
 
     /// Consume a Handoff/deep-link `pendingOpen` → select the note if it's on this Mac (consume regardless so a

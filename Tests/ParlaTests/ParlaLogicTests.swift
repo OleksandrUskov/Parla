@@ -2308,9 +2308,12 @@ final class ParlaLogicTests: XCTestCase {
         let pm = PurchaseManager()
         XCTAssertFalse(pm.isPro)
         XCTAssertNil(pm.proProduct)
+        XCTAssertFalse(pm.entitlementsResolved)
+        XCTAssertTrue(pm.grantsUnlimited, "gate fails open until entitlements resolve — never block a payer mid-launch")
         #if DEBUG
         pm.previewSetPro(true)
         XCTAssertTrue(pm.isPro)
+        XCTAssertTrue(pm.grantsUnlimited)
         #endif
     }
 
