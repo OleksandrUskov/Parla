@@ -53,3 +53,17 @@ public enum AudioDuration {
         return sr > 0 ? Double(file.length) / sr : nil
     }
 }
+
+/// Container duration (seconds) via `AVURLAsset` — reads the media header WITHOUT decoding, so it's the cheap
+/// up-front probe the free/Pro length gate uses before any work begins. Covers every AVFoundation-readable
+/// container (mp4/mov/m4a/mp3/wav/flac/aac/caf/aiff/3gp…). Returns nil when the header can't be read — notably
+/// Ogg/Opus, which AVFoundation can't demux (and those short Telegram voice notes sit under the free cap
+/// anyway), so the gate simply never blocks what it can't measure here.
+public enum MediaDuration {
+    public static func seconds(of url: URL) async -> Double? {
+        let asset = AVURLAsset(url: url)
+        guard let cm = try? await asset.load(.duration) else { return nil }
+        let secs = CMTimeGetSeconds(cm)
+        return secs.isFinite && secs > 0 ? secs : nil
+    }
+}

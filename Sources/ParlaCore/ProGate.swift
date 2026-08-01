@@ -28,3 +28,11 @@ public enum ProGate {
         return durationSec > freeLimitSec
     }
 }
+
+/// Why the paywall is being presented — set by the gate, observed by the UI (which presents the paywall and
+/// clears this on dismiss). Grows more cases as feature gating expands (e.g. a locked Pro-only feature).
+public enum PaywallReason: Equatable, Sendable {
+    /// A free user tried to transcribe a file longer than `ProGate.freeLimitSec`. Carries the file name + its
+    /// length so the upsell can say "This 12-minute recording needs Pro".
+    case lengthExceeded(fileName: String, durationSec: Double)
+}

@@ -28,6 +28,7 @@ public protocol FileWatching: AnyObject {
 @Observable
 public final class AppModel {
     public var phase: EnginePhase = .idle
+    public var paywallReason: PaywallReason?          // non-nil → present the paywall (set by the free-tier length gate; the UI clears it on dismiss)
     public var history: [TranscriptItem] = HistoryStore.load()
     public var selection: TranscriptItem.ID?
     public var pendingOpen: TranscriptItem.ID?        // a deep-link (parla://note / widget / Handoff) asked to open this note; drained by the History shell
@@ -208,6 +209,17 @@ public final class AppModel {
 
     /// Re-apply the folder-watch config after a settings change (start/stop/restart the FSEvents watcher). macOS wires it.
     public var syncWatch: @MainActor () -> Void = { }
+
+    // MARK: Monetization seams (Phase 3)
+
+    /// Whether the user owns Pro (the monetization entitlement). Injected: both apps wire it to the live
+    /// `PurchaseManager.isPro`; the inert Core/test default is `true` — fail-OPEN, so a wiring gap can never
+    /// wrongly block a paying/free user's transcription. A test that exercises the free tier sets `{ false }`.
+    public var isProUser: @MainActor () -> Bool = { true }
+
+    /// Cheap container-duration probe for the free-tier length gate (reads the media header, no decode).
+    /// Injected so tests can script a duration without a real audio fixture; production reads `MediaDuration.seconds`.
+    public var mediaDuration: @Sendable (URL) async -> Double? = { await MediaDuration.seconds(of: $0) }
 
     public enum Keys {
         public static let model = "model"

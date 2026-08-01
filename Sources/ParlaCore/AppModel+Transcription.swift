@@ -103,8 +103,18 @@ extension AppModel {
         let jobStart = Date()
         var failures: [String] = []
         var succeeded = 0
+        var gated: [(name: String, dur: Double)] = []   // files blocked by the free-tier length cap → up-front upsell
         for (i, url) in files.enumerated() {
             if Task.isCancelled { break }   // cancelled → stop pulling more files (already-saved ones stay)
+            // FREE-tier length gate (stateless): a non-Pro user's over-cap file is skipped BEFORE any decode or
+            // model work — the graceful up-front upsell (never cut mid-transcript). Pro users skip the probe
+            // entirely (zero added latency). Ogg/Opus can't be header-probed by AVFoundation → they fall through
+            // here, and those short voice notes sit under the cap anyway, so they're not gated.
+            if !isProUser(), let dur = await mediaDuration(url),
+               ProGate.exceedsFreeLimit(durationSec: dur, isPro: false) {
+                gated.append((url.lastPathComponent, dur))
+                continue
+            }
             // Show the queue position only for a batch (>1 file); a single drop looks like before.
             let batch = total > 1 ? BatchProgress(index: i + 1, total: total, done: i) : nil
             do {
@@ -153,6 +163,16 @@ extension AppModel {
             await pruneAudioCache()            // keep the audio cache bounded even on a cancelled batch
             return
         }
+        // Pure-gate outcome: every dropped file was blocked by the free length cap (nothing decoded or failed).
+        // The paywall IS the feedback — skip the "done" sound / notification / toast.
+        if succeeded == 0, failures.isEmpty, !gated.isEmpty {
+            refreshDownloaded()
+            phase = .idle
+            if quickModeRun { quickModeRun = false; hideToast() }
+            paywallReason = gated.first.map { .lengthExceeded(fileName: $0.name, durationSec: $0.dur) }
+            await pruneAudioCache()
+            return
+        }
         refreshDownloaded()
         phase = failures.isEmpty ? .idle : .failed(Lf("error.transcribe.failed", failures.joined(separator: "; ")))
         if Self.shouldPlayCompletionSound(soundEnabled: soundOnComplete, isWatcherRun: isWatcherRun,
@@ -179,6 +199,8 @@ extension AppModel {
             }
         }
 
+        // Mixed batch: some files ran, some were gated by the free cap → still surface the upsell for the blocked ones.
+        if let g = gated.first { paywallReason = .lengthExceeded(fileName: g.name, durationSec: g.dur) }
         await pruneAudioCache()   // keep the audio cache within its limit (we don't touch the text)
     }
 

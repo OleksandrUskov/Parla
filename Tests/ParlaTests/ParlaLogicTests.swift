@@ -2178,6 +2178,80 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    // MARK: Free-tier length gate (Phase 3)
+
+    /// A non-Pro user dropping an over-cap file: it's skipped BEFORE any engine work (never decoded/transcribed),
+    /// history stays empty, phase returns to .idle, and the paywall reason is set so the UI can upsell.
+    @MainActor func testFreeLengthGateSkipsOverCapFileAndSetsPaywall() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "should not run", language: "ru", segments: [], duration: 600)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.isProUser = { false }                 // free tier
+            m.mediaDuration = { _ in 600 }          // 10-minute file (over the 5-min cap)
+            let src = makeTempSource()
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            await m.transcribe(urls: [src])
+
+            XCTAssertTrue(m.history.isEmpty, "over-cap file must not be transcribed for a free user")
+            XCTAssertEqual(fake.transcribeCalls, 0, "no engine work should start for a gated file")
+            XCTAssertEqual(fake.ensureLoadedCalls, 0)
+            if case .idle = m.phase {} else { XCTFail("phase should be .idle after a pure-gate outcome") }
+            guard case .lengthExceeded(let name, let dur)? = m.paywallReason else {
+                return XCTFail("paywallReason should be .lengthExceeded")
+            }
+            XCTAssertEqual(name, src.lastPathComponent)
+            XCTAssertEqual(dur, 600, accuracy: 0.001)
+        }
+    }
+
+    /// A non-Pro user's file UNDER the cap transcribes normally — no gate, no paywall.
+    @MainActor func testFreeUnderCapTranscribesNormally() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "ok", language: "ru", segments: [], duration: 60)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            m.isProUser = { false }
+            m.mediaDuration = { _ in 60 }           // 1-minute file (under the cap)
+            let src = makeTempSource()
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            await m.transcribe(urls: [src])
+
+            XCTAssertEqual(m.history.count, 1)
+            XCTAssertEqual(fake.transcribeCalls, 1)
+            XCTAssertNil(m.paywallReason)
+        }
+    }
+
+    /// A Pro user is never length-gated — an over-cap file transcribes and the paywall never fires.
+    @MainActor func testProUserBypassesLengthGate() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "long", language: "ru", segments: [], duration: 7200)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.history = []
+            m.autoCopy = false
+            m.isProUser = { true }                  // Pro (also the fail-open default)
+            m.mediaDuration = { _ in 7200 }         // 2-hour file — never probed for Pro, never gated
+            let src = makeTempSource()
+            defer { try? FileManager.default.removeItem(at: src) }
+
+            await m.transcribe(urls: [src])
+
+            XCTAssertEqual(m.history.count, 1, "Pro transcribes any length")
+            XCTAssertEqual(fake.transcribeCalls, 1)
+            XCTAssertNil(m.paywallReason)
+        }
+    }
+
     @MainActor func testTranscribeFailureRecordsAndLeavesHistory() async {
         await withTemporaryHistoryStoreAsync {
             let fake = FakeEngine(throwOnTranscribe: true)
