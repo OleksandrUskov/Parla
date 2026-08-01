@@ -21,15 +21,8 @@ as those licenses require.
 | [swift-crypto](https://github.com/apple/swift-crypto) | Crypto primitives (transitive) | Apache-2.0 |
 | [swift-numerics](https://github.com/apple/swift-numerics) | Numerics (transitive) | Apache-2.0 |
 | [swift-syntax](https://github.com/apple/swift-syntax) | Macros / build-time (transitive) | Apache-2.0 |
-| [libopus](https://opus-codec.org/) (via [opus-binary-xcframework](https://github.com/sbooth/opus-binary-xcframework)) | Opus decode (iOS) | BSD-3-Clause |
-| [libogg](https://xiph.org/ogg/) (via [ogg-binary-xcframework](https://github.com/sbooth/ogg-binary-xcframework)) | Ogg container (iOS) | BSD-3-Clause |
-| [FFmpeg](https://ffmpeg.org/) | Audio/video decode helper (macOS only, separate LGPL binary) | LGPL-2.1-or-later |
-
-FFmpeg is shipped as a **separate helper executable** inside the macOS app bundle
-(`Contents/Resources/Helpers/ffmpeg`), built statically with `--disable-gpl
---disable-nonfree` (LGPL-clean). Its full license and the source/relink notice
-travel with the binary as `Contents/Resources/Helpers/LICENSE.LGPL` and
-`ffmpeg-SOURCE.md` (recipe: `Vendor/ffmpeg/build.sh`, `Vendor/ffmpeg/SOURCE.md`).
+| [libopus](https://opus-codec.org/) (via [opus-binary-xcframework](https://github.com/sbooth/opus-binary-xcframework)) | Opus decode (iOS + macOS) | BSD-3-Clause |
+| [libogg](https://xiph.org/ogg/) (via [ogg-binary-xcframework](https://github.com/sbooth/ogg-binary-xcframework)) | Ogg container (iOS + macOS) | BSD-3-Clause |
 
 --------------------------------------------------------------------------------
 
@@ -397,17 +390,3 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 --------------------------------------------------------------------------------
 
-## GNU LGPL 2.1 (or later) — FFmpeg
-
-FFmpeg (https://ffmpeg.org) is used on macOS only, as a **separate helper
-executable** in the app bundle (not statically linked into the application
-binary). It is built LGPL-clean (`--disable-gpl --disable-nonfree`). The complete
-LGPL-2.1 license text and the corresponding-source / relink notice are shipped
-alongside the binary:
-
-- `Contents/Resources/Helpers/LICENSE.LGPL` — the full LGPL-2.1 license text.
-- `Contents/Resources/Helpers/ffmpeg-SOURCE.md` — exact version/commit, the
-  `./configure` line, and the reproducible build recipe (the LGPL "how to obtain
-  and relink the source" notice).
-
-Build recipe in this repository: `Vendor/ffmpeg/build.sh` and `Vendor/ffmpeg/SOURCE.md`.

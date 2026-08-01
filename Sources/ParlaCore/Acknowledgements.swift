@@ -33,7 +33,6 @@ public enum Acknowledgements {
         .init(name: "swift-syntax",          license: "Apache-2.0",   copyright: "© Apple Inc."),
         .init(name: "libopus",               license: "BSD-3-Clause", copyright: "© 2001–2023 Xiph.Org, et al."),
         .init(name: "libogg",                license: "BSD-3-Clause", copyright: "© 2002 Xiph.org Foundation"),
-        .init(name: "FFmpeg",                license: "LGPL-2.1",     copyright: "© the FFmpeg developers (macOS helper)"),
     ]
 
     /// The full upstream license texts, shown verbatim in the Acknowledgements sheet. English only (legal text).
@@ -115,13 +114,5 @@ public enum Acknowledgements {
     reproduce notice, no-endorsement) are met. THIS SOFTWARE IS PROVIDED "AS IS"
     AND ANY WARRANTIES ARE DISCLAIMED; IN NO EVENT SHALL THE FOUNDATION OR
     CONTRIBUTORS BE LIABLE FOR ANY DAMAGES ARISING OUT OF THE USE OF THIS SOFTWARE.
-
-    ────────────────────────────────────────
-    GNU LGPL 2.1-or-later — FFmpeg (macOS only)
-    © the FFmpeg developers
-    ────────────────────────────────────────
-    FFmpeg is used on macOS only, as a separate helper executable built LGPL-clean
-    (--disable-gpl --disable-nonfree). The full LGPL-2.1 text and the corresponding
-    source / relink notice ship with the binary (LICENSE.LGPL + ffmpeg-SOURCE.md).
     """
 }

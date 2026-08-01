@@ -140,22 +140,7 @@ PLIST
 # Для UNUserNotificationCenter ad-hoc подписи достаточно при запуске собранного .app;
 # уведомления НЕ доставляются при запуске вне бандла (swift run) или из карантина/translocated —
 # поэтому в приложении они best-effort, а основной сигнал готовности это чип/прогресс в окне.
-# Vendored LGPL ffmpeg (optional) → Contents/Resources/Helpers/ffmpeg, so Telegram Ogg/Opus works
-# WITHOUT a user-installed brew ffmpeg. Sign the nested binary BEFORE the outer app (inside-out;
-# `--deep` is unreliable for nested executables).
-if [ -f "Vendor/ffmpeg/ffmpeg" ]; then
-  mkdir -p "$APPDIR/Contents/Resources/Helpers"
-  cp "Vendor/ffmpeg/ffmpeg" "$APPDIR/Contents/Resources/Helpers/ffmpeg"
-  chmod +x "$APPDIR/Contents/Resources/Helpers/ffmpeg"
-  # LGPL 2.1 §6: the license text AND a source/relink notice must travel WITH the binary the end
-  # user receives (they get the .app, not the git repo). LICENSE.LGPL = the full license; SOURCE.md =
-  # exact version + upstream URL + configure line + reproducible build recipe (the "how to get/relink
-  # the source" notice). Without these in the bundle, distributing the static LGPL binary is non-compliant.
-  [ -f "Vendor/ffmpeg/LICENSE.LGPL" ] && cp "Vendor/ffmpeg/LICENSE.LGPL" "$APPDIR/Contents/Resources/Helpers/LICENSE.LGPL"
-  [ -f "Vendor/ffmpeg/SOURCE.md" ]    && cp "Vendor/ffmpeg/SOURCE.md"    "$APPDIR/Contents/Resources/Helpers/ffmpeg-SOURCE.md"
-  codesign --force --options runtime --sign - "$APPDIR/Contents/Resources/Helpers/ffmpeg" >/dev/null 2>&1 || true
-  echo "• Вшит LGPL ffmpeg + LICENSE/SOURCE → Helpers/"
-fi
+# (Audio decode is fully in-process now — libopus + AVAssetReader, no bundled ffmpeg subprocess. Phase 2c.)
 
 # NOTE: ad-hoc, no hardened runtime — fine for local/dev runs and doesn't block exec'ing the helper.
 # At the notarization milestone, sign the outer app with a Developer ID + `--options runtime` (and prefer

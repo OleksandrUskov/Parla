@@ -147,8 +147,8 @@ public final class AppModel {
     public let embedder: any TextEmbedder                      // semantic-embedding seam — injectable; NLContextualEmbedding default
     public let tts: any TTSService                              // TTS seam (voice synthesis P1a) — injectable; SystemTTSService default (system voice)
 
-    /// Audio decoding (platform + test seam): the inert Core default has no ffmpeg dependency; the macOS app
-    /// wires `FFmpegAudioDecoder` via `AppModel.mac()` and iOS an in-process decoder. Tests
+    /// Audio decoding (platform + test seam): the inert Core default has no decoder wired in; both apps
+    /// wire the in-process `OpusAudioDecoder` via `AppModel.mac()` / `AppModel.iOS()`. Tests
     /// inject a stub to script the decode.
     public var decoder: any AudioDecoding = UnavailableAudioDecoder()
 

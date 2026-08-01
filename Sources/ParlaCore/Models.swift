@@ -570,7 +570,7 @@ public enum AudioStore {
     }
 
     /// Wipe orphan files: everything in audio/ not referenced by any record (catches leftovers from a crash
-    /// between copy and save, an unfinished ffmpeg .m4a). Doesn't touch the text — files only.
+    /// between copy and save, an unfinished playback rendition). Doesn't touch the text — files only.
     public static func pruneOrphans(keeping history: [TranscriptItem]) {
         let referenced = Set(history.flatMap { [$0.audioFile, $0.audioPlayable].compactMap { $0 } })
         guard let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)

@@ -50,7 +50,7 @@ with a Share Extension, Live Activity, Home-screen widgets, and Handoff.
 |---|---|---|
 | **Minimum** | macOS 14 (Sonoma) | iOS / iPadOS 17 |
 | **Get it** | [**Download the app**](https://github.com/OleksandrUskov/Parla/releases/latest) · or `./build_app.sh` | build from source |
-| **Audio decode** | bundled LGPL **ffmpeg** (Ogg/Opus + video) | **in-process libopus** xcframework + AVAssetReader — no subprocess |
+| **Audio decode** | **in-process libopus** + AVAssetReader — no subprocess | *(same — one shared decoder)* |
 | **OS integration** | Menu-bar companion · Services menu · `parla://` · Shortcuts/Spotlight/Siri · global hotkey · mic dictation | Share Extension (Telegram → Parla) · **Live Activity / Dynamic Island** · Home widgets · **Handoff** ↔ Mac · `parla://` · Shortcuts/Siri · mic dictation |
 | **iPad** | — | first-class: `NavigationSplitView`, drag & drop, ⌘I |
 
@@ -140,14 +140,13 @@ graph TD
     VM --> AI
     ENG --> DEC
     ENG --> WK["WhisperKit → CoreML / ANE"]
-    DEC -->|macOS| FF["bundled LGPL ffmpeg"]
-    DEC -->|iOS| OP["in-process libopus + AVAssetReader"]
+    DEC -->|macOS + iOS| OP["in-process libopus + AVAssetReader"]
 ```
 
 **Engineering highlights**
 - **One library, two apps.** All logic lives in `ParlaCore` (`public` API); the apps are thin SwiftUI shells. Platform differences are handled behind **protocol seams** injected by `AppModel.mac()` / `AppModel.iOS()` factories, not `#if os` sprinkled through the UI.
 - **Actor-isolated engine.** `TranscriptionEngine` is an `actor` that owns the loaded Whisper model and reuses it across files. The whole package compiles in **Swift 6 language mode** — strict concurrency, data-race-checked.
-- **Two decode lanes, one guarantee.** macOS shells out to a bundled, self-contained LGPL `ffmpeg`; iOS decodes Telegram Ogg/Opus **in-process** via an `libopus` xcframework (no subprocess allowed) and video/`.flac` via `AVAssetReader`. Both stream into the same 16 kHz mono sink and the same chunker.
+- **Two decode lanes, one decoder.** Both platforms decode **in-process** — Telegram Ogg/Opus via a bundled `libopus` xcframework (no subprocess) and video/`.flac` via `AVAssetReader`. Both lanes stream into the same 16 kHz mono sink and the same chunker.
 - **Lean app extensions.** The Share Extension and the Widgets extension **do not link ParlaCore or WhisperKit** — they stay inside the tight extension memory budget and talk to the app through an **App Group** container.
 - **Best-effort AI.** The on-device AI layer never touches the transcript: if a summary/embedding fails, the text is unaffected. Vectors are mean-centered before cosine and compared only within a script (Cyrillic vs Latin).
 - **Tested logic.** 320+ pure-logic unit tests (macOS `swift test`) plus an iOS test target; a legacy-JSON decode test pins the "every new field is Optional" persistence invariant.
@@ -156,7 +155,7 @@ graph TD
 
 ```
 m4a / mp3 / wav ───────────────────────────────▶ WhisperKit (CoreML / ANE) ──▶ text    (AVFoundation, no decode step)
-ogg / opus / video ──▶ decode → 16 kHz mono ────▶ WhisperKit ──────────────▶ text    (macOS: ffmpeg · iOS: libopus/AVAssetReader)
+ogg / opus / video ──▶ decode → 16 kHz mono ────▶ WhisperKit ──────────────▶ text    (in-process: libopus + AVAssetReader)
 ```
 
 - Formats AVFoundation can open go **straight to the engine**. Telegram Ogg/Opus (and video) are decoded first — with **zero setup** on either platform.
@@ -173,12 +172,12 @@ The quickest way — no Xcode, no build:
 
 In the app, pick a model — it **downloads once** (~600 MB) and then runs fully offline. Drag a Telegram voice note (or any audio/video) onto the drop zone and you get the text.
 
-> **macOS 14+ · Apple Silicon.** On Intel Macs, build from source below (the bundled `ffmpeg` is arm64).
+> **macOS 14+ · Apple Silicon** (Intel: build from source — core transcription works; the opt-in MLX generative AI is Apple-Silicon-only).
 
 ## Build & run
 
 ### Prerequisites
-- **macOS 14 (Sonoma)+**, **Apple Silicon** recommended (the bundled `ffmpeg` is arm64 — see the Intel note below).
+- **macOS 14 (Sonoma)+**, **Apple Silicon** recommended (the opt-in MLX generative AI is Apple-Silicon-only; core transcription runs on Intel too).
 - **Xcode 16+** (for the Swift 6 toolchain) and its Command Line Tools.
 - **iOS build only:** [XcodeGen](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen`.
 - Internet for the first build (Swift Package dependencies) and the first transcription (one-time model download).
@@ -199,9 +198,6 @@ In the app, pick a model — it **downloads once** (~600 MB CoreML weights from 
 > **Run it as the built `.app`, not from an IDE.** Parla's Mac app is a Swift Package, not an Xcode project —
 > pressing Build & Run launches the bare executable, and a windowed SwiftUI app needs a real `.app` bundle to
 > show its window. Always run via `./build_app.sh && open Parla.app`.
->
-> **Intel Macs:** the committed `ffmpeg` (which decodes Telegram Ogg/Opus + video) is arm64-only. On Intel,
-> rebuild it via `Vendor/ffmpeg/build.sh`, or `brew install ffmpeg` (picked up automatically as a fallback).
 
 ### iOS · iPadOS
 
@@ -245,8 +241,8 @@ Everything beyond plain transcription is **opt-in** and asks for the minimum per
 | Live mic dictation *(off by default)* | **Microphone** (+ Accessibility only for optional auto-paste on macOS) | records **only while you dictate**, transcribes on-device — audio never leaves your device |
 | Services · `parla://` · Shortcuts / Siri | **none** | transcribe **existing local files only**, read-only |
 
-The Mac app is **not sandboxed** (it shells out to `ffmpeg`) so it ships outside the Mac App Store — and the
-full source is available, so you can read exactly what it does.
+The Mac app ships as a **direct download** (outside the Mac App Store), and the full source is available —
+so you can read exactly what it does.
 
 ## Automation / integrations
 
@@ -269,8 +265,8 @@ Spotlight / Siri): *Transcribe File*, *Transcribe Last File*, and *Get Last Parl
 Swift 6 toolchain (**Swift 6 language mode**, strict concurrency) · SwiftUI · Swift Concurrency (actors) ·
 [WhisperKit](https://github.com/argmaxinc/WhisperKit) · CoreML · NaturalLanguage (`NLContextualEmbedding`) ·
 [MLX Swift](https://github.com/ml-explore/mlx-swift) · ActivityKit · WidgetKit · AppIntents ·
-[XcodeGen](https://github.com/yonaskolb/XcodeGen) · bundled LGPL ffmpeg (macOS) ·
-[opus-binary-xcframework](https://github.com/sbooth/opus-binary-xcframework) (iOS) ·
+[XcodeGen](https://github.com/yonaskolb/XcodeGen) ·
+[opus-binary-xcframework](https://github.com/sbooth/opus-binary-xcframework) (in-process Ogg/Opus) ·
 [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) (MIT)
 
 ## Project layout
@@ -280,7 +276,6 @@ Sources/ParlaCore/     cross-platform library — engine, view-model, AI layer, 
 Sources/Parla/         macOS app (thin SwiftUI shell + menu-bar + macOS-only integrations)
 apps/ios/              iOS · iPadOS app (XcodeGen project) + Share & Widgets extensions
 Localization/          en / ru / uk .lproj (shared by both apps)
-Vendor/ffmpeg/         bundled LGPL ffmpeg build recipe
 build_app.sh           macOS build → Parla.app
 ```
 

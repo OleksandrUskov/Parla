@@ -64,10 +64,10 @@ public struct OpusAudioDecoder: AudioDecoding {
 
     public var isChunkingAvailable: Bool { true }
 
-    /// In-app playback rendition for iOS. Reuses the same decode lanes that feed WhisperKit to write a mono
+    /// In-app playback rendition. Reuses the same decode lanes that feed WhisperKit to write a mono
     /// Float32 WAV the built-in `AVAudioPlayer` can open — so an imported Telegram Ogg/Opus (or video, whose
-    /// original container AVAudioPlayer can't open) is PLAYABLE on iOS, matching macOS where FFmpegAudioDecoder
-    /// renders a playable .m4a. `renderPlayableM4a` stays unimplemented on purpose: `AudioStore.makePlayable`
+    /// original container AVAudioPlayer can't open) is PLAYABLE. This decoder serves both iOS and macOS now.
+    /// `renderPlayableM4a` stays unimplemented on purpose: `AudioStore.makePlayable`
     /// tries M4a first, then falls back to this WAV (larger, but the audio cache is capped/managed). webm is
     /// scoped out of iOS v1 either way (no in-process decoder → both renditions throw → no player, by design).
     public func renderPlayableM4a(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }

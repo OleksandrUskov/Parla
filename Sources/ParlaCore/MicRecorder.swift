@@ -19,7 +19,7 @@ import os
 @MainActor
 public final class MicRecorder {
     /// WhisperKit's native input: 16 kHz mono Int16 PCM. Recording straight to this skips the whole
-    /// ffmpeg / `AudioConverter` decode step for dictation. Pinned by a unit test (`targetFormat` constant).
+    /// decode step for dictation. Pinned by a unit test (`targetFormat` constant).
     public static let targetFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
                                             sampleRate: 16_000, channels: 1, interleaved: true)!
 

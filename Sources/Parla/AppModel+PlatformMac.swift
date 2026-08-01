@@ -15,7 +15,7 @@ extension AppModel {
 
         // Audio decode / playback rendition → the in-process native decoder (Phase 2c native-first: opusfile +
         // AVAssetReader, same as iOS; no ffmpeg subprocess). webm/mkv/exotic containers are dropped by design
-        // (AVFoundation can't demux Matroska). `FFmpegAudioDecoder` stays in the tree but is no longer wired in.
+        // (AVFoundation can't demux Matroska).
         m.decoder = OpusAudioDecoder()
 
         m.copyToClipboard = { text in

@@ -4,7 +4,7 @@ import Foundation
 /// manual clear. TRANSCRIPT TEXT IS NEVER TOUCHED — only audio copies.
 extension AppModel {
     /// Copy the source + render m4a if needed — in the background. Best-effort. The playback rendition goes
-    /// through the injected `decoder` seam (macOS: ffmpeg; iOS: its own), so this stays platform-agnostic.
+    /// through the injected `decoder` seam (the same in-process decoder on both platforms), so this stays platform-agnostic.
     public nonisolated static func keepAudio(from url: URL, id: UUID, using decoder: any AudioDecoding) async -> (file: String?, playable: String?) {
         await Task.detached(priority: .utility) {
             let file = AudioStore.copy(from: url, id: id)

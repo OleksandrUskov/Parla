@@ -3,7 +3,7 @@ import ParlaCore
 
 /// First-run intro — what Parla does + the on-device privacy promise, shown once before the
 /// model-download screen. Uses iOS-neutral copy (`onboarding.ios.*`; the macOS `onboarding.*` strings say
-/// "Mac" / "drag"). The macOS model-picker + ffmpeg steps are dropped — iOS decodes in-process, and the
+/// "Mac" / "drag"). The macOS model-picker step is dropped — iOS decodes in-process, and the
 /// RAM-adaptive first-run screen names + downloads the model on the next step.
 struct OnboardingView: View {
     let onDone: () -> Void

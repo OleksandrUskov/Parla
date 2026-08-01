@@ -2,7 +2,7 @@ import SwiftUI
 import ParlaCore
 
 /// One-time first-run sheet: what Parla does, privacy, pick a model (defaulting to the recommended
-/// turbo tier so the first download isn't the heaviest), and the bundled-ffmpeg reassurance.
+/// turbo tier so the first download isn't the heaviest), and a self-contained / on-device reassurance.
 /// Presented from `ParlaApp` gated on `@AppStorage("didOnboard")`. View-only — it sets the model
 /// choice through the existing `model.selectedModel` (UserDefaults-mirrored) and triggers NO download
 /// (the lazy download-on-first-transcribe path stays the single download codepath).

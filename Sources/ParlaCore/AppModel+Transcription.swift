@@ -199,7 +199,7 @@ extension AppModel {
             decodePath = url.path
             tempWav = nil
         } else {
-            let decoder = self.decoder      // capture the seam (real ffmpeg in production, stub in tests)
+            let decoder = self.decoder      // capture the seam (the native in-process decoder in production, stub in tests)
             let wav = try await Task.detached(priority: .userInitiated) {
                 try decoder.decodeToWav16k(url)
             }.value
@@ -213,7 +213,7 @@ extension AppModel {
         // Splitting needs a chunking-capable decoder (native in-process now); unavailable / unknown-duration → single-pass.
         // The duration probe opens the file via AVAudioFile → run it off the main actor.
         let dur = await Task.detached(priority: .userInitiated) { AudioDuration.seconds(ofFileAt: decodePath) }.value
-        if let dur, AudioChunker.shouldChunk(durationSec: dur, ffmpegAvailable: decoder.isChunkingAvailable) {
+        if let dur, AudioChunker.shouldChunk(durationSec: dur, chunkingAvailable: decoder.isChunkingAvailable) {
             return try await transcribeChunked(source: URL(fileURLWithPath: decodePath),
                                                model: model, audioDuration: dur)
         }

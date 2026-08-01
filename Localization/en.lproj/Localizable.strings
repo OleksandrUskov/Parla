@@ -228,7 +228,6 @@
 "error.transcribe.failed"   = "Failed: %@";
 "error.source.missing"      = "Source file “%@” not found — drop it again";
 "error.retranscribe.failed" = "Couldn't re-transcribe: %@";
-"error.ffmpeg.missing"      = "ffmpeg not found. Install it with:  brew install ffmpeg";
 "error.decode.failed"       = "Couldn't decode the audio.\n%@";
 "error.model.notloaded"     = "The model didn't load";
 "error.tts.novoice"         = "No voice available for this language";

@@ -19,11 +19,11 @@ public enum AudioChunker {
         durationSec > threshold
     }
 
-    /// Whether to use the chunked pipeline: a long recording with ffmpeg available. Deliberately
+    /// Whether to use the chunked pipeline: a long recording with a chunking-capable decoder. Deliberately
     /// INDEPENDENT of batch membership — a long file dropped alongside others must still be chunked
     /// (bounded memory), not run whole in a single pass.
-    public static func shouldChunk(durationSec: Double, ffmpegAvailable: Bool) -> Bool {
-        ffmpegAvailable && isLong(durationSec: durationSec)
+    public static func shouldChunk(durationSec: Double, chunkingAvailable: Bool) -> Bool {
+        chunkingAvailable && isLong(durationSec: durationSec)
     }
 
     /// Number of chunks for a given duration (always ≥ 1).
@@ -34,10 +34,9 @@ public enum AudioChunker {
 
     /// Offset one chunk's segments into the global timeline: chunk `k` covers `[k*chunkLength, …)`,
     /// so every local timecode shifts by `k*chunkLength`.
-    /// NOTE: ffmpeg's segment muxer cuts on frame boundaries, so a real chunk's start drifts from the
-    /// nominal `k*chunkLength` by tens of ms (measured ≤ ~20 ms accumulated over a 25-min file) — a
-    /// constant per-chunk offset, not compounding. Imperceptible for subtitles, and `stitch`'s sort +
-    /// `subtitleCues`'s end≥start clamp absorb any tiny overlap. Left nominal for simplicity.
+    /// NOTE: the in-process ChunkWriter cuts EXACTLY on `k*chunkLength` boundaries, so a chunk's start
+    /// matches the nominal offset with no drift. `stitch`'s sort + `subtitleCues`'s end≥start clamp still
+    /// absorb any tiny overlap from rounding.
     public static func offsetSegments(_ segs: [Segment], chunkIndex k: Int,
                                chunkLength: Double = chunkLengthSec) -> [Segment] {
         let shift = Double(k) * chunkLength

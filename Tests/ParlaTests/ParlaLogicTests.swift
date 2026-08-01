@@ -2535,7 +2535,7 @@ final class ParlaLogicTests: XCTestCase {
             m.soundOnComplete = false
             m.history = []
             m.autoCopy = false
-            m.decoder = ClosureAudioDecoder(decode: { _ in throw AudioConverter.Failure.ffmpegNotFound })   // would fail if dictation used it
+            m.decoder = ClosureAudioDecoder(decode: { _ in throw AudioDecodingError.noDecoderAvailable })   // would fail if dictation used it
             let wav = makeTempSource("d.wav")
             defer { try? FileManager.default.removeItem(at: wav) }
 
@@ -2730,29 +2730,13 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(AppModel.avDecodable.isSubset(of: AppModel.audioExts))
     }
 
-    func testAvDecodableExcludesFfmpegOnlyFormats() {
-        for ext in ["ogg", "oga", "opus", "amr", "webm", "3gp", "flac", "wma"] {
-            XCTAssertFalse(AppModel.avDecodable.contains(ext), "\(ext) must route through ffmpeg")
+    func testAvDecodableExcludesDecoderOnlyFormats() {
+        for ext in ["ogg", "oga", "opus", "3gp", "flac"] {
+            XCTAssertFalse(AppModel.avDecodable.contains(ext), "\(ext) must route through the decoder")
         }
     }
 
-    func testFfmpegArgsAreQuiet() {
-        // The Tier-0 deadlock guard: without these flags ffmpeg floods stderr on a long file and hangs.
-        for args in [AudioConverter.wavArgs(src: "/in", out: "/out"),
-                     AudioConverter.m4aArgs(src: "/in", dest: "/out"),
-                     AudioConverter.playableWavArgs(src: "/in", dest: "/out")] {
-            XCTAssertTrue(args.contains("-hide_banner"))
-            XCTAssertTrue(args.contains("-nostats"))
-            guard let i = args.firstIndex(of: "-loglevel") else { return XCTFail("-loglevel missing") }
-            XCTAssertEqual(args[i + 1], "error")
-        }
-        // The WAV fallback must use the bundled-ffmpeg-supported PCM encoder + drop video.
-        let wavFallback = AudioConverter.playableWavArgs(src: "/in", dest: "/out")
-        XCTAssertTrue(wavFallback.contains("pcm_s16le"))
-        XCTAssertTrue(wavFallback.contains("-vn"))
-    }
-
-    /// `AudioDuration` (the ffmpeg-free AVFoundation probe the engine + chunking gate now use) must return
+    /// `AudioDuration` (the AVFoundation probe the engine + chunking gate use) must return
     /// nil for a path AVAudioFile can't open, so callers fall back instead of trusting a bogus length.
     func testAudioDurationNilForNonAudio() {
         let junk = FileManager.default.temporaryDirectory.appendingPathComponent("parla-not-audio-\(UUID().uuidString).bin")
@@ -2762,14 +2746,7 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(AudioDuration.seconds(ofFileAt: "/no/such/file.wav"))
     }
 
-    /// The default macOS decoder conforms to the `AudioDecoding` seam and reports chunking availability from
-    /// the real ffmpeg resolver — the same source of truth as `AudioConverter.isFFmpegAvailable`.
-    func testFFmpegDecoderReflectsFfmpegAvailability() {
-        let decoder: any AudioDecoding = FFmpegAudioDecoder()
-        XCTAssertEqual(decoder.isChunkingAvailable, AudioConverter.isFFmpegAvailable)
-    }
-
-    /// An AVFoundation format (.m4a) must NOT spawn ffmpeg — the source path goes straight to the engine.
+    /// An AVFoundation format (.m4a) must NOT hit the decoder — the source path goes straight to the engine.
     @MainActor func testTranscribeSkipsConverterForAvFormat() async {
         await withTemporaryHistoryStoreAsync {
             let fake = FakeEngine(results: [EngineResult(text: "ok", language: "en", segments: [], duration: 1)])
@@ -2786,11 +2763,11 @@ final class ParlaLogicTests: XCTestCase {
             await m.transcribe(urls: [src])
 
             XCTAssertEqual(fake.transcribedPaths.first, src.path)                      // original handed straight to the engine
-            XCTAssertFalse(fake.transcribedPaths.contains("/tmp/CONVERTER-RAN.wav"))   // ffmpeg never ran
+            XCTAssertFalse(fake.transcribedPaths.contains("/tmp/CONVERTER-RAN.wav"))   // the decoder never ran
         }
     }
 
-    /// A non-AVFoundation format (.opus) must still go through the ffmpeg converter.
+    /// A non-AVFoundation format (.opus) must still go through the native decoder.
     @MainActor func testTranscribeUsesConverterForOpus() async {
         await withTemporaryHistoryStoreAsync {
             let fake = FakeEngine(results: [EngineResult(text: "ok", language: "en", segments: [], duration: 1)])
@@ -3159,9 +3136,9 @@ final class ParlaLogicTests: XCTestCase {
     }
 
     func testShouldChunkIsBatchIndependent() {
-        XCTAssertTrue(AudioChunker.shouldChunk(durationSec: 700, ffmpegAvailable: true))    // long + ffmpeg → chunk (even in a batch)
-        XCTAssertFalse(AudioChunker.shouldChunk(durationSec: 700, ffmpegAvailable: false))  // no ffmpeg → single-pass
-        XCTAssertFalse(AudioChunker.shouldChunk(durationSec: 300, ffmpegAvailable: true))   // short → single-pass
+        XCTAssertTrue(AudioChunker.shouldChunk(durationSec: 700, chunkingAvailable: true))    // long + chunking → chunk (even in a batch)
+        XCTAssertFalse(AudioChunker.shouldChunk(durationSec: 700, chunkingAvailable: false))  // no chunking → single-pass
+        XCTAssertFalse(AudioChunker.shouldChunk(durationSec: 300, chunkingAvailable: true))   // short → single-pass
     }
 
     func testOffsetSegments() {
@@ -3220,30 +3197,6 @@ final class ParlaLogicTests: XCTestCase {
 
     func testChaptersEmpty() {
         XCTAssertTrue(AudioChunker.chapters(from: [], size: 120).isEmpty)
-    }
-
-    func testChunkArgsAreQuiet() {
-        let args = AudioConverter.chunkArgs(src: "/in", segmentTime: 120, outPattern: "/out/chunk_%04d.wav")
-        XCTAssertTrue(args.contains("-hide_banner"))       // Tier-0 deadlock guard
-        XCTAssertTrue(args.contains("-nostats"))
-        XCTAssertTrue(args.contains("segment"))            // segment muxer
-        guard let i = args.firstIndex(of: "-segment_time") else { return XCTFail("-segment_time missing") }
-        XCTAssertEqual(args[i + 1], "120")
-    }
-
-    func testFfmpegResolverPrefersBundled() {
-        // bundled present + executable → wins over system (real executables that exist on macOS)
-        XCTAssertEqual(AudioConverter.resolveFfmpeg(bundled: URL(fileURLWithPath: "/bin/sh"),
-                                                    systemCandidates: ["/bin/echo"])?.path, "/bin/sh")
-        // no bundled → first executable system candidate
-        XCTAssertEqual(AudioConverter.resolveFfmpeg(bundled: nil,
-                                                    systemCandidates: ["/nonexistent", "/bin/echo"])?.path, "/bin/echo")
-        // bundled path not executable → falls through to system
-        XCTAssertEqual(AudioConverter.resolveFfmpeg(bundled: URL(fileURLWithPath: "/nope"),
-                                                    systemCandidates: ["/bin/echo"])?.path, "/bin/echo")
-        // neither → nil
-        XCTAssertNil(AudioConverter.resolveFfmpeg(bundled: URL(fileURLWithPath: "/nope"),
-                                                  systemCandidates: ["/also/nope"]))
     }
 
     // MARK: FolderWatcher teardown stress
@@ -3416,46 +3369,6 @@ final class ParlaLogicTests: XCTestCase {
             XCTAssertTrue(items.isEmpty)
             XCTAssertTrue(corruptSiblings.isEmpty)        // a legitimately-empty history is NOT corruption
         }
-    }
-
-    // MARK: ffmpeg process drain — no deadlock on a stderr flood (long-file hang fix)
-
-    /// A child that floods >64 KB to stderr then exits. The OLD "read stderr after waitUntilExit"
-    /// pattern deadlocked here (pipe buffer fills → child blocks on write → waitUntilExit hangs).
-    /// runCapturingStderr drains concurrently, so it must finish. Run on a thread with a timeout so
-    /// a regression FAILS the test instead of hanging the suite forever.
-    func testRunCapturingStderrDrainsFloodWithoutDeadlock() {
-        let exp = expectation(description: "drain completes")
-        let status = OSAllocatedUnfairLock<Int32>(initialState: -1)   // Sendable cross-thread handoff
-        Thread.detachNewThread {
-            let p = Process()                                          // created in-thread → not captured
-            p.executableURL = URL(fileURLWithPath: "/bin/sh")
-            p.arguments = ["-c", "i=0; while [ $i -lt 6000 ]; do echo 'xxxxxxxxxxxxxxxxxxxxxxxxxx' 1>&2; i=$((i+1)); done; exit 3"]
-            let r = try? AudioConverter.runCapturingStderr(p)
-            status.withLock { $0 = r?.status ?? -1 }
-            exp.fulfill()
-        }
-        wait(for: [exp], timeout: 15)
-        XCTAssertEqual(status.withLock { $0 }, 3)   // completed (not deadlocked), exit code preserved
-    }
-
-    /// A wedged child (sleep 30) must be killed by the watchdog, not block readDataToEndOfFile forever.
-    func testRunCapturingStderrWatchdogTerminatesHang() {
-        let exp = expectation(description: "watchdog fires")
-        let result = OSAllocatedUnfairLock<(status: Int32, elapsed: Double)>(initialState: (0, .greatestFiniteMagnitude))
-        let start = Date()
-        Thread.detachNewThread {
-            let p = Process()                                          // created in-thread → not captured
-            p.executableURL = URL(fileURLWithPath: "/bin/sleep")
-            p.arguments = ["30"]
-            let r = try? AudioConverter.runCapturingStderr(p, timeout: 0.4)
-            result.withLock { $0 = (r?.status ?? 0, Date().timeIntervalSince(start)) }
-            exp.fulfill()
-        }
-        wait(for: [exp], timeout: 10)
-        let r = result.withLock { $0 }
-        XCTAssertLessThan(r.elapsed, 5)        // killed ~0.4s, not 30s
-        XCTAssertNotEqual(r.status, 0)         // terminated → non-zero
     }
 
     // MARK: Sidecar identity + migration completeness (C, D)

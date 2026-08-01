@@ -7,7 +7,7 @@ transcripts never leave your machine. The only outbound network call is a **one-
 the Whisper CoreML weights (from Hugging Face); everything else runs locally.
 
 That means the attack surface is essentially: the local file handling (imported audio, the history JSON,
-the audio cache) and the bundled/third-party binaries (a static `ffmpeg`, the WhisperKit / MLX / Opus
+the audio cache) and the bundled/third-party binaries (the WhisperKit / MLX / Opus / Ogg
 dependencies). There is no server to attack and no user data in transit.
 
 ## Supported versions

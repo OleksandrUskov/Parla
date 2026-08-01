@@ -38,7 +38,6 @@ Sources/ParlaCore/   cross-platform library — engine, view-model, on-device AI
 Sources/Parla/       macOS app (thin SwiftUI shell + menu bar + macOS-only integrations)
 apps/ios/            iOS · iPadOS app (XcodeGen project) + Share & Widgets extensions
 Localization/        en / ru / uk .lproj (shared by both apps)
-Vendor/ffmpeg/       bundled LGPL ffmpeg + build recipe
 ```
 
 The architecture is described in the [README](README.md#architecture): one cross-platform `ParlaCore`

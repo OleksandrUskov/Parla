@@ -6,8 +6,8 @@ import ParlaCore
 /// a toggle here drives the shared reading views live and survives relaunch — exactly like the Mac.
 ///
 /// Dropped vs macOS (physically macOS-only): folder-watch, the global hotkey + `KeyboardShortcuts.Recorder`,
-/// the dictation paste-into-frontmost toggle (the paste seam is inert on iOS), the ffmpeg row (iOS decodes
-/// in-process), the pinned-player toggle (the iOS detail always pins → the toggle is a no-op), and the MLX
+/// the dictation paste-into-frontmost toggle (the paste seam is inert on iOS), the pinned-player toggle
+/// (the iOS detail always pins → the toggle is a no-op), and the MLX
 /// generative hint (MLX is `#if os(macOS)`). Model selection is NOT duplicated — there's a Models tab; a
 /// read-only current-model + on-disk-size line deep-links there via `onManageModels`.
 struct SettingsView: View {

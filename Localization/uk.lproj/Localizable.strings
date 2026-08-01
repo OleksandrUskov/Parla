@@ -228,7 +228,6 @@
 "error.transcribe.failed"   = "Не вдалося: %@";
 "error.source.missing"      = "Файл-джерело «%@» не знайдено — перетягни його знову";
 "error.retranscribe.failed" = "Не вдалося перерозпізнати: %@";
-"error.ffmpeg.missing"      = "ffmpeg не знайдено. Встанови його командою:  brew install ffmpeg";
 "error.decode.failed"       = "Не вдалося декодувати аудіо.\n%@";
 "error.model.notloaded"     = "Модель не завантажилася";
 "error.tts.novoice"         = "Немає голосу для цієї мови";
