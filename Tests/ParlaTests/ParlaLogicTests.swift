@@ -2135,6 +2135,32 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(ProGate.proProductID.hasPrefix("com.parla."), "product ID stays in the placeholder namespace pre-rebrand")
     }
 
+    /// The export split: TXT/Markdown are free, SRT/VTT/JSON are Pro.
+    func testProExportFormatSplit() {
+        XCTAssertFalse(ProGate.isProExportFormat(.txt))
+        XCTAssertFalse(ProGate.isProExportFormat(.markdown))
+        XCTAssertTrue(ProGate.isProExportFormat(.srt))
+        XCTAssertTrue(ProGate.isProExportFormat(.vtt))
+        XCTAssertTrue(ProGate.isProExportFormat(.json))
+    }
+
+    /// exportIsGated: a free user is blocked (with a paywall) on the Pro formats only; a Pro user never is.
+    @MainActor func testExportGateFreeVsPro() {
+        let m = AppModel(engine: FakeEngine())
+        m.isProUser = { false }
+        XCTAssertFalse(m.exportIsGated(.txt));      XCTAssertNil(m.paywallReason)
+        XCTAssertFalse(m.exportIsGated(.markdown)); XCTAssertNil(m.paywallReason)
+        XCTAssertTrue(m.exportIsGated(.srt))
+        guard case .featureLocked(.export)? = m.paywallReason else { return XCTFail("SRT should upsell for a free user") }
+        m.paywallReason = nil
+        XCTAssertTrue(m.exportIsGated(.vtt));  m.paywallReason = nil
+        XCTAssertTrue(m.exportIsGated(.json)); m.paywallReason = nil
+        // Pro user: nothing gated.
+        m.isProUser = { true }
+        for fmt in ExportFormat.allCases { XCTAssertFalse(m.exportIsGated(fmt)) }
+        XCTAssertNil(m.paywallReason)
+    }
+
     // MARK: Audio-cache prune protection — TOCTOU
 
     /// Pins the exact bug the review found: the displayed/playing entry is never evicted, and the

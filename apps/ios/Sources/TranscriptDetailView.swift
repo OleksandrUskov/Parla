@@ -257,6 +257,7 @@ struct TranscriptDetailView: View {
 
     /// Render the chosen format to a temp file (pure Core formatters) and present the system share sheet.
     private func share(_ fmt: ExportFormat) {
+        if model.exportIsGated(fmt) { return }   // free = TXT/Markdown; SRT/VTT/JSON → paywall
         let base = (item.sourceName as NSString).deletingPathExtension
         let name = base.isEmpty ? "transcript" : base
         let data: Data = fmt == .json

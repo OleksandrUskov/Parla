@@ -330,3 +330,5 @@
 
 /* Pro toast (windowless quick-run gate) */
 "toast.pro.needed" = "This recording needs Pro (over 5 min)";
+
+"paywall.locked.export" = "Export to SRT, VTT and JSON is a Pro feature.";

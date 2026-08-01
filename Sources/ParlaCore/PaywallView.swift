@@ -129,11 +129,18 @@ public struct PaywallView: View {
         return L("paywall.cta.unavailable")
     }
 
-    /// The contextual up-front line for a length-gated open ("This recording runs about 12 min…").
+    /// The contextual up-front line — length-gated ("This recording runs about 12 min…") or feature-locked
+    /// ("Export to SRT/VTT/JSON is a Pro feature"). nil for a generic upgrade (from Settings).
     private var contextLine: String? {
-        guard case .lengthExceeded(_, let dur)? = reason else { return nil }
-        let minutes = max(1, Int((dur / 60).rounded()))
-        return Lf("paywall.length.body", minutes)
+        switch reason {
+        case .lengthExceeded(_, let dur):
+            let minutes = max(1, Int((dur / 60).rounded()))
+            return Lf("paywall.length.body", minutes)
+        case .featureLocked(let feature):
+            switch feature { case .export: return L("paywall.locked.export") }
+        case nil:
+            return nil
+        }
     }
 }
 

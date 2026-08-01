@@ -27,6 +27,21 @@ public enum ProGate {
         guard !isPro, durationSec > 0 else { return false }
         return durationSec > freeLimitSec
     }
+
+    /// Which export formats are Pro-only: the subtitle formats (SRT/VTT) + JSON. Plain TXT and Markdown stay
+    /// free (the everyday "copy the text out" path). Pure, so it's the single testable source of the export split.
+    public static func isProExportFormat(_ format: ExportFormat) -> Bool {
+        switch format {
+        case .txt, .markdown:   return false
+        case .srt, .vtt, .json: return true
+        }
+    }
+}
+
+/// A Pro-only capability — carried by `PaywallReason.featureLocked` so the paywall can name what the user tapped.
+/// Grows as feature gating expands (batch, folder-watch, AI power…).
+public enum ProFeature: String, Sendable, Equatable {
+    case export        // advanced export: SRT / VTT / JSON
 }
 
 /// Why the paywall is being presented — set by the gate, observed by the UI (which presents the paywall and
@@ -36,8 +51,13 @@ public enum PaywallReason: Equatable, Sendable, Identifiable {
     /// A free user tried to transcribe a file longer than `ProGate.freeLimitSec`. Carries the file name + its
     /// length so the upsell can say "This 12-minute recording needs Pro".
     case lengthExceeded(fileName: String, durationSec: Double)
+    /// A free user tapped a Pro-only feature (e.g. SRT export).
+    case featureLocked(ProFeature)
 
     public var id: String {
-        switch self { case .lengthExceeded(let name, let dur): return "length:\(name):\(Int(dur))" }
+        switch self {
+        case .lengthExceeded(let name, let dur): return "length:\(name):\(Int(dur))"
+        case .featureLocked(let f):              return "feature:\(f.rawValue)"
+        }
     }
 }
