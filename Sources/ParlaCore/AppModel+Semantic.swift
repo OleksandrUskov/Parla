@@ -58,6 +58,9 @@ extension AppModel {
     /// Robust to the embedding's anisotropy by mean-centering on the same-script corpus (cross-script vectors
     /// live in a different space). Pure in-memory (`embeddingIndex`); best-effort — no vector / no peers → none.
     public func refreshRelatedNotes() {
+        // Related is Pro (Pro*): a free user simply sees no Related section. NO paywall here — this is auto-called
+        // when a note opens, so popping the paywall on every open would be wrong; the free experience is "absent".
+        guard isProUser() else { relatedIDs = []; return }
         guard let item = selectedItem, let selfVec = embeddingIndex[item.id] else { relatedIDs = []; return }
         // Download-tier (Qwen) vectors are isotropic + cross-lingual → raw cosine, NO mean-centering and NO
         // same-script restriction (an English note CAN relate to a Russian one). The NL path below needs centering.
@@ -171,6 +174,7 @@ extension AppModel {
     /// the TEXT didn't change, so those are still valid. Best-effort: a generative failure leaves the extractive
     /// fallback and never touches the transcript. Drives a transient per-note spinner via `regeneratingIDs`.
     public func regenerateInsights(for id: TranscriptItem.ID) async {
+        if aiPowerIsGated() { return }   // manual generative regenerate is Pro (auto extractive insights stay free)
         guard let idx = history.firstIndex(where: { $0.id == id }) else { return }
         history[idx].aiModel = nil                                          // re-eligible for BOTH passes (the force)
         history[idx].summary = nil
@@ -190,6 +194,7 @@ extension AppModel {
     /// untouched; the transcript is never touched. Provenance (`aiModel`) is left as-is — the note is already at its
     /// current tag, so the next refresh won't clobber this manual override. Reuses the `regeneratingIDs` spinner.
     public func regenerateInsight(for id: TranscriptItem.ID, field: InsightField) async {
+        if aiPowerIsGated() { return }   // manual generative regenerate is Pro
         guard let item = history.first(where: { $0.id == id }) else { return }
         regeneratingIDs.insert(id)
         defer { regeneratingIDs.remove(id) }
@@ -242,6 +247,7 @@ extension AppModel {
     /// (or is empty/silence) is skipped, the rest still land, and the transcript is NEVER touched. Generative-only:
     /// a no-op when the language has no ready backend (the button is hidden then). Re-running replaces the set.
     public func generateChapterSummaries(for id: TranscriptItem.ID) async {
+        if aiPowerIsGated() { return }   // per-chapter summaries are Pro
         guard let item = history.first(where: { $0.id == id }),
               AudioChunker.isLong(durationSec: item.durationSec),
               ai.availability(forLanguage: item.language) == .ready else { return }
@@ -286,6 +292,7 @@ extension AppModel {
     /// recording can be redone without re-running the whole thing. Upserts into `chapterSummaries` by the stable
     /// window key. Best-effort: a failure/empty leaves the existing summaries untouched; the transcript is never touched.
     public func regenerateChapterSummary(for id: TranscriptItem.ID, startSec: Double) async {
+        if aiPowerIsGated() { return }   // per-chapter summary regenerate is Pro
         guard let item = history.first(where: { $0.id == id }),
               AudioChunker.isLong(durationSec: item.durationSec),
               ai.availability(forLanguage: item.language) == .ready,

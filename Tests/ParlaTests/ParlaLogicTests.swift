@@ -2275,6 +2275,29 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(m.paywallReason)
     }
 
+    /// Generative AI power (model downloads, manual ✨ regenerate, per-chapter summaries) is Pro.
+    @MainActor func testAiPowerGateFreeVsPro() {
+        let m = AppModel(engine: FakeEngine())
+        m.isProUser = { false }
+        XCTAssertTrue(m.aiPowerIsGated())
+        guard case .featureLocked(.aiPower)? = m.paywallReason else { return XCTFail("AI power should upsell") }
+        m.paywallReason = nil
+        m.isProUser = { true }
+        XCTAssertFalse(m.aiPowerIsGated())
+        XCTAssertNil(m.paywallReason)
+    }
+
+    /// Related is Pro but AUTO-computed on note open → a free user gets an EMPTY Related section, and it must NOT
+    /// pop the paywall (that would fire on every note open).
+    @MainActor func testRelatedClearedForFreeWithoutPaywall() {
+        let m = AppModel(engine: FakeEngine())
+        m.isProUser = { false }
+        m.relatedIDs = [UUID(), UUID()]
+        m.refreshRelatedNotes()
+        XCTAssertTrue(m.relatedIDs.isEmpty, "a free user gets no Related")
+        XCTAssertNil(m.paywallReason, "Related absence must NOT pop the paywall (it's auto-called on open)")
+    }
+
     // MARK: Audio-cache prune protection — TOCTOU
 
     /// Pins the exact bug the review found: the displayed/playing entry is never evicted, and the

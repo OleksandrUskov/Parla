@@ -22,6 +22,7 @@ extension AppModel {
     /// refresh is best-effort and must not freeze the UI). A failure surfaces inline + as a transient chip, and
     /// search stays lexical.
     public func downloadEmbedModel() async {
+        if aiPowerIsGated() { return }   // the semantic-search model is a Pro download
         guard !isBusy, downloadingModel == nil, !embedDownloading, !embedModelDownloaded else { return }
         embedDownloading = true
         embedDownloadProgress = 0

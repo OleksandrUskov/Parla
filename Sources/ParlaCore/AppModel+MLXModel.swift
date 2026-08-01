@@ -22,6 +22,7 @@ extension AppModel {
     /// generates per note. Memory is bounded by the engine's GPU-cache cap + the post-batch model unload. A failure
     /// surfaces inline (mlxDownloadError) + as a transient chip, and keeps everything extractive.
     public func downloadMLXModel() async {
+        if aiPowerIsGated() { return }   // the generative RU/UK model is a Pro download
         guard !isBusy, downloadingModel == nil, !mlxDownloading, !mlxModelDownloaded else { return }
         mlxDownloading = true
         mlxDownloadProgress = 0

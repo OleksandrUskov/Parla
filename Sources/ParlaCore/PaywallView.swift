@@ -141,6 +141,7 @@ public struct PaywallView: View {
             case .export:      return L("paywall.locked.export")
             case .batch:       return L("paywall.locked.batch")
             case .folderWatch: return L("paywall.locked.folderwatch")
+            case .aiPower:     return L("paywall.locked.aipower")
             }
         case nil:
             return nil

@@ -334,3 +334,4 @@
 "paywall.locked.export" = "Экспорт в SRT, VTT и JSON — функция Pro.";
 "paywall.locked.batch"       = "Расшифровка нескольких файлов сразу — функция Pro.";
 "paywall.locked.folderwatch" = "Слежение за папкой с новыми записями — функция Pro.";
+"paywall.locked.aipower"     = "Генеративный ИИ — регенерация, сводки по главам и «Похожие» — функция Pro.";

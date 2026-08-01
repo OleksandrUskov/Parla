@@ -334,3 +334,4 @@
 "paywall.locked.export" = "Export to SRT, VTT and JSON is a Pro feature.";
 "paywall.locked.batch"       = "Transcribing several files at once is a Pro feature.";
 "paywall.locked.folderwatch" = "Watching a folder for new recordings is a Pro feature.";
+"paywall.locked.aipower"     = "Generative AI — regenerate, per-chapter summaries and Related — is a Pro feature.";

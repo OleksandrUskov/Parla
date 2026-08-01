@@ -34,4 +34,13 @@ extension AppModel {
         paywallReason = .featureLocked(.folderWatch)
         return true
     }
+
+    /// Generative AI power is Pro: the MLX/embed model downloads, the manual ✨ regenerate, and the per-chapter
+    /// summaries. Returns true (and upsells) for a non-Pro user — the caller then does nothing. The AUTOMATIC
+    /// extractive insights (title/keywords/one-line summary shown on load) are NOT gated here — those stay free.
+    public func aiPowerIsGated() -> Bool {
+        guard !isProUser() else { return false }
+        paywallReason = .featureLocked(.aiPower)
+        return true
+    }
 }
