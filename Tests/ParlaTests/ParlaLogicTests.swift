@@ -2169,10 +2169,15 @@ final class ParlaLogicTests: XCTestCase {
         let f = URL(fileURLWithPath: path)
         try XCTSkipUnless(FileManager.default.fileExists(atPath: f.path), "fixture missing")
         XCTAssertTrue(OpusAudioDecoder.looksLikeOgg(f), "fixture should be recognized as Ogg by content")
+        // Cheap index-based duration probe (what the length gate uses) must match the full decode — proving an
+        // extension-less Telegram ogg IS now length-measurable (no longer slips the free/Pro gate).
+        let probe = OpusAudioDecoder.oggDurationSeconds(f)
+        XCTAssertNotNil(probe, "opusfile op_pcm_total should measure the ogg without decoding")
         let wav = try OpusAudioDecoder().decodeToWav16k(f)
         defer { try? FileManager.default.removeItem(at: wav) }
         let dur = AudioDuration.seconds(ofFileAt: wav.path) ?? 0
         XCTAssertGreaterThan(dur, 1, "opusfile should decode the fixture to a non-trivial WAV")
+        XCTAssertEqual(probe ?? 0, dur, accuracy: 1.0, "index-probe duration ≈ decoded duration")
     }
 
     /// The export split: TXT/Markdown are free, SRT/VTT/JSON are Pro.

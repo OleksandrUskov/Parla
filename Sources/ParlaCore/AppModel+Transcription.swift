@@ -108,8 +108,8 @@ extension AppModel {
             if Task.isCancelled { break }   // cancelled → stop pulling more files (already-saved ones stay)
             // FREE-tier length gate (stateless): a non-Pro user's over-cap file is skipped BEFORE any decode or
             // model work — the graceful up-front upsell (never cut mid-transcript). Pro users skip the probe
-            // entirely (zero added latency). Ogg/Opus can't be header-probed by AVFoundation → they fall through
-            // here, and those short voice notes sit under the cap anyway, so they're not gated.
+            // entirely (zero added latency). `mediaDuration` covers EVERY supported format: Ogg/Opus (incl.
+            // extension-less Telegram voices) via opusfile's index, everything else via AVURLAsset.
             if !isProUser(), let dur = await mediaDuration(url),
                ProGate.exceedsFreeLimit(durationSec: dur, isPro: false) {
                 gated.append((url.lastPathComponent, dur))

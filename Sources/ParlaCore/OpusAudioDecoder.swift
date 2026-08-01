@@ -99,6 +99,21 @@ public struct OpusAudioDecoder: AudioDecoding {
         return ((try? fh.read(upToCount: 4)) ?? Data()) == Data("OggS".utf8)
     }
 
+    /// Cheap duration (seconds) for an Ogg/Opus file via opusfile's index — `op_pcm_total` reads the stream's
+    /// total 48 kHz sample count from the Ogg granule positions WITHOUT decoding the audio. This is what lets the
+    /// free/Pro length gate measure a Telegram voice message (which AVFoundation can't demux, so `MediaDuration`
+    /// returns nil for it — including the very common extension-less case). Returns nil for a non-Ogg file or an
+    /// unseekable/broken stream, so the caller falls back to `MediaDuration` (and, failing both, doesn't gate).
+    static func oggDurationSeconds(_ src: URL) -> Double? {
+        guard looksLikeOgg(src) else { return nil }
+        var err: Int32 = 0
+        guard let file = op_open_file(src.path, &err), err == 0 else { return nil }
+        defer { op_free(file) }
+        let total = op_pcm_total(file, -1)          // total samples at 48 kHz across all links; < 0 if unseekable
+        guard total > 0 else { return nil }
+        return Double(total) / opusSampleRate
+    }
+
     private static func monoFloatFormat(sampleRate: Double) -> AVAudioFormat? {
         AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)
     }

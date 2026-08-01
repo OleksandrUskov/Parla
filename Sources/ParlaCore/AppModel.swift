@@ -217,9 +217,13 @@ public final class AppModel {
     /// wrongly block a paying/free user's transcription. A test that exercises the free tier sets `{ false }`.
     public var isProUser: @MainActor () -> Bool = { true }
 
-    /// Cheap container-duration probe for the free-tier length gate (reads the media header, no decode).
-    /// Injected so tests can script a duration without a real audio fixture; production reads `MediaDuration.seconds`.
-    public var mediaDuration: @Sendable (URL) async -> Double? = { await MediaDuration.seconds(of: $0) }
+    /// Cheap container-duration probe for the free-tier length gate (reads the media index, no decode). Ogg/Opus
+    /// (incl. extension-less Telegram voices) can't be read by AVFoundation → probe via opusfile's `op_pcm_total`
+    /// first; everything else via `AVURLAsset`. Injected so tests can script a duration without a real fixture.
+    public var mediaDuration: @Sendable (URL) async -> Double? = { url in
+        if let d = OpusAudioDecoder.oggDurationSeconds(url) { return d }
+        return await MediaDuration.seconds(of: url)
+    }
 
     public enum Keys {
         public static let model = "model"
