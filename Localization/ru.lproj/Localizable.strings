@@ -332,3 +332,5 @@
 "toast.pro.needed" = "Эта запись требует Pro (больше 5 мин)";
 
 "paywall.locked.export" = "Экспорт в SRT, VTT и JSON — функция Pro.";
+"paywall.locked.batch"       = "Расшифровка нескольких файлов сразу — функция Pro.";
+"paywall.locked.folderwatch" = "Слежение за папкой с новыми записями — функция Pro.";

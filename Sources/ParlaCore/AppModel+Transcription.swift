@@ -99,6 +99,11 @@ extension AppModel {
             phase = .failed(L("error.noaudio"))
             return
         }
+        // Batch (multiple files or a folder) is Pro; free = one file at a time → show the upsell, transcribe none.
+        if batchIsGated(fileCount: files.count) {
+            phase = .idle
+            return
+        }
         let total = files.count
         let jobStart = Date()
         var failures: [String] = []

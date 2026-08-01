@@ -137,7 +137,11 @@ public struct PaywallView: View {
             let minutes = max(1, Int((dur / 60).rounded()))
             return Lf("paywall.length.body", minutes)
         case .featureLocked(let feature):
-            switch feature { case .export: return L("paywall.locked.export") }
+            switch feature {
+            case .export:      return L("paywall.locked.export")
+            case .batch:       return L("paywall.locked.batch")
+            case .folderWatch: return L("paywall.locked.folderwatch")
+            }
         case nil:
             return nil
         }

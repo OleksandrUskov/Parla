@@ -39,9 +39,11 @@ public enum ProGate {
 }
 
 /// A Pro-only capability — carried by `PaywallReason.featureLocked` so the paywall can name what the user tapped.
-/// Grows as feature gating expands (batch, folder-watch, AI power…).
+/// Grows as feature gating expands (AI power…).
 public enum ProFeature: String, Sendable, Equatable {
     case export        // advanced export: SRT / VTT / JSON
+    case batch         // transcribing several files at once (a multi-file or folder drop / a second queued job)
+    case folderWatch   // auto-transcribing a watched folder (macOS)
 }
 
 /// Why the paywall is being presented — set by the gate, observed by the UI (which presents the paywall and

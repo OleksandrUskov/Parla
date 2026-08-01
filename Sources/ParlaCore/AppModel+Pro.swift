@@ -18,4 +18,20 @@ extension AppModel {
         if exportIsGated(format) { return }
         export(item, as: format)
     }
+
+    /// Batch (a multi-file or folder drop) is Pro; free = one file per drop. Returns true (and upsells) when a
+    /// non-Pro user's drop expands to more than one file — the caller then transcribes none of them.
+    public func batchIsGated(fileCount: Int) -> Bool {
+        guard !isProUser(), fileCount > 1 else { return false }
+        paywallReason = .featureLocked(.batch)
+        return true
+    }
+
+    /// Folder-watch (auto-transcribe a watched folder, macOS) is Pro. Returns true (and upsells) if a non-Pro
+    /// user is turning it ON; the caller then leaves the toggle off.
+    public func folderWatchEnableGated(_ turningOn: Bool) -> Bool {
+        guard turningOn, !isProUser() else { return false }
+        paywallReason = .featureLocked(.folderWatch)
+        return true
+    }
 }

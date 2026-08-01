@@ -2206,6 +2206,75 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(m.paywallReason)
     }
 
+    /// Batch (a multi-file drop) is Pro: a free user transcribes NONE of them and sees the upsell.
+    @MainActor func testBatchGateBlocksMultiFileForFree() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "a", language: "en", segments: [], duration: 1),
+                                            EngineResult(text: "b", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }; m.soundOnComplete = false; m.history = []; m.autoCopy = false
+            m.isProUser = { false }
+            let a = makeTempSource("a.m4a"), b = makeTempSource("b.m4a")
+            defer { try? FileManager.default.removeItem(at: a); try? FileManager.default.removeItem(at: b) }
+
+            await m.transcribe(urls: [a, b])
+
+            XCTAssertTrue(m.history.isEmpty, "a free multi-file batch transcribes nothing")
+            XCTAssertEqual(fake.transcribeCalls, 0)
+            guard case .featureLocked(.batch)? = m.paywallReason else { return XCTFail("batch should upsell") }
+        }
+    }
+
+    /// A single-file drop is never batch-gated (a free user still gets one-at-a-time transcription).
+    @MainActor func testBatchGateAllowsSingleFileForFree() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "ok", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }; m.soundOnComplete = false; m.history = []; m.autoCopy = false
+            m.isProUser = { false }
+            m.mediaDuration = { _ in 60 }   // short → not length-gated either
+            let a = makeTempSource("a.m4a")
+            defer { try? FileManager.default.removeItem(at: a) }
+
+            await m.transcribe(urls: [a])
+
+            XCTAssertEqual(m.history.count, 1)
+            XCTAssertNil(m.paywallReason)
+        }
+    }
+
+    /// A Pro user transcribes a whole batch (no gate).
+    @MainActor func testBatchGateProProcessesAll() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "a", language: "en", segments: [], duration: 1),
+                                            EngineResult(text: "b", language: "en", segments: [], duration: 1)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }; m.soundOnComplete = false; m.history = []; m.autoCopy = false
+            m.isProUser = { true }
+            let a = makeTempSource("a.m4a"), b = makeTempSource("b.m4a")
+            defer { try? FileManager.default.removeItem(at: a); try? FileManager.default.removeItem(at: b) }
+
+            await m.transcribe(urls: [a, b])
+
+            XCTAssertEqual(m.history.count, 2)
+            XCTAssertNil(m.paywallReason)
+        }
+    }
+
+    /// Folder-watch is Pro: enabling it upsells a free user; turning it off / a Pro user is never gated.
+    @MainActor func testFolderWatchEnableGate() {
+        let m = AppModel(engine: FakeEngine())
+        m.isProUser = { false }
+        XCTAssertTrue(m.folderWatchEnableGated(true))
+        guard case .featureLocked(.folderWatch)? = m.paywallReason else { return XCTFail("enabling watch should upsell") }
+        m.paywallReason = nil
+        XCTAssertFalse(m.folderWatchEnableGated(false))   // turning OFF is never gated
+        XCTAssertNil(m.paywallReason)
+        m.isProUser = { true }
+        XCTAssertFalse(m.folderWatchEnableGated(true))    // Pro → not gated
+        XCTAssertNil(m.paywallReason)
+    }
+
     // MARK: Audio-cache prune protection — TOCTOU
 
     /// Pins the exact bug the review found: the displayed/playing entry is never evicted, and the

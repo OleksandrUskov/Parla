@@ -70,7 +70,9 @@ struct SettingsView: View {
             }
 
             Section(L("settings.section.folderwatch")) {
-                Toggle(L("settings.folderwatch.toggle"), isOn: $model.watchEnabled)
+                Toggle(L("settings.folderwatch.toggle"), isOn: Binding(
+                    get: { model.watchEnabled },
+                    set: { on in if !model.folderWatchEnableGated(on) { model.watchEnabled = on } }))   // Pro: enabling watch upsells for a free user
                 LabeledContent(L("settings.folderwatch.folder")) {
                     HStack(spacing: 8) {
                         Text(model.watchedFolderURL?.path ?? L("settings.folderwatch.notchosen"))
