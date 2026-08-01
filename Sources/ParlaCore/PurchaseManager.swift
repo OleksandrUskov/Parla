@@ -34,6 +34,12 @@ public final class PurchaseManager {
     /// The purchasable Pro product once loaded (nil until `start()` loads it, or if the store is unreachable).
     public private(set) var proProduct: Product?
 
+    /// Consumable "tip the developer" products (D3 tip-jar), sorted by price. Empty until `start()` loads them.
+    public private(set) var tipProducts: [Product] = []
+
+    /// Set true after a successful tip → the tip-jar shows a thank-you instead of the tiers.
+    public private(set) var tipThanks = false
+
     /// A purchase / restore is in flight — drives the paywall spinner + disables its buttons.
     public private(set) var purchasing = false
 
@@ -83,12 +89,40 @@ public final class PurchaseManager {
         }
         await refreshEntitlements()
         await loadProduct()
+        await loadTips()
     }
 
     /// Load the Pro product (price/title) for the paywall. Best-effort — leaves `proProduct` nil on any failure
     /// (offline, ad-hoc build with no StoreKit config), and the paywall degrades to "unavailable".
     public func loadProduct() async {
         proProduct = try? await Product.products(for: [ProGate.proProductID]).first
+    }
+
+    /// Load the consumable tip products (D3 tip-jar). Best-effort — leaves `tipProducts` empty on failure.
+    public func loadTips() async {
+        tipProducts = (try? await Product.products(for: ProGate.tipProductIDs))?.sorted { $0.price < $1.price } ?? []
+    }
+
+    /// Leave a tip — a CONSUMABLE, so it grants NO entitlement (isPro is untouched); just a thank-you. Verifies +
+    /// finishes the transaction (consumables must be finished).
+    public func tip(_ product: Product) async {
+        purchasing = true
+        lastError = nil
+        defer { purchasing = false }
+        do {
+            switch try await product.purchase() {
+            case .success(let verification):
+                let transaction = try checkVerified(verification)
+                await transaction.finish()
+                tipThanks = true
+            case .userCancelled, .pending:
+                break
+            @unknown default:
+                break
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     /// Buy Pro. Returns true on a verified purchase (`isPro` flips reactively). `.userCancelled` / `.pending`

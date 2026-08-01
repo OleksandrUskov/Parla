@@ -2180,6 +2180,16 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertEqual(probe ?? 0, dur, accuracy: 1.0, "index-probe duration ≈ decoded duration")
     }
 
+    /// Tip-jar consumables are separate from Pro (a tip must never grant the entitlement) and stay in the
+    /// placeholder namespace pre-rebrand.
+    func testTipProductsSeparateFromPro() {
+        XCTAssertEqual(ProGate.tipProductIDs.count, 3)
+        XCTAssertFalse(ProGate.tipProductIDs.contains(ProGate.proProductID), "a tip must never be the Pro product")
+        for id in ProGate.tipProductIDs {
+            XCTAssertTrue(id.hasPrefix("com.parla.tip."), "tip IDs stay in the placeholder namespace")
+        }
+    }
+
     /// The export split: TXT/Markdown are free, SRT/VTT/JSON are Pro.
     func testProExportFormatSplit() {
         XCTAssertFalse(ProGate.isProExportFormat(.txt))
@@ -2471,6 +2481,8 @@ final class ParlaLogicTests: XCTestCase {
         let pm = PurchaseManager()
         XCTAssertFalse(pm.isPro)
         XCTAssertNil(pm.proProduct)
+        XCTAssertTrue(pm.tipProducts.isEmpty)
+        XCTAssertFalse(pm.tipThanks)
         XCTAssertFalse(pm.entitlementsResolved)
         XCTAssertTrue(pm.grantsUnlimited, "gate fails open until entitlements resolve — never block a payer mid-launch")
         #if DEBUG

@@ -177,3 +177,32 @@ public struct ProSettingsSection: View {
         }
     }
 }
+
+/// A drop-in Settings section for the optional "tip the developer" jar (D3). Self-contained: reads the injected
+/// `PurchaseManager` for the consumable tip tiers and shows a thank-you after a tip (a tip grants NO entitlement).
+/// Placement-guarded per the Branch-2 decision: renders ONLY for an already-Pro user or a heavy free user
+/// (≥10 notes), and both apps place it at the BOTTOM (About area), never adjacent to the Pro CTA.
+public struct TipJarView: View {
+    @Environment(PurchaseManager.self) private var purchases
+    @Environment(AppModel.self) private var model
+    public init() {}
+
+    public var body: some View {
+        let heavyFree = model.history.count >= 10
+        if (purchases.isPro || heavyFree), (!purchases.tipProducts.isEmpty || purchases.tipThanks) {
+            Section(L("tip.section")) {
+                if purchases.tipThanks {
+                    Text(L("tip.thanks")).font(.callout)
+                } else {
+                    Text(L("tip.blurb")).font(.caption).foregroundStyle(.secondary)
+                    ForEach(purchases.tipProducts, id: \.id) { p in
+                        Button { Task { await purchases.tip(p) } } label: {
+                            HStack { Text(p.displayName); Spacer(); Text(p.displayPrice).foregroundStyle(.secondary) }
+                        }
+                        .disabled(purchases.purchasing)
+                    }
+                }
+            }
+        }
+    }
+}

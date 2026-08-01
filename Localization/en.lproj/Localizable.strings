@@ -335,3 +335,8 @@
 "paywall.locked.batch"       = "Transcribing several files at once is a Pro feature.";
 "paywall.locked.folderwatch" = "Watching a folder for new recordings is a Pro feature.";
 "paywall.locked.aipower"     = "Generative AI — regenerate, per-chapter summaries and Related — is a Pro feature.";
+
+/* Tip jar (D3) */
+"tip.section" = "Tip the developer";
+"tip.blurb"   = "Parla is free and fully on-device. If it helps you, a small tip is always optional — thank you.";
+"tip.thanks"  = "Thank you so much! ❤️";

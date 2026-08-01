@@ -144,6 +144,8 @@ struct SettingsView: View {
                 }
                 Button(L("acknowledgements.title")) { showAcknowledgements = true }
             }
+
+            TipJarView()   // optional "tip the dev" (D3) — bottom placement, never adjacent to the Pro CTA
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showAcknowledgements) { AcknowledgementsView() }

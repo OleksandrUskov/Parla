@@ -26,6 +26,39 @@
       "productID" : "com.parla.pro.lifetime",
       "referenceName" : "Parla Pro (lifetime)",
       "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "A1B2C3D4-0000-0000-0000-000000000003",
+      "localizations" : [
+        { "description" : "A small thank-you to support Parla's development.", "displayName" : "Small tip", "locale" : "en_US" }
+      ],
+      "productID" : "com.parla.tip.small",
+      "referenceName" : "Tip — small",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "A1B2C3D4-0000-0000-0000-000000000004",
+      "localizations" : [
+        { "description" : "A generous thank-you to support Parla's development.", "displayName" : "Medium tip", "locale" : "en_US" }
+      ],
+      "productID" : "com.parla.tip.medium",
+      "referenceName" : "Tip — medium",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "A1B2C3D4-0000-0000-0000-000000000005",
+      "localizations" : [
+        { "description" : "A big thank-you to support Parla's development.", "displayName" : "Large tip", "locale" : "en_US" }
+      ],
+      "productID" : "com.parla.tip.large",
+      "referenceName" : "Tip — large",
+      "type" : "Consumable"
     }
   ],
   "settings" : {

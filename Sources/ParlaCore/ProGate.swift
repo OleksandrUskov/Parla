@@ -15,6 +15,10 @@ public enum ProGate {
     /// placeholder is NEVER registered as-is.
     public static let proProductID = "com.parla.pro.lifetime"
 
+    /// Consumable "tip the developer" product IDs (D3 tip-jar) — separate from Pro, grant NO entitlement.
+    /// Placeholder namespace like `proProductID` (LOCAL `.storekit` only until the real ASC records exist).
+    public static let tipProductIDs = ["com.parla.tip.small", "com.parla.tip.medium", "com.parla.tip.large"]
+
     /// Free-tier per-file transcription length cap, in seconds (owner: 5 minutes). The gate is a stateless
     /// per-file check (read the file's duration locally) — nothing is counted or persisted, which is what keeps
     /// the whole monetization server-less. Tunable post-launch.
