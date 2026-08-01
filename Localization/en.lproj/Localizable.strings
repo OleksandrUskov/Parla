@@ -165,8 +165,6 @@
 "settings.history.export"       = "Export history…";
 "settings.history.clear"        = "Clear history";
 "settings.section.system"       = "System";
-"settings.system.ffmpeg.bundled"= "bundled";
-"settings.system.ffmpeg.missing"= "not found — install: brew install ffmpeg";
 "settings.system.models"        = "Models on disk";
 "settings.system.audio"         = "Audio for the player";
 "settings.system.clearaudio"    = "Clear audio cache";
@@ -288,8 +286,8 @@
 "onboarding.privacy.body"   = "Nothing is uploaded. The only network use is the one-time model download below — after that, fully offline.";
 "onboarding.model.title"    = "Pick a model";
 "onboarding.model.body"     = "Bigger = more accurate but slower to download. Turbo is the recommended balance; you can change it later in Settings.";
-"onboarding.ffmpeg.title"   = "Ready for Telegram audio";
-"onboarding.ffmpeg.bundled" = "ffmpeg is built in — nothing to install. Ogg/Opus, m4a, mp3, wav and more just work.";
+"onboarding.ready.title"    = "Ready for Telegram audio";
+"onboarding.ready.body"     = "Everything runs on your device — nothing to install. Ogg/Opus (Telegram voice notes), m4a, mp3, wav, mp4 and more just work.";
 "onboarding.start"          = "Get started";
 // iOS onboarding (P1.4l) — device-neutral copy (macOS onboarding.* says "Mac"/"drag")
 "onboarding.ios.title" = "Transcribe voice to text — 100% on your device.";

@@ -19,7 +19,7 @@ struct OnboardingView: View {
                     step("text.bubble", L("onboarding.step1.title"), L("onboarding.step1.body"))
                     step("lock.shield", L("onboarding.privacy.title"), L("onboarding.privacy.body"))
                     modelStep(selection: $model.selectedModel, tiers: model.modelTiers)
-                    ffmpegStep
+                    readyStep
                 }
                 .padding(28)
             }
@@ -76,14 +76,14 @@ struct OnboardingView: View {
         }
     }
 
-    // ffmpeg is ALWAYS bundled in the built .app (build_app.sh copies the vendored binary), so there is
-    // no "missing" case to handle here — just confirm it's built in.
-    private var ffmpegStep: some View {
+    // A first-run reassurance beat: transcription is fully on-device and self-contained — nothing to install.
+    // (Decoding is the in-process native decoder as of Phase 2c; no ffmpeg in the decode path.)
+    private var readyStep: some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: "checkmark.seal").font(.title2).foregroundStyle(.green).frame(width: 30)
             VStack(alignment: .leading, spacing: 4) {
-                Text(L("onboarding.ffmpeg.title")).font(.headline)
-                Text(L("onboarding.ffmpeg.bundled"))
+                Text(L("onboarding.ready.title")).font(.headline)
+                Text(L("onboarding.ready.body"))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -165,8 +165,6 @@
 "settings.history.export"       = "Экспортировать историю…";
 "settings.history.clear"        = "Очистить историю";
 "settings.section.system"       = "Система";
-"settings.system.ffmpeg.bundled"= "встроенный";
-"settings.system.ffmpeg.missing"= "не найден — установи: brew install ffmpeg";
 "settings.system.models"        = "Модели на диске";
 "settings.system.audio"         = "Аудио для плеера";
 "settings.system.clearaudio"    = "Очистить аудио-кэш";
@@ -288,8 +286,8 @@
 "onboarding.privacy.body"   = "Ничего не загружается в сеть. Единственный сетевой запрос — разовое скачивание модели ниже, дальше всё офлайн.";
 "onboarding.model.title"    = "Выбери модель";
 "onboarding.model.body"     = "Больше = точнее, но дольше качать. Turbo — рекомендуемый баланс; поменять можно потом в настройках.";
-"onboarding.ffmpeg.title"   = "Готов к аудио из Telegram";
-"onboarding.ffmpeg.bundled" = "ffmpeg уже встроен — ставить ничего не надо. Ogg/Opus, m4a, mp3, wav и другое работают сразу.";
+"onboarding.ready.title"    = "Готов к аудио из Telegram";
+"onboarding.ready.body"     = "Всё работает прямо на твоём устройстве — ставить ничего не надо. Ogg/Opus (голосовые из Telegram), m4a, mp3, wav, mp4 и другое работают сразу.";
 "onboarding.start"          = "Начать";
 // iOS onboarding (P1.4l) — device-neutral copy (macOS onboarding.* says "Mac"/"drag")
 "onboarding.ios.title" = "Расшифровка голоса в текст — 100% на твоём устройстве.";
