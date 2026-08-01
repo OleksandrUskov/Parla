@@ -340,3 +340,6 @@
 "tip.section" = "Tip the developer";
 "tip.blurb"   = "Parla is free and fully on-device. If it helps you, a small tip is always optional — thank you.";
 "tip.thanks"  = "Thank you so much! ❤️";
+
+/* House cross-promo (D2) */
+"house.section" = "More from the developer";

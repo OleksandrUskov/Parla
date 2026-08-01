@@ -145,7 +145,8 @@ struct SettingsView: View {
                 Button(L("acknowledgements.title")) { showAcknowledgements = true }
             }
 
-            TipJarView()   // optional "tip the dev" (D3) — bottom placement, never adjacent to the Pro CTA
+            HousePromoCard()   // D2 house cross-promo — hidden until the owner adds apps; zero network
+            TipJarView()       // optional "tip the dev" (D3) — bottom placement, never adjacent to the Pro CTA
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showAcknowledgements) { AcknowledgementsView() }
