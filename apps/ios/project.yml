@@ -154,3 +154,6 @@ schemes:
     test:
       targets:
         - Parla-iOSTests
+    # NOTE: to test the StoreKit purchase flow locally, attach `apps/ios/Parla.storekit` manually in Xcode
+    # (Product → Scheme → Edit Scheme → Run → Options → StoreKit Configuration). Wiring it via XcodeGen's
+    # `storeKitConfiguration:` emitted a wrong relative path here, so it's a one-time manual attach for now.
