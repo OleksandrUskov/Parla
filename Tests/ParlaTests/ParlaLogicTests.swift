@@ -2252,6 +2252,68 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// Re-transcribe is a fresh transcription → the length gate must apply there too: a non-Pro user re-running
+    /// an over-cap history note is blocked (old transcript untouched, no engine work) and the paywall shows.
+    @MainActor func testRetranscribeGatedForFreeOverCapNote() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "NEW-should-not-apply", language: "en", segments: [], duration: 600)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.autoCopy = false
+            m.isProUser = { false }
+            let item = TranscriptItem(sourceName: "long.m4a", language: "en", durationSec: 600,
+                                      model: "old-model", text: "OLD-keep-me", segments: [], sourcePath: "/tmp/parla-nope.m4a")
+            m.history = [item]
+
+            m.retranscribe(item, with: "new-model")
+            await m.currentTranscriptionTask?.value   // nil when gated (no task spawned) → no-op
+
+            XCTAssertEqual(m.history.first?.text, "OLD-keep-me")   // untouched
+            XCTAssertEqual(m.history.first?.model, "old-model")    // not re-transcribed
+            XCTAssertEqual(fake.transcribeCalls, 0)                // no engine work started
+            guard case .lengthExceeded? = m.paywallReason else { return XCTFail("gated re-transcribe should show the paywall") }
+        }
+    }
+
+    /// A Pro user re-transcribes an over-cap note normally (no gate).
+    @MainActor func testRetranscribeProOverCapProceeds() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "NEW", language: "en", segments: [], duration: 600)])
+            let m = AppModel(engine: fake)
+            m.postNotification = { _, _ in }
+            m.soundOnComplete = false
+            m.autoCopy = false
+            m.isProUser = { true }
+            let src = makeTempSource("long.m4a")
+            defer { try? FileManager.default.removeItem(at: src) }
+            let item = TranscriptItem(sourceName: "long.m4a", language: "en", durationSec: 600,
+                                      model: "old-model", text: "OLD", segments: [], sourcePath: src.path)
+            m.history = [item]
+
+            m.retranscribe(item, with: "new-model")
+            await m.currentTranscriptionTask?.value
+
+            XCTAssertEqual(m.history.first?.text, "NEW")           // replaced in place
+            XCTAssertEqual(m.history.first?.model, "new-model")
+            XCTAssertEqual(fake.transcribeCalls, 1)
+            XCTAssertNil(m.paywallReason)
+        }
+    }
+
+    /// PurchaseManager stays inert until `start()`: no entitlement, no product, no store contact — so a unit
+    /// test can construct one without touching StoreKit. The DEBUG preview hook flips isPro for previews/tests.
+    @MainActor func testPurchaseManagerInertUntilStart() {
+        UserDefaults.standard.removeObject(forKey: "debugProState")   // ensure no dev override leaks in
+        let pm = PurchaseManager()
+        XCTAssertFalse(pm.isPro)
+        XCTAssertNil(pm.proProduct)
+        #if DEBUG
+        pm.previewSetPro(true)
+        XCTAssertTrue(pm.isPro)
+        #endif
+    }
+
     @MainActor func testTranscribeFailureRecordsAndLeavesHistory() async {
         await withTemporaryHistoryStoreAsync {
             let fake = FakeEngine(throwOnTranscribe: true)

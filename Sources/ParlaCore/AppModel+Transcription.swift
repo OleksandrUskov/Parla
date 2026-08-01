@@ -330,6 +330,14 @@ extension AppModel {
     public func retranscribe(_ item: TranscriptItem, with model: String) {
         guard !isBusy, downloadingModel == nil else { return }
         guard model != item.model else { return }            // same model — nothing to recompute
+        // Free-tier length gate: re-transcribing an over-cap note is a fresh transcription too, so gate it for a
+        // non-Pro user (parity with a fresh drop — otherwise a migrated/refunded free user re-runs a long history
+        // note unlimited for free). Uses the note's KNOWN duration, so it also covers Ogg/Opus that the fresh-drop
+        // AVFoundation probe can't measure.
+        if !isProUser(), ProGate.exceedsFreeLimit(durationSec: item.durationSec, isPro: false) {
+            paywallReason = .lengthExceeded(fileName: item.sourceName, durationSec: item.durationSec)
+            return
+        }
         // A re-transcribe is NOT a "last drop": clear it so the error chip's «Try again» (which replays
         // lastAttemptedURLs) can't fire the wrong file/model if this re-transcribe fails.
         lastAttemptedURLs = []

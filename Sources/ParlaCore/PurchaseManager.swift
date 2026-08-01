@@ -33,8 +33,8 @@ public final class PurchaseManager {
     /// StoreKit-derived ownership (the `currentEntitlements` scan). Private so `isPro` is the only public read.
     private var storeEntitled = false
 
-    /// Dev/QA override read once from `UserDefaults` at init — `"debugProState"` = `"pro"` | `"free"` forces the
-    /// entitlement; unset = real StoreKit. Undocumented, harmless, removed before the paid launch.
+    /// DEBUG-only dev/QA override read once from `UserDefaults` at init — `"debugProState"` = `"pro"` | `"free"`
+    /// forces the entitlement; unset = real StoreKit. Always nil in release builds (see init), so it can't ship.
     private let devOverride: Bool?
 
     /// The lifetime `Transaction.updates` listener — catches transactions that happen OUTSIDE `purchase()`
@@ -44,11 +44,17 @@ public final class PurchaseManager {
     nonisolated(unsafe) private var updatesTask: Task<Void, Never>?
 
     public init() {
+        // DEBUG-ONLY so it can NEVER ship: a plain UserDefaults bypass in a release build (this repo is public)
+        // would let anyone `defaults write … debugProState pro` to unlock Pro for free. Release builds get nil.
+        #if DEBUG
         switch UserDefaults.standard.string(forKey: "debugProState") {
         case "pro":  devOverride = true
         case "free": devOverride = false
         default:     devOverride = nil
         }
+        #else
+        devOverride = nil
+        #endif
     }
 
     deinit { updatesTask?.cancel() }
