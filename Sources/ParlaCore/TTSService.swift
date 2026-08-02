@@ -93,7 +93,13 @@ public actor SystemTTSService: TTSService {
         let sink = Sink(url: url, synth: synth)
 
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            synth.write(utterance) { buffer in
+            // `@Sendable`: this callback runs off-actor on AVFoundation's synthesis queue. Inside an `actor`
+            // method the closure would otherwise INHERIT actor isolation, and — because `@preconcurrency import
+            // AVFoundation` hides the non-@Sendable callback param from the compiler — it would compile clean yet
+            // TRAP (swift_task_isCurrentExecutor / EXC_BREAKPOINT) on the first buffer. Marking it @Sendable strips
+            // the isolation (captures are all Sendable: `sink` @unchecked Sendable, `cont` Sendable). Same class of
+            // fix as the MicRecorder tap + the WhisperKit progress callback.
+            synth.write(utterance) { @Sendable buffer in
                 guard let pcm = buffer as? AVAudioPCMBuffer else { return }
                 if pcm.frameLength == 0 {
                     // Terminal buffer: CLOSE the writer (nil → dealloc flushes the WAV header, else it reads

@@ -95,10 +95,12 @@ final class FolderWatcher: FileWatching, @unchecked Sendable {
     private func startPolling() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            let t = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
                 guard let self else { return }                  // weak — otherwise the timer holds self forever
                 MainActor.assumeIsolated { self.onChange() }
             }
+            // Assign under the lock — `pollTimer` is read+cleared under `lock` in stop(); keep every access consistent.
+            self.lock.lock(); self.pollTimer = t; self.lock.unlock()
         }
     }
 
