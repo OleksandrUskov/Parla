@@ -7,7 +7,10 @@ APP="Parla"
 # Не менять: к bundle ID привязан грант на уведомления (UNUserNotificationCenter).
 # Сменишь — пользователь потеряет разрешение и его спросят заново.
 BUNDLE_ID="com.parla.app"
-VERSION="1.0.0"
+# Overridable so a release build can stamp a real version/build without editing the script:
+#   PARLA_VERSION=1.1.0 PARLA_BUILD=42 ./build_app.sh
+VERSION="${PARLA_VERSION:-1.0.0}"
+BUILD_NUMBER="${PARLA_BUILD:-1}"
 
 # Сгенерить иконку, если её ещё нет (нужны swift + sips + iconutil — есть на любом маке с Xcode).
 if [ ! -f Resources/AppIcon.icns ] && [ -f make_icon.swift ]; then
@@ -133,7 +136,7 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>$APP</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
@@ -171,13 +174,38 @@ PLIST
 # уведомления НЕ доставляются при запуске вне бандла (swift run) или из карантина/translocated —
 # поэтому в приложении они best-effort, а основной сигнал готовности это чип/прогресс в окне.
 # (Audio decode is fully in-process now — libopus + AVAssetReader, no bundled ffmpeg subprocess. Phase 2c.)
-
+#
+# THIS STEP IS FATAL ON FAILURE. On Apple Silicon an unsigned binary does not execute at all, so signing
+# decides whether the .app launches. It used to be `codesign … >/dev/null 2>&1 || true` followed by an
+# unconditional "✅ Готово" — the one step that can break a downloaded app was the one step that could not
+# fail the build. Its output is no longer swallowed either.
 # NOTE: ad-hoc, no hardened runtime — fine for local/dev runs and doesn't block exec'ing the helper.
 # At the notarization milestone, sign the outer app with a Developer ID + `--options runtime` (and prefer
 # explicit per-binary signing over `--deep`, which is unreliable for nested code).
-codesign --force --deep --sign - "$APPDIR" >/dev/null 2>&1 || true
+codesign --force --deep --sign - "$APPDIR" || { echo "❌ codesign упал — .app не запустится"; exit 1; }
+codesign --verify --deep --strict "$APPDIR" || { echo "❌ подпись не проходит верификацию — не отгружаю .app"; exit 1; }
 
-echo "✅ Готово: $(pwd)/$APPDIR"
+# LAUNCH GUARD: every @rpath dependency must resolve INSIDE the bundle. This is the exact failure we
+# shipped once (`1607bd3`): the build succeeded, the .app died at launch with dyld "Library not loaded:
+# @rpath/opus.framework" because the frameworks were never embedded. A build-time invariant now.
+EXEC="$APPDIR/Contents/MacOS/$APP"
+RPATHS="$(otool -l "$EXEC" | awk '/LC_RPATH/{f=1} f && / path /{print $2; f=0}')"
+MISSING=0
+while read -r dep; do
+  [ -n "$dep" ] || continue
+  rel="${dep#@rpath/}"
+  found=0
+  for rp in $RPATHS; do
+    cand="${rp/@executable_path/$APPDIR/Contents/MacOS}"
+    cand="${cand/@loader_path/$APPDIR/Contents/MacOS}"
+    if [ -e "$cand/$rel" ]; then found=1; break; fi
+  done
+  if [ "$found" -eq 0 ]; then echo "❌ зависимость не резолвится в бандле: $dep"; MISSING=1; fi
+done <<< "$(otool -L "$EXEC" | awk '/@rpath\//{print $1}')"
+[ "$MISSING" -eq 0 ] || { echo "❌ .app не запустится (dyld не найдёт библиотеки) — не отгружаю"; exit 1; }
+echo "• Launch guard: все @rpath-зависимости резолвятся внутри бандла"
+
+echo "✅ Готово: $(pwd)/$APPDIR  (v$VERSION build $BUILD_NUMBER)"
 
 # Опционально перезапустить (--run). Старый и новый бинарь имеют ОДИН bundle ID, поэтому при
 # уже запущенном инстансе `open` просто вынесет вперёд СТАРЫЙ процесс из памяти, а не подхватит
