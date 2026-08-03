@@ -9,6 +9,9 @@ import UniformTypeIdentifiers
 class ShareViewController: UIViewController {
     private let groupID = "group.com.parla.ios"   // must match ShareInbox.groupID
     private let inboxName = "inbox"                 // must match ShareInbox.inboxName
+    /// In-progress copies carry this suffix so the app's drain skips them. Must match `ShareInbox.partSuffix`
+    /// (the extension can't link ParlaCore — extension memory budget — so the constant is duplicated by necessity).
+    static let partSuffix = ".part"
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -32,8 +35,20 @@ class ShareViewController: UIViewController {
             provider.loadFileRepresentation(forTypeIdentifier: typeID) { url, _ in
                 defer { group.leave() }
                 guard let url else { return }
-                let dest = inbox.appendingPathComponent(Self.uniqueName(for: url))
-                try? FileManager.default.copyItem(at: url, to: dest)
+                // ATOMIC HANDOFF. The app drains this same directory on every foreground — it enumerates, copies
+                // into its own container and DELETES the source. Copying straight to the final name meant the app
+                // could pick a file up MID-COPY: it would move a truncated file and delete the user's only copy of
+                // what they shared. So: copy to `<name>.part` (which the drain filter ignores), then `moveItem` —
+                // a rename within one volume is atomic, so the final name appears only when the bytes are all there.
+                let finalName = Self.uniqueName(for: url)
+                let part = inbox.appendingPathComponent(finalName + Self.partSuffix)
+                let dest = inbox.appendingPathComponent(finalName)
+                do {
+                    try FileManager.default.copyItem(at: url, to: part)
+                    try FileManager.default.moveItem(at: part, to: dest)
+                } catch {
+                    try? FileManager.default.removeItem(at: part)   // never leave half a file behind
+                }
             }
         }
         group.notify(queue: .main) { [weak self] in self?.complete() }

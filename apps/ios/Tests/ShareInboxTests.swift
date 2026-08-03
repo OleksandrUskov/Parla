@@ -22,6 +22,45 @@ final class ShareInboxTests: XCTestCase {
         XCTAssertEqual(pending, ["a.ogg", "b.m4a", "c.mp4"], "audio/video only, name-sorted, hidden skipped")
     }
 
+    /// DATA-LOSS GUARD: an in-flight copy (`<name>.part`) must never be picked up. The extension copies to `.part`
+    /// and atomically renames when the bytes are all written; if the drain grabbed the `.part`, it would move a
+    /// TRUNCATED file into the app container and then delete the user's only copy of what they shared. Also pins
+    /// that an extension-less shared item (stored as `.dat`) IS picked up when its header is Ogg.
+    func testPendingFilesSkipsInFlightPartsAndAcceptsOggDat() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inbox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try Data("x".utf8).write(to: dir.appendingPathComponent("done.m4a"))
+        try Data("x".utf8).write(to: dir.appendingPathComponent("copying.m4a\(ShareInbox.partSuffix)"))
+        try Data("OggS\u{01}\u{00}\u{00}\u{00}".utf8).write(to: dir.appendingPathComponent("voice.dat"))
+        try Data("OggS\u{01}".utf8).write(to: dir.appendingPathComponent("half.ogg\(ShareInbox.partSuffix)"))
+
+        let pending = ShareInbox.pendingFiles(in: dir).map(\.lastPathComponent)
+        XCTAssertEqual(pending, ["done.m4a", "voice.dat"], "in-flight .part files must never be drained")
+    }
+
+    /// The stale-`.part` sweep removes abandoned copies but must NEVER touch one that could still be in flight.
+    func testSweepStalePartsRemovesOldOnly() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inbox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let fresh = dir.appendingPathComponent("fresh.m4a\(ShareInbox.partSuffix)")
+        let old = dir.appendingPathComponent("old.m4a\(ShareInbox.partSuffix)")
+        let keep = dir.appendingPathComponent("real.m4a")
+        for u in [fresh, old, keep] { try Data("x".utf8).write(to: u) }
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -172_800)], ofItemAtPath: old.path)
+
+        ShareInbox.sweepStaleParts(in: dir)
+        let left = Set((try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)).map(\.lastPathComponent))
+        XCTAssertTrue(left.contains(fresh.lastPathComponent), "a possibly-in-flight .part must be kept")
+        XCTAssertFalse(left.contains(old.lastPathComponent), "an abandoned .part must be swept")
+        XCTAssertTrue(left.contains(keep.lastPathComponent), "real files untouched")
+    }
+
     func testPendingFilesEmptyDirIsEmpty() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("inbox-\(UUID().uuidString)", isDirectory: true)

@@ -27,14 +27,34 @@ enum ShareInbox {
     /// Audio/video files waiting in an inbox directory — PURE, so a test injects a temp dir instead of the
     /// (entitlement-gated) real container. Filters to the formats the pipeline handles; hidden files skipped;
     /// stable order.
+    /// Suffix the Share Extension gives an in-progress copy; it renames to the final name only once the bytes are
+    /// all written. Must match `ShareViewController.partSuffix`.
+    static let partSuffix = ".part"
+
     static func pendingFiles(in dir: URL) -> [URL] {
         let items = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil,
                                                                   options: [.skipsHiddenFiles])) ?? []
         return items
+            // NEVER pick up an in-flight copy: the extension writes `<name>.part` and atomically renames when the
+            // copy completes. Without this the app could move a TRUNCATED file into its container and then delete
+            // the source — losing the user's only copy of what they shared. (`isTranscribable` would reject `.part`
+            // by extension anyway; this is explicit so the invariant is impossible to break by accident.)
+            .filter { !$0.lastPathComponent.hasSuffix(partSuffix) }
             // Extension OR Ogg content: the Share Extension can't sniff (it doesn't link ParlaCore), so an
             // extension-less shared voice note lands here as `.dat` — without this it would sit in the inbox forever.
             .filter { AppModel.isTranscribable($0) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// Sweep `.part` files abandoned by a crashed/killed share (older than a day — never touch one that could
+    /// still be in flight). Cheap, best-effort, keeps the shared container from accumulating dead bytes.
+    static func sweepStaleParts(in dir: URL, olderThan age: TimeInterval = 86_400, now: Date = Date()) {
+        let items = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey],
+                                                                  options: [.skipsHiddenFiles])) ?? []
+        for u in items where u.lastPathComponent.hasSuffix(partSuffix) {
+            let mtime = (try? u.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let mtime, now.timeIntervalSince(mtime) > age { try? FileManager.default.removeItem(at: u) }
+        }
     }
 
     /// Which inbox sources are safe to delete after a copy pass: ONLY those `copyIntoContainer` actually produced a
@@ -58,6 +78,7 @@ enum ShareInbox {
     /// is unavailable, empty, or a drain is already in flight. Files land as a normal drop → queued if busy.
     @MainActor static func drain(into model: AppModel) {
         guard !isDraining, let inbox = inboxURL() else { return }
+        sweepStaleParts(in: inbox)                 // clear leftovers from a crashed share (never an in-flight one)
         let pending = pendingFiles(in: inbox)
         guard !pending.isEmpty else { return }
         isDraining = true
