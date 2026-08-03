@@ -83,6 +83,11 @@ public struct MLXHubDownloader: Downloader {
         useLatest: Bool,
         progressHandler: @Sendable @escaping (Progress) -> Void
     ) async throws -> URL {
+        // The single choke point for BOTH MLX model stores (the generative model and the embedder both download
+        // through this type) — so the backup-exclusion rule is applied here once, before any bytes land. Without it
+        // a ~2.3 GB re-downloadable model went straight into the user's backup (App Store 2.5 on iOS, Time Machine
+        // on macOS); only the WhisperKit tree was ever excluded.
+        ModelStorage.prepareExcludedFromBackup(downloadBase)
         let hub = HubApi(downloadBase: downloadBase)
         return try await hub.snapshot(
             from: id, revision: revision ?? "main", matching: patterns, progressHandler: progressHandler)

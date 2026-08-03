@@ -68,12 +68,7 @@ public actor TranscriptionEngine {
     /// inflate the user's iCloud backup (App Store 2.5). Idempotent; only the `huggingface` subtree is touched —
     /// history/audio under Application Support/Parla stay backed up. Call before any download.
     public static func prepareModelStorage() {
-        let hf = downloadBase()   // Application Support/huggingface
-        try? FileManager.default.createDirectory(at: hf, withIntermediateDirectories: true)
-        var url = hf
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try? url.setResourceValues(values)
+        ModelStorage.prepareExcludedFromBackup(downloadBase())   // Application Support/huggingface
     }
     #endif
     public static func localFolder(_ model: String) -> URL {
