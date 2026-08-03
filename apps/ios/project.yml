@@ -133,13 +133,22 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
   # Runtime proof: a unit-test target (hosted by Parla-iOS) that decodes a real Ogg/Opus fixture on the
   # simulator to prove the Opusfile path works at runtime. `@testable import Parla_iOS` reuses OpusAudioDecoder.
-  # The fixture is gitignored (voice never in git); the test XCTSkips when it's absent → never a false red.
+  # A real voice fixture stays gitignored (voice never in git) — the committed synthetic tone below is what makes
+  # the decode proof run everywhere, including CI.
   Parla-iOSTests:
     type: bundle.unit-test
     platform: iOS
     deploymentTarget: "17.0"
     sources:
       - path: Tests
+      # Lane-2 (AVAssetReader) decode proof lives in the SHARED suite so plain `swift test` runs it in CI on every
+      # push; compiled into the iOS test target as well, because Lane 2 is the iOS-critical decode path. One file,
+      # both platforms — mirrors the fat-Core/thin-app architecture.
+      - path: ../../Tests/ParlaTests/AVAssetDecodeTests.swift
+      # Committed 6.7 KB synthetic Ogg/Opus tone (no voice → public-repo safe). Without it the libopusfile lane was
+      # proven NOWHERE automatically: the real fixture is gitignored, so CI silently skipped the decode test.
+      - path: ../../Tests/ParlaTests/Fixtures/tone.ogg
+        buildPhase: resources
     dependencies:
       - target: Parla-iOS
     settings:

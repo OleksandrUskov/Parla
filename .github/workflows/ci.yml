@@ -22,6 +22,17 @@ jobs:
       - name: Test
         run: swift test
 
+  # ThreadSanitizer over the same suite. The project builds every target in Swift 6 language mode (COMPLETE
+  # strict concurrency), which is a COMPILE-time claim; TSan is the RUNTIME evidence for it. Cheap to keep honest:
+  # verified locally at 347 tests / 0 failures / 0 race reports before this job was added.
+  macos-tsan:
+    name: macOS 26 · swift test (ThreadSanitizer)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test under TSan
+        run: swift test --sanitize=thread
+
   # Compile-compatibility on the current stable Xcode (16.x / Swift 6.1). Build only — tests run on
   # macos-26 above (Apple-NLP output is OS-versioned). Guards against source that compiles only on the
   # newer toolchain (e.g. not-yet-Sendable SDK types needing @preconcurrency imports).
@@ -36,7 +47,7 @@ jobs:
         run: swift build
 
   ios:
-    name: iOS · xcodebuild (app + extensions)
+    name: iOS · xcodebuild test (app + extensions)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -45,16 +56,23 @@ jobs:
       - name: Generate Xcode project
         working-directory: apps/ios
         run: xcodegen generate
-      # Build the app scheme = compiles the app + the Share and Widgets extensions + ParlaCore-for-iOS
-      # (in-process libopus, MLX gated out on iOS). A generic simulator destination needs no booted sim;
+      # `test`, not `build`. This job used to only COMPILE, so `Parla-iOSTests` — the share-handoff data-loss
+      # guards, the App-Group drain, the in-process Opus/Lane-2 decode proofs — ran in CI NOWHERE. Testing needs a
+      # concrete simulator (not `generic/platform=iOS Simulator`), so resolve one from the runner image instead of
+      # hardcoding a device name that drifts with the image. Verified locally: 18 tests pass unsigned on the sim.
       # -skipMacroValidation trusts the dependency Swift macros (swift-transformers) non-interactively;
       # CODE_SIGNING_ALLOWED=NO because CI has no provisioning profile (same as the local recipe).
-      - name: Build (app + extensions, simulator)
+      - name: Test (app + extensions, simulator)
         working-directory: apps/ios
         run: |
-          xcodebuild build \
+          DEST=$(xcrun simctl list devices available \
+                 | grep -m1 -E '^ +iPhone' \
+                 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
+          [ -n "$DEST" ] || { echo "::error::no available iPhone simulator on this runner"; exit 1; }
+          echo "simulator: $DEST"
+          xcodebuild test \
             -project Parla-iOS.xcodeproj \
             -scheme Parla-iOS \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "id=$DEST" \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO

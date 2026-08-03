@@ -108,6 +108,10 @@ let package = Package(
             name: "ParlaTests",
             dependencies: ["ParlaCore", "Parla"],
             path: "Tests/ParlaTests",
+            // `Fixtures/tone.ogg` — a 6.7 KB SYNTHETIC Ogg/Opus tone (no voice, safe in a public repo) that lets the
+            // real libopusfile decode path run on EVERY machine and in CI, instead of the old opt-in
+            // `PARLA_OGG_FIXTURE` env var that meant the native decoder was proven NOWHERE automatically.
+            resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

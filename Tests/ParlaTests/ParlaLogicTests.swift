@@ -2204,24 +2204,55 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(OpusAudioDecoder.looksLikeOgg(tmp.appendingPathComponent("missing-\(UUID().uuidString)")))
     }
 
-    /// Runtime proof that the Opus lane actually decodes a real extension-less Ogg/Opus on this machine (the
-    /// native decoder is hard to exercise hermetically). Set PARLA_OGG_FIXTURE to a real file to run it.
+    /// Runtime proof that the libopusfile lane REALLY decodes an Ogg/Opus file — on every machine and in CI.
+    /// This used to be opt-in behind `PARLA_OGG_FIXTURE`, which meant the native decoder (the whole point of
+    /// Phase 2c — no ffmpeg) was automatically proven NOWHERE. `Fixtures/tone.ogg` is a 6.7 KB synthetic tone
+    /// (no voice → fine in a public repo), so the real C decode path runs unconditionally.
+    func testDecodesBundledOggFixture() throws {
+        let f = try XCTUnwrap(Bundle.module.url(forResource: "tone", withExtension: "ogg", subdirectory: "Fixtures"),
+                              "bundled Ogg fixture missing — check Package.swift resources")
+        try assertOggDecodes(f, expectedSeconds: 3.0)
+    }
+
+    /// The intake rule from `0b779fc`: a Telegram voice note arrives with NO extension, so recognition must be by
+    /// CONTENT. Same bytes, no extension → still sniffed as Ogg, still accepted by the one intake gate, still
+    /// measurable by the cheap index probe (so it can't slip the free/Pro length gate).
+    func testExtensionlessOggIsSniffedAndAcceptedByIntake() throws {
+        let src = try XCTUnwrap(Bundle.module.url(forResource: "tone", withExtension: "ogg", subdirectory: "Fixtures"))
+        let bare = FileManager.default.temporaryDirectory.appendingPathComponent("voice_\(UUID().uuidString)")
+        try FileManager.default.copyItem(at: src, to: bare)
+        defer { try? FileManager.default.removeItem(at: bare) }
+
+        XCTAssertTrue(OpusAudioDecoder.looksLikeOgg(bare), "no extension → must be recognized by the OggS header")
+        XCTAssertTrue(AppModel.isTranscribable(bare), "the intake gate must accept an extension-less Ogg voice note")
+        try assertOggDecodes(bare, expectedSeconds: 3.0)
+    }
+
+    /// Optional extra: point PARLA_OGG_FIXTURE at a REAL voice note to run the same assertions on real bytes.
+    /// (Real voice never lives in git; the bundled tone is what CI proves.)
     func testDecodeRealOggFixtureIfProvided() throws {
         guard let path = ProcessInfo.processInfo.environment["PARLA_OGG_FIXTURE"] else {
-            throw XCTSkip("PARLA_OGG_FIXTURE not set")
+            throw XCTSkip("PARLA_OGG_FIXTURE not set — the bundled fixture already covers the decode path")
         }
         let f = URL(fileURLWithPath: path)
         try XCTSkipUnless(FileManager.default.fileExists(atPath: f.path), "fixture missing")
-        XCTAssertTrue(OpusAudioDecoder.looksLikeOgg(f), "fixture should be recognized as Ogg by content")
-        // Cheap index-based duration probe (what the length gate uses) must match the full decode — proving an
-        // extension-less Telegram ogg IS now length-measurable (no longer slips the free/Pro gate).
-        let probe = OpusAudioDecoder.oggDurationSeconds(f)
-        XCTAssertNotNil(probe, "opusfile op_pcm_total should measure the ogg without decoding")
+        try assertOggDecodes(f, expectedSeconds: nil)
+    }
+
+    /// Shared body: the cheap index-based duration probe (what the length gate uses) must agree with a real full
+    /// decode, and the decode must produce a non-trivial 16 kHz WAV.
+    private func assertOggDecodes(_ f: URL, expectedSeconds: Double?, file: StaticString = #filePath, line: UInt = #line) throws {
+        XCTAssertTrue(OpusAudioDecoder.looksLikeOgg(f), "should be recognized as Ogg", file: file, line: line)
+        let probe = try XCTUnwrap(OpusAudioDecoder.oggDurationSeconds(f),
+                                  "opusfile op_pcm_total should measure the ogg WITHOUT decoding", file: file, line: line)
         let wav = try OpusAudioDecoder().decodeToWav16k(f)
         defer { try? FileManager.default.removeItem(at: wav) }
         let dur = AudioDuration.seconds(ofFileAt: wav.path) ?? 0
-        XCTAssertGreaterThan(dur, 1, "opusfile should decode the fixture to a non-trivial WAV")
-        XCTAssertEqual(probe ?? 0, dur, accuracy: 1.0, "index-probe duration ≈ decoded duration")
+        XCTAssertGreaterThan(dur, 1, "opusfile should decode to a non-trivial WAV", file: file, line: line)
+        XCTAssertEqual(probe, dur, accuracy: 0.2, "index-probe duration ≈ decoded duration", file: file, line: line)
+        if let expected = expectedSeconds {
+            XCTAssertEqual(dur, expected, accuracy: 0.2, "decoded duration should match the fixture", file: file, line: line)
+        }
     }
 
     /// Tip-jar consumables are separate from Pro (a tip must never grant the entitlement) and stay in the

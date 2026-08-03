@@ -3,16 +3,24 @@ import AVFoundation
 import ParlaCore
 
 // runtime proof: exercise the REAL `AudioDecoding` seam (`OpusAudioDecoder` in ParlaCore) on a
-// real Telegram Ogg/Opus fixture on the iOS simulator, and assert it yields a WAV WhisperKit can read — link ≠
-// works ([[run-manual-verify-paths]]). The fixture is gitignored (voice never in git); when it's absent (CI / a
-// fresh clone) the test XCTSkips, so it is never a false red.
+// real Ogg/Opus fixture on the iOS simulator, and assert it yields a WAV WhisperKit can read — link ≠
+// works ([[run-manual-verify-paths]]). A real Telegram voice note stays gitignored (voice never in git), so the
+// target also bundles a committed synthetic tone and the test falls back to it — it RUNS everywhere, never skips.
 // Run: xcodebuild test -scheme Parla-iOS -destination 'platform=iOS Simulator,id=<iPhone-15/iOS-17>'.
 final class OpusDecodeTests: XCTestCase {
 
+    /// Prefer a REAL (gitignored) Telegram voice note when the developer has one; otherwise fall back to the
+    /// committed synthetic tone. Before that fallback existed this test simply XCTSkipped in CI and on any fresh
+    /// clone — i.e. the native decode path, the entire point of Phase 2c, was automatically proven NOWHERE.
+    private func oggFixture() throws -> URL {
+        let bundle = Bundle(for: Self.self)
+        if let real = bundle.url(forResource: "sample", withExtension: "ogg") { return real }
+        return try XCTUnwrap(bundle.url(forResource: "tone", withExtension: "ogg"),
+                             "no Ogg fixture bundled — Tests/ParlaTests/Fixtures/tone.ogg must be a resource of this target")
+    }
+
     func testDecodeRealOggOpusFixtureViaSeam() throws {
-        guard let url = Bundle(for: Self.self).url(forResource: "sample", withExtension: "ogg") else {
-            throw XCTSkip("no local Ogg/Opus fixture bundled (gitignored) — skipping the runtime decode proof")
-        }
+        let url = try oggFixture()
 
         let wav = try OpusAudioDecoder().decodeToWav16k(url)
         defer { try? FileManager.default.removeItem(at: wav) }
@@ -30,9 +38,7 @@ final class OpusDecodeTests: XCTestCase {
     // imported Telegram Ogg/Opus (it used to `throw .noDecoderAvailable`, so `AudioStore.makePlayable` returned nil
     // and in-app playback was a silent no-op on iOS while macOS played the same import). Fixture-gated like above.
     func testRenderPlayableWavYieldsAPlayableRendition() throws {
-        guard let url = Bundle(for: Self.self).url(forResource: "sample", withExtension: "ogg") else {
-            throw XCTSkip("no local Ogg/Opus fixture bundled (gitignored) — skipping the playback-rendition proof")
-        }
+        let url = try oggFixture()
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent("parla-playable-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: dest) }
