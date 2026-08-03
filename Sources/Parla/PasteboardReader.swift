@@ -31,6 +31,6 @@ enum PasteboardReader {
 
     /// Keep only what Parla can transcribe (by extension; single source of truth — AppModel.audioExts).
     static func audioOnly(_ urls: [URL]) -> [URL] {
-        urls.filter { AppModel.audioExts.contains($0.pathExtension.lowercased()) }
+        urls.filter { AppModel.isTranscribable($0) }   // extension OR Ogg content (extension-less Telegram voice)
     }
 }

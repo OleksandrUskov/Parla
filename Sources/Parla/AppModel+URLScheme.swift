@@ -13,7 +13,7 @@ extension AppModel {
             let urls = (paths + dirs).map { URL(fileURLWithPath: $0) }.filter { u in
                 var isDir: ObjCBool = false
                 guard FileManager.default.fileExists(atPath: u.path, isDirectory: &isDir) else { return false }
-                return isDir.boolValue || Self.audioExts.contains(u.pathExtension.lowercased())
+                return isDir.boolValue || Self.isTranscribable(u)   // accepts extension-less Ogg (Telegram voice)
             }
             guard !urls.isEmpty else { return }
             quickModeRun = true            // toast feedback, no window assumed (like the hotkey path)

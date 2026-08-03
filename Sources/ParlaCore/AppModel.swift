@@ -385,11 +385,32 @@ public final class AppModel {
     /// decoder's AVAssetReader lane (Phase 2c: native in-process; was ffmpeg). Must remain a strict subset of
     /// `audioExts` (pinned by test): a format wrongly listed here would hard-fail instead of routing through the decoder.
     public nonisolated static let avDecodable: Set<String> = ["m4a", "mp3", "wav", "aac", "caf", "aiff", "aif"]
+
+    /// Placeholder extension the iOS Share Extension assigns when a shared item carries none — it can't link
+    /// ParlaCore (extension memory budget), so it can't sniff the content itself.
+    public nonisolated static let opaqueExtension = "dat"
+
+    /// Whether a file should be OFFERED to the transcription pipeline. A known audio extension qualifies; so does
+    /// a file with NO extension (or the share-inbox `.dat` placeholder) whose header sniffs as Ogg.
+    ///
+    /// Telegram routinely saves voice messages WITHOUT an extension, and the decoder already routes those by
+    /// content (`OggS` magic) — but every INTAKE filter used to reject them by name first, so an extension-less
+    /// voice note was silently ignored by the `parla://` verb, the clipboard/Services action, folder-watch, a
+    /// dropped folder, and the iOS share inbox (where it lands as `.dat` and would sit there forever). A direct
+    /// drag-drop of the file worked, which is why this stayed invisible. Anything with a REAL but unsupported
+    /// extension is still rejected by name (no sniffing `.txt`), so the guard stays tight.
+    public nonisolated static func isTranscribable(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        if audioExts.contains(ext) { return true }
+        guard ext.isEmpty || ext == opaqueExtension else { return false }
+        return OpusAudioDecoder.looksLikeOgg(url)
+    }
+
     public nonisolated static func audioFiles(in dir: URL) -> [URL] {
         let fm = FileManager.default
         guard let en = fm.enumerator(at: dir, includingPropertiesForKeys: nil) else { return [] }
         return en.compactMap { $0 as? URL }
-            .filter { audioExts.contains($0.pathExtension.lowercased()) }
+            .filter { isTranscribable($0) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 }

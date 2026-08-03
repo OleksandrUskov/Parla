@@ -146,7 +146,7 @@ extension AppModel {
                                      includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
                                      options: opts) else { return [] }
         return en.compactMap { $0 as? URL }
-            .filter { audioExts.contains($0.pathExtension.lowercased()) }
+            .filter { isTranscribable($0) }   // extension OR Ogg content (extension-less Telegram voice)
             .compactMap { url in
                 let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
                 guard let size = v?.fileSize, let mtime = v?.contentModificationDate else { return nil }

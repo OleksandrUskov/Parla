@@ -31,7 +31,9 @@ enum ShareInbox {
         let items = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil,
                                                                   options: [.skipsHiddenFiles])) ?? []
         return items
-            .filter { AppModel.audioExts.contains($0.pathExtension.lowercased()) }
+            // Extension OR Ogg content: the Share Extension can't sniff (it doesn't link ParlaCore), so an
+            // extension-less shared voice note lands here as `.dat` — without this it would sit in the inbox forever.
+            .filter { AppModel.isTranscribable($0) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 

@@ -524,6 +524,50 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(found.contains("drop.webm"))
     }
 
+    /// Intake filter: a known extension qualifies; an EXTENSION-LESS (or share-inbox `.dat`) file qualifies only
+    /// when its header sniffs as Ogg. A real-but-unsupported extension is still rejected by name (no sniffing
+    /// `.txt`/`.webm`). Pins the fix for silently-ignored extension-less Telegram voice notes.
+    func testIsTranscribableAcceptsExtensionlessOggOnly() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("parla-intake-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        func write(_ name: String, _ bytes: String) throws -> URL {
+            let u = dir.appendingPathComponent(name)
+            try Data(bytes.utf8).write(to: u)
+            return u
+        }
+        let ogg = "OggS\u{01}\u{00}\u{00}\u{00}"
+
+        // Known extensions → accepted on name alone (content irrelevant).
+        XCTAssertTrue(AppModel.isTranscribable(try write("a.m4a", "x")))
+        XCTAssertTrue(AppModel.isTranscribable(try write("b.OGG", "x")))
+        // Extension-less: accepted ONLY with the Ogg magic (the Telegram-voice case).
+        XCTAssertTrue(AppModel.isTranscribable(try write("voice_30-07-2026_20-26-47", ogg)))
+        XCTAssertFalse(AppModel.isTranscribable(try write("random-blob", "not audio at all")))
+        // Share-inbox placeholder extension: same content rule (an extension-less shared item lands as `.dat`).
+        XCTAssertTrue(AppModel.isTranscribable(try write("shared.dat", ogg)))
+        XCTAssertFalse(AppModel.isTranscribable(try write("other.dat", "junk")))
+        // A real but unsupported extension is rejected by NAME — never sniffed.
+        XCTAssertFalse(AppModel.isTranscribable(try write("notes.txt", ogg)))
+        XCTAssertFalse(AppModel.isTranscribable(try write("clip.webm", ogg)))
+        // Missing file → false, never a crash.
+        XCTAssertFalse(AppModel.isTranscribable(dir.appendingPathComponent("gone-\(UUID().uuidString)")))
+    }
+
+    /// A dropped/watched FOLDER must pick up an extension-less Ogg voice note too (same intake rule).
+    func testAudioFilesPicksUpExtensionlessOgg() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("parla-folder-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        try Data("OggS\u{01}\u{00}\u{00}\u{00}".utf8).write(to: dir.appendingPathComponent("voice_no_ext"))
+        try Data("x".utf8).write(to: dir.appendingPathComponent("note.txt"))
+        let found = Set(AppModel.audioFiles(in: dir).map(\.lastPathComponent))
+        XCTAssertTrue(found.contains("voice_no_ext"))
+        XCTAssertFalse(found.contains("note.txt"))
+    }
+
     func testAudioFilesEmptyAndMissing() throws {
         let fm = FileManager.default
         let empty = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
