@@ -223,6 +223,17 @@ extension AppModel {
     private func transcribeOne(url: URL, model: String, batch: BatchProgress? = nil) async throws -> EngineResult {
         phase = .preparing(url.lastPathComponent, batch: batch)
 
+        // Decide the long-audio path from the SOURCE, before spending anything on it. This used to decode the
+        // whole file to one big WAV and THEN re-read that WAV to cut chunks: two full decode passes, and at peak
+        // the intermediate WAV plus every chunk on disk simultaneously — gigabytes for a multi-hour recording,
+        // on exactly the feature Pro is sold for. The chunker reads the original container perfectly well, so
+        // the intermediate never needed to exist. `mediaDuration` is the same probe the free-tier length gate
+        // uses, so it already measures Ogg/Opus (which AVFoundation cannot) without decoding.
+        if let sourceDuration = await mediaDuration(url),
+           AudioChunker.shouldChunk(durationSec: sourceDuration, chunkingAvailable: decoder.isChunkingAvailable) {
+            return try await transcribeChunked(source: url, model: model, audioDuration: sourceDuration)
+        }
+
         // AVFoundation opens these containers directly (WhisperKit loads via AVAudioFile + resamples to
         // 16 kHz itself) → hand the engine the ORIGINAL file and skip decode entirely.
         // Everything else (Ogg/Opus, flac, mp4/mov/m4v, 3gp) goes through the in-process native decoder
@@ -248,10 +259,9 @@ extension AppModel {
         }
         defer { if let tempWav { try? FileManager.default.removeItem(at: tempWav) } }
 
-        // A long recording → chunked pipeline: bounded memory + real per-chunk progress, EVEN inside a
-        // folder batch (a long file mustn't bypass chunking just because it was dropped with others).
-        // Splitting needs a chunking-capable decoder (native in-process now); unavailable / unknown-duration → single-pass.
-        // The duration probe opens the file via AVAudioFile → run it off the main actor.
+        // Fallback for a source whose length the probe above could not determine: measure the DECODED audio and
+        // chunk from there. This is the old path, kept because "unknown duration" must not silently lose chunking —
+        // it just no longer runs for the ordinary case, which is what removes the double decode.
         let dur = await Task.detached(priority: .userInitiated) { AudioDuration.seconds(ofFileAt: decodePath) }.value
         if let dur, AudioChunker.shouldChunk(durationSec: dur, chunkingAvailable: decoder.isChunkingAvailable) {
             return try await transcribeChunked(source: URL(fileURLWithPath: decodePath),
