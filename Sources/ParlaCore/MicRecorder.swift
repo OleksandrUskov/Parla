@@ -196,6 +196,28 @@ private func installMicTap(on input: AVAudioInputNode, format: AVAudioFormat, si
     }
 }
 
+// REAL-TIME BUDGET — MEASURED, so this doesn't get re-litigated from first principles.
+//
+// A review flagged this callback as real-time-unsafe: it allocates, takes a lock the main actor also takes, and
+// writes to a file — all true, and all textbook hazards. The proposed fix was a lock-free ring buffer plus a
+// consumer thread. Before rewriting a path that works and that only a live microphone can verify, each step was
+// timed against the actual deadline (4096 frames at 48 kHz = 85 ms), in a RELEASE build, worst case not average:
+//
+//   allocate the output buffer   max  70 µs   0.08%      convert to 16 kHz   max  89 µs   0.10%
+//   allocate the lock            max  19 µs   0.02%      AVAudioFile.write   max  96 µs   0.11%
+//   RMS for the VAD              max   1 µs   0.00%      Int16 -> Float copy max  21 µs   0.02%
+//   append to the live buffer    max 275 µs   0.32%   (while it grew to 683k samples, so incl. reallocation)
+//
+// Total worst case ~570 µs — under 0.7% of the budget. The file write, which sounds like the scary one, is a
+// buffered memcpy, not a syscall per callback. The lock is held for O(new samples) on BOTH sides (the consumer
+// reads `buf[cursor...]`, not the whole buffer), so there is no unbounded contention either.
+//
+// Worth knowing: in a DEBUG build the same RMS loop measures ~900 µs, because the per-sample Swift loops are
+// unoptimised there. Measuring the shipping configuration is what changed the answer.
+//
+// So: NOT rewritten. The one real cost here is memory, not time — `liveBuffer` grows for the whole dictation
+// (~4 MB/min at 16 kHz mono Float), which is fine on a Mac and worth revisiting for a very long iOS dictation.
+//
 /// Real-time WAV sink: resamples each tap buffer to the target format and appends it to an `AVAudioFile`.
 /// NOT `Sendable` — created on the main actor, then transferred into the tap block and touched ONLY on the
 /// audio thread (never concurrently). Holds ONE `AVAudioConverter` for the whole session so sample-rate
