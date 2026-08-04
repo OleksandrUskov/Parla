@@ -1,4 +1,13 @@
-import ActivityKit
+// @preconcurrency: ActivityKit is not Sendable-audited — its `.swiftinterface` gives `Activity<Attributes>` no
+// Sendable conformance at all, while `update`/`end` are nonisolated `async`. So handing our activity to them from
+// this @MainActor type reads as sending a non-Sendable value out of the actor's region, and a newer compiler than
+// the one this was written on rejects it ("Sending 'activity' risks causing data races" — caught by CI on Xcode
+// 26.6, invisible on 26.0). This is the same situation as WhisperKit and is silenced the same narrow way.
+//
+// Audited rather than waved through: the activity is created on the main actor and touched ONLY from Tasks that
+// inherit main-actor isolation, so there is no second thread to race with. ActivityKit is documented as callable
+// from any context. What is suppressed is the SDK's missing annotation, not a real concurrency hazard here.
+@preconcurrency import ActivityKit
 import ParlaCore
 
 /// Drives the transcription Live Activity from the app. Best-effort + additive: EVERY ActivityKit
