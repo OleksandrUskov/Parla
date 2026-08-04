@@ -6,7 +6,7 @@ import AVFoundation
 /// checked nothing, so the Cancel button was a lie for the whole decode phase — on a long file, minutes of a
 /// button that does nothing. The old ffmpeg subprocess had a 1800 s watchdog; nothing replaced it when decoding
 /// moved in-process, so a wedged read had nothing to stop it either.
-final class DecodeControlTests: XCTestCase {
+final class DecodeControlTests: ParlaTestCase {
 
     func testCancelIsObservedByTheNextCheck() throws {
         let control = DecodeControl()
@@ -125,7 +125,7 @@ final class DecodeControlTests: XCTestCase {
 /// Every decode failure used to arrive as ONE hardcoded English sentence, for all fourteen throw sites: a cancel
 /// and a corrupt file were indistinguishable, the message blamed "this platform" when the file was the problem,
 /// and it was never translated — in an app whose audience reads Russian and Ukrainian.
-final class DecodeErrorTaxonomyTests: XCTestCase {
+final class DecodeErrorTaxonomyTests: ParlaTestCase {
 
     /// Distinct cases must produce distinct messages. A taxonomy that all reads the same is not a taxonomy.
     func testEachCaseHasItsOwnMessage() {

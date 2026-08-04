@@ -3,7 +3,7 @@ import XCTest
 
 /// The wrong-language nudge. The thresholds here are not taste — they come from running detection over real
 /// notes and a known-language synthetic set, so the tests use those measured values as their fixtures.
-final class LanguageMismatchTests: XCTestCase {
+final class LanguageMismatchTests: ParlaTestCase {
 
     /// THE case this feature exists for, with its real numbers: Russian speech transcribed with Ukrainian
     /// pinned. Measured 49.85% word errors versus 5.57%, and the detector called it Russian at 0.999.

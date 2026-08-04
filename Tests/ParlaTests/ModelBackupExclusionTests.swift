@@ -4,7 +4,7 @@ import XCTest
 /// Pins the rule that large re-downloadable model trees stay OUT of the user's backup. It used to be implemented
 /// once, inline, for the WhisperKit tree only — so the ~2.3 GB MLX/Qwen model and the MLX embedding model, both
 /// added later, were backed up in full (App Store 2.5 on iOS, Time Machine on macOS).
-final class ModelBackupExclusionTests: XCTestCase {
+final class ModelBackupExclusionTests: ParlaTestCase {
 
     private func tempDir() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("modelstore-\(UUID().uuidString)", isDirectory: true)
@@ -55,11 +55,23 @@ final class ModelBackupExclusionTests: XCTestCase {
     #if os(macOS)
     /// Both MLX stores must live under Application Support — one deletable tree with one "disk used" number — and
     /// never in Documents, where the user sees (and syncs) them.
+    ///
+    /// Asserts the PRODUCTION default rather than `downloadBase`, which the test base class redirects to a temp
+    /// dir on purpose. Checking the redirected value would only prove the isolation works.
     func testMLXStoresLiveUnderApplicationSupport() {
-        for base in [MLXModelSpec.downloadBase, EmbeddingModelSpec.downloadBase] {
+        for base in [MLXModelSpec.defaultDownloadBase(), EmbeddingModelSpec.defaultDownloadBase()] {
             XCTAssertTrue(base.path.contains("Application Support"), "unexpected model base: \(base.path)")
             XCTAssertFalse(base.path.contains("/Documents/"), "model weights must not sit in Documents")
         }
+    }
+
+    /// …and the isolation itself is load-bearing enough to pin: a test run must never see the user's real model
+    /// cache, because `retrievalEmbedder` switches to the MLX embedder when it does — which pulls the MLX runtime
+    /// into a process that has no Metal library and aborts it from a background thread.
+    func testTestRunsNeverSeeTheRealModelCache() {
+        XCTAssertFalse(MLXModelSpec.downloadBase.path.contains("Application Support"),
+                       "the test base class must redirect the model cache")
+        XCTAssertFalse(EmbeddingModelSpec.isDownloaded(), "…so no model is ever 'downloaded' during a test run")
     }
     #endif
 }

@@ -74,7 +74,9 @@ public struct EmbeddingModelSpec: Sendable {
     /// HubApi download base under Parla's Application Support. A settable `var` so tests redirect it to a temp dir
     /// (mirror of `MLXModelSpec.downloadBase` / `HistoryStore.fileURL`) — else `isDownloaded()` reads the real model.
     nonisolated(unsafe) static var downloadBase: URL = defaultDownloadBase()
-    private static func defaultDownloadBase() -> URL {
+    /// `internal` (not private) so tests can assert the PRODUCTION location even while
+    /// `downloadBase` itself is redirected to a temp dir for isolation.
+    static func defaultDownloadBase() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         return support.appendingPathComponent("Parla/embed", isDirectory: true)

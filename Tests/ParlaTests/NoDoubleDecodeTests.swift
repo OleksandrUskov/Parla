@@ -12,7 +12,7 @@ import XCTest
 /// as a fire-and-forget task, and the DEFAULT embedder picks the MLX one whenever the download-tier model happens
 /// to be present on the machine — which then reaches for a Metal library `swift test` does not build, and aborts
 /// the whole test process from a background task, at a different point every run.
-final class NoDoubleDecodeTests: XCTestCase {
+final class NoDoubleDecodeTests: ParlaTestCase {
 
     /// Counts what the pipeline asks of the decoder. Returns real (tiny) WAVs so the flow can continue.
     private final class CountingDecoder: AudioDecoding, @unchecked Sendable {

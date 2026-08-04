@@ -6,7 +6,7 @@ import AVFoundation
 ///
 /// Both fixtures are synthesised tones committed to the repo — no voice, a few KB each — so these run on every
 /// machine and in CI rather than depending on something a developer happens to have locally.
-final class DecodeFormatCoverageTests: XCTestCase {
+final class DecodeFormatCoverageTests: ParlaTestCase {
 
     private func fixture(_ name: String, _ ext: String) throws -> URL {
         try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures"),
@@ -79,7 +79,7 @@ final class DecodeFormatCoverageTests: XCTestCase {
 /// The playback rendition. `renderPlayableM4a` threw unconditionally, so every note fell through to a PCM WAV —
 /// about 11.5 MB per minute for an Opus voice note against AAC's fraction of that. A 45-minute recording came to
 /// roughly 520 MB against a 500 MB cache cap, i.e. one long note could evict the whole cache including itself.
-final class PlaybackRenditionTests: XCTestCase {
+final class PlaybackRenditionTests: ParlaTestCase {
 
     private func fixture(_ name: String, _ ext: String) throws -> URL {
         try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures"))

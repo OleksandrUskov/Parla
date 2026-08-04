@@ -7,7 +7,7 @@ import XCTest
 /// Swedish, Turkish — was reported "your language isn't supported" to people whose model handled it fine.
 ///
 /// These run on any machine: the decision is a pure function, so no Apple Intelligence, no macOS 26, no device.
-final class FoundationModelsLanguageGateTests: XCTestCase {
+final class FoundationModelsLanguageGateTests: ParlaTestCase {
 
     /// THE regression. "da" is deliberately NOT in `knownSupportedLanguages`; if the static list is ever
     /// consulted as a gate again, this goes red.

@@ -34,7 +34,9 @@ public enum MLXModelSpec {
     /// go non-deterministic (mirrors `HistoryStore.fileURL`). `nonisolated(unsafe)`: a test seam, set only in `setUp`.
     nonisolated(unsafe) static var downloadBase: URL = defaultDownloadBase()
 
-    private static func defaultDownloadBase() -> URL {
+    /// `internal` (not private) so tests can assert the PRODUCTION location even while
+    /// `downloadBase` itself is redirected to a temp dir for isolation.
+    static func defaultDownloadBase() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         return support.appendingPathComponent("Parla/mlx", isDirectory: true)

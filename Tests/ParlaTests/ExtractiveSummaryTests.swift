@@ -5,7 +5,7 @@ import XCTest
 /// the free tier's quality. These pin three fixes to it: coverage of the whole note instead of its opening,
 /// a length that scales with the note, and a summary that says three different things instead of one thing
 /// three times.
-final class ExtractiveSummaryTests: XCTestCase {
+final class ExtractiveSummaryTests: ParlaTestCase {
 
     // MARK: spanningSample — coverage of the WHOLE note
 
