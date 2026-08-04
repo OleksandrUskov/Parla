@@ -289,7 +289,22 @@ extension AppModel {
         let chunks = try await Task.detached(priority: .userInitiated) {
             try decoder.splitIntoChunks(source, chunkLength: AudioChunker.chunkLengthSec, control: control)
         }.value
-        let chunkDir = chunks.first?.deletingLastPathComponent()
+        // Delete the chunk DIRECTORY, never a directory that merely contains chunks. This line trusted the
+        // decoder's "chunks live in their own temp dir" contract absolutely, and recursive deletion is not
+        // something to trust: a decoder that returned a chunk straight from the shared temp directory made this
+        // delete /var/folders/<user>/T itself, taking every other process's files with it. Proven with a
+        // sentinel file. The guard is deliberately about the real hazard — never remove the temp ROOT — rather
+        // than a naming convention, which would only move the assumption somewhere else.
+        let tempRoot = FileManager.default.temporaryDirectory.standardizedFileURL
+        let parent = chunks.first?.deletingLastPathComponent().standardizedFileURL
+        let chunkDir: URL? = {
+            guard let parent else { return nil }
+            guard parent.path != tempRoot.path, parent.path.hasPrefix(tempRoot.path) else {
+                assertionFailure("refusing to delete \(parent.path): chunks must live in their own temp dir")
+                return nil
+            }
+            return parent
+        }()
         defer { if let chunkDir { try? FileManager.default.removeItem(at: chunkDir) } }
 
         phase = .loadingModel

@@ -26,13 +26,21 @@ final class NoDoubleDecodeTests: ParlaTestCase {
         }
         func splitIntoChunks(_ src: URL, chunkLength: Double) throws -> [URL] {
             splits += 1
-            return [try Self.silentWav(seconds: 1)]
+            // A DEDICATED directory, because that is the decoder's contract and the caller relies on it:
+            // `transcribeChunked` cleans up with `removeItem(at: chunks.first!.deletingLastPathComponent())`.
+            // Returning a chunk from the shared temp directory made that line delete /var/folders/<user>/T
+            // itself — the test passed green while destroying every other process's temp files, locally and on
+            // the CI runner. Verified with a sentinel file before and after.
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("dd-chunks-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return [try Self.silentWav(seconds: 1, in: dir)]
         }
         func renderPlayableM4a(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
         func renderPlayableWav(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
 
-        static func silentWav(seconds: Double) throws -> URL {
-            let url = FileManager.default.temporaryDirectory
+        static func silentWav(seconds: Double, in dir: URL? = nil) throws -> URL {
+            let url = (dir ?? FileManager.default.temporaryDirectory)
                 .appendingPathComponent("dd-\(UUID().uuidString).wav")
             let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)!
             let file = try AVAudioFile(forWriting: url, settings: format.settings)
@@ -136,4 +144,47 @@ private struct FakeEngineForDecode: TranscribingEngine {
         EngineResult(text: "ok", language: "ru", segments: [], duration: 1)
     }
     func deleteModel(_ name: String) async throws {}
+}
+
+/// The chunk-cleanup contract, pinned. `transcribeChunked` removes the directory containing the first chunk —
+/// which is safe only while every decoder puts chunks in their OWN temp dir. A test decoder that returned a chunk
+/// straight from the shared temp directory made that line recursively delete `/var/folders/<user>/T`: the test
+/// passed green while destroying every other process's temp files, on this machine and on the CI runner.
+final class ChunkCleanupSafetyTests: ParlaTestCase {
+
+    /// The real decoder must never hand back chunks whose parent is the temp root.
+    func testRealDecoderPutsChunksInTheirOwnDirectory() throws {
+        let src = try XCTUnwrap(Bundle.module.url(forResource: "tone", withExtension: "ogg", subdirectory: "Fixtures"))
+        let chunks = try OpusAudioDecoder().splitIntoChunks(src, chunkLength: 1.0)
+        let dir = try XCTUnwrap(chunks.first?.deletingLastPathComponent()).standardizedFileURL
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let tempRoot = FileManager.default.temporaryDirectory.standardizedFileURL
+        XCTAssertNotEqual(dir.path, tempRoot.path,
+                          "chunks must NOT sit directly in the temp root — the caller deletes their parent")
+        XCTAssertTrue(dir.path.hasPrefix(tempRoot.path))
+        XCTAssertEqual(Set(try FileManager.default.contentsOfDirectory(atPath: dir.path)).count, chunks.count,
+                       "the chunk dir must contain the chunks and nothing else, since it gets deleted wholesale")
+    }
+
+    /// And the side that actually protects the user: a neighbouring file in the shared temp directory survives a
+    /// full chunked transcription. This is the exact check that caught the bug.
+    @MainActor func testAChunkedRunLeavesTheSharedTempDirectoryAlone() async {
+        let sentinel = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sentinel-\(UUID().uuidString).txt")
+        try? Data("do not delete".utf8).write(to: sentinel)
+        defer { try? FileManager.default.removeItem(at: sentinel) }
+
+        let m = AppModel(engine: FakeEngineForDecode(), ai: NoopAIService(), embedder: NoopEmbedder())
+        m.decoder = OpusAudioDecoder()
+        m.isProUser = { true }
+        m.mediaDuration = { _ in 45 * 60 }
+
+        let src = Bundle.module.url(forResource: "tone", withExtension: "ogg", subdirectory: "Fixtures")!
+        m.handleDrop(urls: [src])
+        await m.currentTranscriptionTask?.value
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel.path),
+                      "a transcription must never delete unrelated files from the shared temp directory")
+    }
 }
