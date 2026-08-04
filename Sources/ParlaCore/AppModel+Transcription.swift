@@ -322,13 +322,20 @@ extension AppModel {
         var perChunkSegments: [[Segment]] = []
         var texts: [String] = []
         var langs: [String] = []
+        // What the model HEARD, asked ONCE — on the first chunk. Before this, the wrong-language nudge was dead
+        // for every chunked file (the hand-built EngineResult below simply omitted `heard`), which meant it never
+        // fired on precisely the long recordings where a wrong pin is most expensive — while every chunk still
+        // paid for a detection pass whose result was thrown away.
+        var heard: HeardLanguage? = nil
         for (k, chunk) in chunks.enumerated() {
             if Task.isCancelled { break }   // cancelled → stop decoding more chunks (the partial is discarded upstream)
             phase = .transcribing(Lf("chunk.label", k + 1, total),
                                   batch: BatchProgress(index: k + 1, total: total, done: k))
             do {
                 let r = try await engine.transcribe(wavPath: chunk.path, language: lang,
-                                                    model: model, translate: translateToEnglish)
+                                                    model: model, translate: translateToEnglish,
+                                                    detectHeardLanguage: k == 0)
+                if k == 0 { heard = r.heard }
                 perChunkSegments.append(r.segments)
                 texts.append(r.text)
                 langs.append(r.language)
@@ -350,7 +357,7 @@ extension AppModel {
         // not the bare requested value — otherwise long Auto-mode files persist an empty language.
         return EngineResult(text: fullText,
                             language: AudioChunker.resolveLanguage(chunkLanguages: langs, requested: lang),
-                            segments: stitched, duration: audioDuration)
+                            segments: stitched, duration: audioDuration, heard: heard)
     }
 
     public func progressHandler() -> @Sendable (ModelLoad) -> Void {   // internal: also reused by +Dictation
@@ -439,8 +446,15 @@ extension AppModel {
                 phase = .idle   // transcript is ready → clear "busy" BEFORE the background semantic recompute
                 await refreshSemanticIndex()   // re-embed + re-lemmatize + re-insight from the new text (inline → test-safe)
             } catch {
-                let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                phase = .failed(Lf("error.retranscribe.failed", msg))
+                // A cancel is not a failure. Pressing Cancel during a re-transcribe used to paint a red
+                // «Не удалось перераспознать: Отменено.» — telling the user something broke when they are the one
+                // who stopped it. Only reachable now that Cancel actually reaches the decode.
+                if Task.isCancelled || (error as? AudioDecodingError) == .cancelled {
+                    phase = .idle
+                } else {
+                    let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    phase = .failed(Lf("error.retranscribe.failed", msg))
+                }
             }
         }
         refreshDownloaded()   // the target model may have just been downloaded (pump happens in the retranscribe wrapper)

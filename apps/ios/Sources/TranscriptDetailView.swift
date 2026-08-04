@@ -31,7 +31,7 @@ struct TranscriptDetailView: View {
                 // TranscriptCard reading stack, 1:1, via the same shared Core views.
                 VStack(alignment: .leading, spacing: 12) {
                     // Same nudge as macOS, same Core view — parity by construction, not by duplication.
-                    if model.languageSuggestion?.id == item.id, let s = model.languageSuggestion {
+                    if let s = model.activeLanguageSuggestion, s.id == item.id {
                         LanguageNudgeView(suggestion: s)
                     }
                     InsightsView(item: item)

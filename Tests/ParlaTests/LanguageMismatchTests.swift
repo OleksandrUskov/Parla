@@ -61,3 +61,102 @@ final class LanguageMismatchTests: ParlaTestCase {
         XCTAssertEqual(s?.detected, "ru")
     }
 }
+
+/// The nudge's LIFETIME, which the adversarial review found to be the dangerous part — not the maths.
+/// A raw `languageSuggestion` is a global slot: it survived selecting another note (so on macOS the strip floated
+/// above whatever was open and its button re-transcribed a DIFFERENT note, wiping that note's edits) and it
+/// survived deleting the note it was about (a permanent strip with a dead button).
+@MainActor
+final class LanguageSuggestionLifetimeTests: ParlaTestCase {
+
+    private func model(with items: [TranscriptItem]) -> AppModel {
+        let m = AppModel(engine: NoopEngineForNudge(), ai: NoopAIService(), embedder: NoopEmbedder())
+        m.history = items
+        m.isProUser = { true }
+        return m
+    }
+
+    private func note(_ text: String = "текст", dur: Double = 30) -> TranscriptItem {
+        TranscriptItem(sourceName: "n.ogg", language: "uk", durationSec: dur,
+                       model: "openai_whisper-tiny", text: text, segments: [])
+    }
+
+    func testSuggestionShowsOnlyForTheNoteItIsAbout() {
+        let a = note(), b = note()
+        let m = model(with: [a, b])
+        m.selection = a.id
+        m.languageSuggestion = LanguageSuggestion(id: a.id, pinned: "uk", detected: "ru", confidence: 0.99)
+        XCTAssertNotNil(m.activeLanguageSuggestion, "shown while its own note is open")
+
+        m.selection = b.id
+        XCTAssertNil(m.activeLanguageSuggestion,
+                     "must NOT float above another note — its button re-transcribes the note it was raised for")
+    }
+
+    func testSuggestionDisappearsWithTheDeletedNote() {
+        let a = note()
+        let m = model(with: [a])
+        m.selection = a.id
+        m.languageSuggestion = LanguageSuggestion(id: a.id, pinned: "uk", detected: "ru", confidence: 0.99)
+        XCTAssertNotNil(m.activeLanguageSuggestion)
+
+        m.history = []
+        XCTAssertNil(m.activeLanguageSuggestion, "a strip about a note that no longer exists has a dead button")
+    }
+
+    /// The accept path used to commit two irreversible things — the app-wide persisted language, and consuming
+    /// the offer — BEFORE calling `retranscribe`, which is free to decline. Mid-batch that re-pinned the language
+    /// for files still to be transcribed, while the note the nudge was about was never re-run.
+    func testAcceptingWhileBusyChangesNothingAndKeepsTheOffer() {
+        let a = note()
+        let m = model(with: [a])
+        m.selection = a.id
+        m.language = "uk"
+        m.languageSuggestion = LanguageSuggestion(id: a.id, pinned: "uk", detected: "ru", confidence: 0.99)
+        m.recordingStartedAt = Date()                     // something IS running → retranscribe would decline
+        XCTAssertTrue(m.isBusy)
+        XCTAssertFalse(m.canApplyLanguageSuggestion)
+
+        m.applyLanguageSuggestion()
+        XCTAssertEqual(m.language, "uk", "the speech language must NOT be re-pinned when nothing will be re-run")
+        XCTAssertNotNil(m.activeLanguageSuggestion, "…and the offer must survive so it can be accepted later")
+    }
+
+    /// A free user over the length cap: the offer must lead to the paywall, not to a silently re-pinned language
+    /// and a vanished suggestion.
+    func testAcceptingAGatedNoteShowsThePaywallAndKeepsEverythingElseIntact() {
+        let a = note(dur: 20 * 60)
+        let m = model(with: [a])
+        m.selection = a.id
+        m.language = "uk"
+        m.isProUser = { false }
+        m.languageSuggestion = LanguageSuggestion(id: a.id, pinned: "uk", detected: "ru", confidence: 0.99)
+
+        m.applyLanguageSuggestion()
+        XCTAssertEqual(m.language, "uk", "language must not flip for a re-run that cannot happen")
+        XCTAssertNotNil(m.activeLanguageSuggestion)
+        XCTAssertNotNil(m.paywallReason, "the reason it declined should be visible, not silent")
+    }
+
+    /// Language names go into sentences, so they must arrive in the form the sentence expects — «на русском»,
+    /// not «на Русский». Capitalising them was wrong in both Slavic UI languages.
+    func testLanguageNamesAreNotCapitalised() {
+        let m = model(with: [])
+        m.uiLanguage = .ru
+        XCTAssertEqual(m.languageDisplayName("ru"), m.languageDisplayName("ru").lowercased(),
+                       "Slavic language names are lowercase mid-sentence")
+        m.uiLanguage = .uk
+        XCTAssertEqual(m.languageDisplayName("uk"), m.languageDisplayName("uk").lowercased())
+    }
+}
+
+private struct NoopEngineForNudge: TranscribingEngine {
+    func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {}
+    func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult {
+        EngineResult(text: "", language: "", segments: [], duration: 0)
+    }
+    func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult {
+        EngineResult(text: "", language: "", segments: [], duration: 0)
+    }
+    func deleteModel(_ name: String) async throws {}
+}

@@ -346,7 +346,7 @@
 
 /* Wrong-language nudge: the model heard a different language than the user pinned. */
 "language.nudge.title"              = "This recording sounds like %@";
-"language.nudge.body"               = "It was transcribed as %@, which can make the text far less accurate.";
+"language.nudge.body"               = "Transcribed as %@, which can make the text far less accurate.";
 "language.nudge.switch"             = "Redo in %@";
 "language.nudge.dismiss"            = "Dismiss";
 

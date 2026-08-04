@@ -42,6 +42,11 @@ public enum ModelLoad: Sendable, Equatable {
 public protocol TranscribingEngine: Sendable {
     func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws
     func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult
+    /// Same, but says whether to ALSO ask the model what language it heard. Opt-in because that costs a second
+    /// audio load plus a full encoder pass: worth it once per file, wasteful once per chunk. Default forwards to
+    /// the plain version, so test doubles and other conformances are untouched.
+    func transcribe(wavPath: String, language: String?, model: String, translate: Bool,
+                    detectHeardLanguage: Bool) async throws -> EngineResult
     /// Streaming seam: decode an in-memory 16 kHz mono Float buffer — no file round-trip.
     /// The caller owns windowing + absolute-time bookkeeping; returned segment times are buffer-relative.
     func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult
@@ -54,6 +59,11 @@ public protocol TranscribingEngine: Sendable {
 extension TranscribingEngine {
     /// Default no-op: an engine that holds nothing has nothing to release (test doubles, future backends).
     public func unload() async {}
+
+    public func transcribe(wavPath: String, language: String?, model: String, translate: Bool,
+                           detectHeardLanguage: Bool) async throws -> EngineResult {
+        try await transcribe(wavPath: wavPath, language: language, model: model, translate: translate)
+    }
 }
 
 /// Thin wrapper around WhisperKit. Keeps the loaded model and reuses it.
@@ -195,6 +205,12 @@ public actor TranscriptionEngine {
     }
 
     public func transcribe(wavPath: String, language: String?, model: String, translate: Bool = false) async throws -> EngineResult {
+        try await transcribe(wavPath: wavPath, language: language, model: model,
+                             translate: translate, detectHeardLanguage: true)
+    }
+
+    public func transcribe(wavPath: String, language: String?, model: String,
+                           translate: Bool, detectHeardLanguage: Bool) async throws -> EngineResult {
         if loadedModel != model || whisperKit == nil {
             try await ensureLoaded(model: model, progress: { _ in })
         }
@@ -214,7 +230,7 @@ public actor TranscriptionEngine {
         // (`detectLanguage: language == nil`), so without this the app can never notice a wrong pin. One encoder
         // pass over the first 30 s; negligible next to the decode that just ran.
         var heard: HeardLanguage? = nil
-        if language != nil, let d = try? await kit.detectLanguage(audioPath: wavPath) {
+        if detectHeardLanguage, language != nil, let d = try? await kit.detectLanguage(audioPath: wavPath) {
             // `langProbs` are LOG probabilities — exponentiate to get something a threshold can be reasoned about.
             heard = HeardLanguage(language: d.language, confidence: Foundation.exp(Double(d.langProbs[d.language] ?? -.infinity)))
         }

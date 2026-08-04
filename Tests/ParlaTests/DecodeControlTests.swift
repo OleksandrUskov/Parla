@@ -50,7 +50,13 @@ final class DecodeControlTests: ParlaTestCase {
     }
 
     /// Cancellation crosses threads: the flag is set on the main actor (the button) and read wherever the decode
-    /// happens to run. This would trip ThreadSanitizer if the lock were missing.
+    /// happens to run.
+    ///
+    /// It does NOT prove the lock is needed, and the comment here used to claim it did: `async` + `wait` creates a
+    /// happens-before edge, and ThreadSanitizer is happens-before based, so an unlocked `var` would look just as
+    /// clean. What this pins is the observable contract — a cancel from another thread is seen — not the memory
+    /// model. Genuinely proving the lock would need concurrent unsynchronised access, which is not what the
+    /// production callers do.
     func testCancelFromAnotherThreadIsSeen() {
         let control = DecodeControl()
         let done = expectation(description: "cancelled off-thread")
@@ -67,17 +73,23 @@ final class DecodeControlTests: ParlaTestCase {
         let src = try makeSineWav(seconds: 3)
         defer { try? FileManager.default.removeItem(at: src) }
 
+        // Count the temp WAVs before and after: `decodeToWav16k` picks its own UUID path and never returns it on
+        // the throwing path, so the earlier version of this test asserted the no-partial-file guarantee inside an
+        // `if let` that could never execute. Comparing the directory is the only way to actually see it.
+        let temp = FileManager.default.temporaryDirectory
+        func decodeArtifacts() -> Set<String> {
+            Set(((try? FileManager.default.contentsOfDirectory(atPath: temp.path)) ?? [])
+                .filter { $0.hasPrefix("parla-decode-") })
+        }
+        let before = decodeArtifacts()
+
         let control = DecodeControl()
         control.cancel()
-        var produced: URL?
-        XCTAssertThrowsError(try { produced = try OpusAudioDecoder().decodeToWav16k(src, control: control) }()) { error in
+        XCTAssertThrowsError(try OpusAudioDecoder().decodeToWav16k(src, control: control)) { error in
             XCTAssertEqual(error as? AudioDecodingError, .cancelled)
         }
-        if let produced {
-            XCTAssertFalse(FileManager.default.fileExists(atPath: produced.path),
-                           "a cancelled decode must not leave a partial WAV that looks decoded")
-            try? FileManager.default.removeItem(at: produced)
-        }
+        XCTAssertEqual(decodeArtifacts().subtracting(before), [],
+                       "a cancelled decode must leave no partial WAV behind that could pass for a decoded file")
     }
 
     /// The watchdog reaches the real decoder too, and reports the wedge as a timeout rather than a cancel.

@@ -82,18 +82,40 @@ final class ExtractiveSummaryTests: ParlaTestCase {
         XCTAssertEqual(selection.summary.count, SemanticIndex.adaptiveSummaryCount(sentenceCount: 25))
     }
 
-    /// Mean-centering is what makes the ranking discriminate at all: `NLContextualEmbedding` vectors are
-    /// anisotropic, so every raw pairwise cosine crowds together. Simulated here with a large shared
-    /// background direction — without centering the topical signal is swamped and the title is arbitrary.
-    func testCenteringRecoversTheSignalUnderAStrongSharedDirection() throws {
-        let background = 12.0
-        // One sentence sits with the majority topic; the last is off on its own. With a huge shared component
-        // every raw cosine is ~1.0, so ranking can only work if the shared direction is removed first.
-        var vectors: [[Double]] = (0..<6).map { _ in [background + 1, background, background] }
-        vectors.append([background, background, background + 1])   // the outlier
+    /// Mean-centering, pinned so that removing it turns this RED.
+    ///
+    /// The previous version of this test passed with centering reverted — its fixture was too easy, so it proved
+    /// nothing. `NLContextualEmbedding` is anisotropic: every vector carries a large shared direction. The
+    /// sentence CLOSEST to that shared direction is the blandest one, and on RAW cosines it looks most similar to
+    /// everything, so TextRank crowns it. Centering subtracts the shared direction, and the bland sentence — now
+    /// nearly the zero vector — correctly falls to the bottom.
+    func testCenteringStopsTheBlandestSentenceFromWinningTheTitle() throws {
+        let shared = 10.0
+        var vectors: [[Double]] = []
+        for _ in 0..<3 { vectors.append([shared + 1, shared, shared]) }   // 0,1,2 — the dominant topic
+        for _ in 0..<2 { vectors.append([shared, shared + 1, shared]) }   // 3,4   — a second topic
+        let filler = vectors.count
+        vectors.append([shared, shared, shared])                          // 5 — pure background, says nothing
 
         let selection = try XCTUnwrap(SemanticIndex.extractiveSelection(vectors, summaryCount: 1))
-        XCTAssertNotEqual(selection.title, vectors.count - 1,
-                          "the title must come from the note's dominant topic, not the lone outlier")
+        XCTAssertNotEqual(selection.title, filler,
+                          "the blandest sentence wins on raw cosines — centering is what stops it")
+    }
+
+    /// MMR, pinned so that reverting to top-k centrality turns this RED.
+    ///
+    /// The previous fixture went red only when BOTH fixes were reverted, so neither was actually pinned. With a
+    /// clearly dominant cluster, ranking by centrality alone fills the whole summary from it — which is the
+    /// "same thing three times" this change exists to prevent.
+    func testSummaryReachesOutsideTheDominantClusterEvenWhenItIsLarge() throws {
+        var vectors: [[Double]] = []
+        for i in 0..<6 { vectors.append([1, Double(i) * 0.01, 0]) }   // 0...5 — one big, tight topic
+        vectors.append([0, 1, 0])                                     // 6 — a different topic
+        vectors.append([0, 0.98, 0.1])                                // 7 — near it
+
+        let selection = try XCTUnwrap(SemanticIndex.extractiveSelection(vectors, summaryCount: 3))
+        XCTAssertEqual(selection.summary.count, 3)
+        XCTAssertTrue(selection.summary.contains { $0 >= 6 },
+                      "a 3-sentence summary must not be three sentences from one tight cluster — got \(selection.summary)")
     }
 }

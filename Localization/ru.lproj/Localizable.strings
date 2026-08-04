@@ -314,7 +314,7 @@
 "paywall.feature.export"          = "Экспорт субтитров";
 "paywall.feature.export.detail"   = "Экспорт в SRT, VTT и JSON, а не только простой текст.";
 "paywall.feature.ai"              = "Генеративный AI на устройстве";
-"paywall.feature.ai.detail"       = "Сводки, пересказы глав и задачи, написанные моделью. Через Apple Intelligence — там, где ваш язык поддерживается; для русского и украинского — по отдельной загрузке, на Mac.";
+"paywall.feature.ai.detail"       = "Сводки, пересказы глав и задачи, написанные моделью. Через Apple Intelligence — там, где твой язык поддерживается; для русского и украинского — по отдельной загрузке, на Mac.";
 "paywall.cta.price"               = "Открыть Pro — %@";
 "paywall.cta.unavailable"         = "Временно недоступно";
 "paywall.restore"                 = "Восстановить покупку";
@@ -345,8 +345,8 @@
 "paywall.redeem" = "Активировать код";
 
 /* Wrong-language nudge: the model heard a different language than the user pinned. */
-"language.nudge.title"              = "Похоже, эта запись на %@";
-"language.nudge.body"               = "Распознавали как %@ — из-за этого текст может быть заметно хуже.";
+"language.nudge.title"              = "Похоже, язык записи — %@";
+"language.nudge.body"               = "Распознано как: %@ — из-за этого текст может быть заметно хуже.";
 "language.nudge.switch"             = "Переделать на %@";
 "language.nudge.dismiss"            = "Скрыть";
 

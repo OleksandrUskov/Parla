@@ -314,7 +314,7 @@
 "paywall.feature.export"          = "Експорт субтитрів";
 "paywall.feature.export.detail"   = "Експорт у SRT, VTT та JSON, а не лише простий текст.";
 "paywall.feature.ai"              = "Генеративний AI на пристрої";
-"paywall.feature.ai.detail"       = "Зведення, перекази розділів і завдання, написані моделлю. Через Apple Intelligence — там, де вашу мову підтримано; для української та російської — окремим завантаженням, на Mac.";
+"paywall.feature.ai.detail"       = "Зведення, перекази розділів і завдання, написані моделлю. Через Apple Intelligence — там, де твою мову підтримано; для української та російської — окремим завантаженням, на Mac.";
 "paywall.cta.price"               = "Відкрити Pro — %@";
 "paywall.cta.unavailable"         = "Тимчасово недоступно";
 "paywall.restore"                 = "Відновити покупку";
@@ -345,9 +345,9 @@
 "paywall.redeem" = "Активувати код";
 
 /* Wrong-language nudge: the model heard a different language than the user pinned. */
-"language.nudge.title"              = "Схоже, цей запис — %@";
-"language.nudge.body"               = "Розпізнавали як %@ — через це текст може бути помітно гіршим.";
-"language.nudge.switch"             = "Переробити як %@";
+"language.nudge.title"              = "Схоже, мова запису — %@";
+"language.nudge.body"               = "Розпізнано як: %@ — через це текст може бути помітно гіршим.";
+"language.nudge.switch"             = "Переробити: %@";
 "language.nudge.dismiss"            = "Сховати";
 
 /* Decode failures: one honest reason each, instead of one hardcoded English sentence for all ten sites. */

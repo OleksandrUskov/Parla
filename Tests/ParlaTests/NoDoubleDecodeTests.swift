@@ -15,7 +15,7 @@ import XCTest
 final class NoDoubleDecodeTests: ParlaTestCase {
 
     /// Counts what the pipeline asks of the decoder. Returns real (tiny) WAVs so the flow can continue.
-    private final class CountingDecoder: AudioDecoding, @unchecked Sendable {
+    fileprivate final class CountingDecoder: AudioDecoding, @unchecked Sendable {
         private(set) var fullDecodes = 0
         private(set) var splits = 0
         var isChunkingAvailable: Bool { true }
@@ -186,5 +186,68 @@ final class ChunkCleanupSafetyTests: ParlaTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel.path),
                       "a transcription must never delete unrelated files from the shared temp directory")
+    }
+}
+
+/// The wrong-language nudge was dead for every chunked recording: `transcribeChunked` hand-builds its
+/// `EngineResult` and simply omitted `heard`, so the check could never fire on precisely the long files where a
+/// wrong pin is most expensive (measured 49.85% word errors against 5.57%). Meanwhile EVERY chunk paid for a
+/// detection pass — a second audio load plus a full encoder pass — whose result was discarded.
+final class ChunkedHeardLanguageTests: ParlaTestCase {
+
+    private final class HeardCountingEngine: TranscribingEngine, @unchecked Sendable {
+        private(set) var detectRequests = 0
+        private(set) var calls = 0
+        func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {}
+        func transcribe(wavPath: String, language: String?, model: String, translate: Bool) async throws -> EngineResult {
+            try await transcribe(wavPath: wavPath, language: language, model: model,
+                                 translate: translate, detectHeardLanguage: true)
+        }
+        func transcribe(wavPath: String, language: String?, model: String, translate: Bool,
+                        detectHeardLanguage: Bool) async throws -> EngineResult {
+            calls += 1
+            if detectHeardLanguage { detectRequests += 1 }
+            return EngineResult(text: "текст", language: language ?? "", segments: [], duration: 1,
+                                heard: detectHeardLanguage ? HeardLanguage(language: "ru", confidence: 0.99) : nil)
+        }
+        func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult {
+            EngineResult(text: "", language: "", segments: [], duration: 0)
+        }
+        func deleteModel(_ name: String) async throws {}
+    }
+
+    /// Three chunks from a fake decoder rather than a genuinely long file: the point is the per-chunk cost and
+    /// the propagation of `heard`, and a real 45-minute fixture would only make the suite slow.
+    private final class ThreeChunkDecoder: AudioDecoding, @unchecked Sendable {
+        var isChunkingAvailable: Bool { true }
+        func decodeToWav16k(_ src: URL) throws -> URL { try NoDoubleDecodeTests.CountingDecoder.silentWav(seconds: 1) }
+        func splitIntoChunks(_ src: URL, chunkLength: Double) throws -> [URL] {
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("hc-chunks-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return try (0..<3).map { _ in try NoDoubleDecodeTests.CountingDecoder.silentWav(seconds: 1, in: dir) }
+        }
+        func renderPlayableM4a(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
+        func renderPlayableWav(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
+    }
+
+    @MainActor func testALongRecordingStillRaisesTheNudgeAndDetectsExactlyOnce() async {
+        let engine = HeardCountingEngine()
+        let m = AppModel(engine: engine, ai: NoopAIService(), embedder: NoopEmbedder())
+        m.decoder = ThreeChunkDecoder()
+        m.isProUser = { true }
+        m.language = "uk"                       // pinned Ukrainian…
+        m.mediaDuration = { _ in 45 * 60 }      // …on a file long enough to be chunked
+
+        let src = Bundle.module.url(forResource: "tone", withExtension: "ogg", subdirectory: "Fixtures")!
+        m.handleDrop(urls: [src])
+        await m.currentTranscriptionTask?.value
+
+        XCTAssertEqual(engine.calls, 3, "precondition: the file really was chunked")
+        XCTAssertEqual(engine.detectRequests, 1,
+                       "detection costs an extra encoder pass — once per FILE, not once per chunk")
+        XCTAssertNotNil(m.languageSuggestion,
+                        "a wrong pin on a long recording is where it hurts most — the nudge must still fire")
+        XCTAssertEqual(m.languageSuggestion?.detected, "ru")
     }
 }

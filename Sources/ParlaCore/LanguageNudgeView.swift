@@ -58,12 +58,12 @@ extension View {
     /// Attach the nudge above `self`. A no-op while there is nothing to suggest, so call sites stay unconditional.
     public func languageNudge(_ model: AppModel) -> some View {
         VStack(spacing: 10) {
-            if let suggestion = model.languageSuggestion {
+            if let suggestion = model.activeLanguageSuggestion {
                 LanguageNudgeView(suggestion: suggestion)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             self
         }
-        .animation(.easeInOut(duration: 0.2), value: model.languageSuggestion)
+        .animation(.easeInOut(duration: 0.2), value: model.activeLanguageSuggestion)
     }
 }
