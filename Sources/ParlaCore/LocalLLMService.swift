@@ -24,9 +24,10 @@ import FoundationModels
 // backend available for the transcript's *language* + *OS*; where nothing is available it reports a
 // reason and the UI shows nothing (core transcription untouched).
 //
-// P0 ships the seam + gating only — no generation runs yet. `FoundationModelsService` (English,
-// macOS 26) is wired in P2; the MLX RU/UK backend in P3; RU/UK extractive title/summary + semantic
-// search ride a *separate* `SemanticIndex`, not this LLM service.
+// Two backends live behind this seam today: `FoundationModelsService` (Apple's on-device model — English and
+// its ~15 siblings, macOS 26 / iOS 26) and `MLXLLMService` (Qwen, Russian/Ukrainian, opt-in download).
+// The EXTRACTIVE title/summary/keywords and semantic search are NOT this service — they ride a separate
+// `SemanticIndex` and work with no download at all, which is what every free user gets.
 
 /// Which on-device backend produced an insight. Drives provenance tagging when a language can be served by more
 /// than one backend — EN is FoundationModels normally, but falls back to MLX/Qwen when Apple Intelligence is off
@@ -75,11 +76,11 @@ public enum AIAvailability: Sendable, Equatable {
     case noAppleSilicon        // device not eligible for on-device generation
     case modelUnavailable      // model present but not usable now (AI off, still downloading, …)
     case languageUnsupported   // backend doesn't cover this language (FoundationModels: ru/uk)
-    case needsModelDownload    // an opt-in model (MLX/Qwen, P3) isn't downloaded yet
+    case needsModelDownload    // an opt-in model (MLX/Qwen) isn't downloaded yet
 }
 
 public enum AIError: Error, Equatable {
-    case notImplemented        // P0: no generation wired yet
+    case notImplemented        // a backend exists but has no generation path wired
     case unavailable           // called when `availability` isn't `.ready`
 }
 
@@ -120,7 +121,7 @@ public func completeSentences(_ s: String) -> String {
 
 /// FoundationModels backend. Below the macOS-26 floor (or where the framework can't be imported) the
 /// type still exists and reports `.unsupportedOS`, so the rest of the app links and runs unchanged on
-/// the macOS-14 floor. P0 implements only the gate; `insights` is wired in P2 (`@Generable` output).
+/// the macOS-14 / iOS-17 floor. `insights` generates directly into a `@Generable` type (guided decoding).
 public struct FoundationModelsService: LocalLLMService {
     /// A hardcoded LOWER BOUND on what Apple's model supports — a hint for callers that cannot ask the
     /// framework (below the OS floor, or with Apple Intelligence off). It is **not** a gate: Apple keeps adding
@@ -285,10 +286,10 @@ public struct NoopAIService: LocalLLMService {
 // MARK: - Selector — DefaultAIService
 
 /// Production backend selector + the injectable default on `AppModel`. Picks the best backend for the
-/// transcript's language. P0: only `FoundationModelsService` (English, macOS 26) exists; the MLX RU/UK
-/// backend is added in P3, at which point this falls through to it when FoundationModels can't serve
-/// the language. Until then RU/UK have no *generative* backend (they get extractive insights + semantic
-/// search from `SemanticIndex` in P1, not via this service).
+/// transcript's language: Apple's model first (it needs no download and is free), falling through to
+/// MLX/Qwen when Apple can't serve the language — which is the normal case for Russian and Ukrainian,
+/// since Apple Intelligence covers no Slavic language. If neither is ready the caller shows nothing and the
+/// extractive path from `SemanticIndex` still stands on its own.
 public struct DefaultAIService: LocalLLMService {
     private let foundationModels = FoundationModelsService()
     private let mlx = MLXLLMService()   // Backend B: RU/UK generative, opt-in download (macOS-14 floor)
