@@ -91,6 +91,30 @@ on-device guarantee.
 - 🤝 **Handoff** — start reading a transcript on iPhone, continue on the Mac (and back)
 - 🗂 **First-class iPad** — two-column layout, Files drag & drop, ⌘I to import
 
+## Free & Pro
+
+Parla is free to use. A one-time **Pro** purchase (no subscription) unlocks the heavier features in the App Store
+build:
+
+| | Free | Pro |
+|---|---|---|
+| Notes you can transcribe | unlimited | unlimited |
+| Length per file | up to 5 minutes | **unlimited** |
+| Files per drop | one | many, plus whole folders |
+| Export | TXT · Markdown | + **SRT · VTT · JSON** |
+| Automatic insights (title, keywords, summary) | ✅ included | ✅ included |
+| On-device generative AI + semantic search | — | ✅ (opt-in model download) |
+| Watch a folder and transcribe automatically (macOS) | — | ✅ |
+
+Everything stays **100% on device** in both tiers. There is no account, no server, no telemetry, and no ad SDK —
+the purchase is verified locally by StoreKit, and nothing about your audio or text ever leaves the machine.
+
+> **Building from this repository gives you the full, ungated app.** The freemium gate is switched on by a
+> runtime flag that only the official App Store build sets (`ParlaStoreBuild`), so `./build_app.sh` produces the
+> complete app with no limits. That is deliberate: paying is for people who want the convenience of the store
+> build, not a hoop for people who read the source. (`./build_app.sh --store` builds the gated variant if you
+> want to see the paywall.)
+
 ## Screenshots
 
 <table>
@@ -145,11 +169,11 @@ graph TD
 
 **Engineering highlights**
 - **One library, two apps.** All logic lives in `ParlaCore` (`public` API); the apps are thin SwiftUI shells. Platform differences are handled behind **protocol seams** injected by `AppModel.mac()` / `AppModel.iOS()` factories, not `#if os` sprinkled through the UI.
-- **Actor-isolated engine.** `TranscriptionEngine` is an `actor` that owns the loaded Whisper model and reuses it across files. The whole package compiles in **Swift 6 language mode** — strict concurrency, data-race-checked.
+- **Actor-isolated engine.** `TranscriptionEngine` is an `actor` that owns the loaded Whisper model and reuses it across files. **Every** target compiles in **Swift 6 language mode** — the library, the macOS app, the iOS app and both of its extensions — so strict concurrency is data-race-checked everywhere, not just in the core. A ThreadSanitizer CI lane runs the same suite, because the language mode is a compile-time claim and TSan is the runtime evidence for it.
 - **Two decode lanes, one decoder.** Both platforms decode **in-process** — Telegram Ogg/Opus via a bundled `libopus` xcframework (no subprocess) and video/`.flac` via `AVAssetReader`. Both lanes stream into the same 16 kHz mono sink and the same chunker.
 - **Lean app extensions.** The Share Extension and the Widgets extension **do not link ParlaCore or WhisperKit** — they stay inside the tight extension memory budget and talk to the app through an **App Group** container.
 - **Best-effort AI.** The on-device AI layer never touches the transcript: if a summary/embedding fails, the text is unaffected. Vectors are mean-centered before cosine and compared only within a script (Cyrillic vs Latin).
-- **Tested logic.** 320+ pure-logic unit tests (macOS `swift test`) plus an iOS test target; a legacy-JSON decode test pins the "every new field is Optional" persistence invariant.
+- **Tested logic.** 360+ pure-logic unit tests (macOS `swift test`) plus an iOS test target that CI actually runs; a legacy-JSON decode test pins the "every new field is Optional" persistence invariant, and a committed synthetic Ogg/Opus fixture proves the real in-process decoder on every push.
 
 ## How it works
 
@@ -178,7 +202,7 @@ In the app, pick a model — it **downloads once** (~600 MB) and then runs fully
 
 ### Prerequisites
 - **macOS 14 (Sonoma)+**, **Apple Silicon** recommended (the opt-in MLX generative AI is Apple-Silicon-only; core transcription runs on Intel too).
-- **Xcode 16+** (for the Swift 6 toolchain) and its Command Line Tools.
+- **Xcode 16+** (for the Swift 6 toolchain) and its Command Line Tools. **Xcode 26+** additionally compiles the Apple-Intelligence backend; on an older SDK that one file's `canImport(FoundationModels)` block simply compiles out and the app falls back to the extractive path.
 - **iOS build only:** [XcodeGen](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen`.
 - Internet for the first build (Swift Package dependencies) and the first transcription (one-time model download).
 
@@ -217,10 +241,10 @@ Before a **device** build: in Xcode set your own **Development Team** on each ta
 ### Tests
 
 ```bash
-swift test                   # macOS — the pure-logic unit suite (320+)
+swift test                   # macOS — the pure-logic unit suite (360+)
 ```
 
-The iOS test target runs from Xcode (⌘U). A few decode/transcription tests need a local voice fixture that is **not** committed (voice never goes in git) — those `XCTSkip` cleanly when it's absent (expected, not a failure).
+The iOS test target runs from Xcode (⌘U) and in CI (`xcodebuild test` on a simulator). The decode proofs run everywhere: they use a committed 6.7 KB synthetic Ogg/Opus tone. Pointing `PARLA_OGG_FIXTURE` at a real voice note additionally runs them against real bytes (voice itself never goes in git).
 
 ## Privacy & permissions
 
