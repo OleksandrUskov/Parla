@@ -456,7 +456,7 @@ extension AppModel {
     /// Provenance tag for the current extractive pipeline; bumped when the pipeline gains a capability so
     /// older records reprocess once (v2 = embedding-ranked keywords; v3 = morphology filter + dynamic count
     /// + MMR; v4 = in-context candidate vectors; v5 = min-3 keyword count + isolated fallback).
-    public static var extractiveModelTag: String { "extractive-v5" }
+    public static var extractiveModelTag: String { "extractive-v6" }
 
     /// Generative provenance tags + their FAMILY prefixes. Bump the version suffix on any prompt/output change so
     /// older records reprocess ONCE. The split (prefix vs exact tag) is load-bearing: the extractive pass skips ANY
@@ -619,22 +619,69 @@ extension AppModel {
     /// Extractive (title, summary?, keywords) for an item via per-sentence embeddings, or nil if it can't
     /// be embedded (assets missing → bail early). Summary only when the note is long enough to be worth
     /// condensing; a one/two-sentence voice message gets a title but no summary.
+    /// Sentences considered by the extractive pass. The similarity matrix is O(n²) and every sentence costs an
+    /// embedding, so this stays capped — but the sample now SPANS the note instead of taking its opening.
+    static let extractiveSentenceCap = 120
+    /// Upper bound on the text handed to the one-pass embedder. Beyond it, fall back to per-sentence embedding
+    /// (slower, but bounded and proven) rather than feeding the model an unbounded string.
+    static let extractiveOnePassCharCap = 20_000
+
     public func extractiveInsights(for item: TranscriptItem) async -> (title: String, summary: String?, keywords: [String])? {
-        // Cap the extractive pass: the similarity matrix is O(n²) and the per-sentence embeds add up, so a
-        // very long / chunked transcript would otherwise stall. The lead ~120 sentences carry the gist.
-        let sents = Array(sentences(in: item.text).prefix(120))
+        let all = sentences(in: item.text)
+        let sents = SemanticIndex.spanningSample(all, limit: Self.extractiveSentenceCap)
         guard !sents.isEmpty else { return nil }
-        var vectors: [Embedding] = []
-        vectors.reserveCapacity(sents.count)
-        for sentence in sents {
-            guard let vector = await embedder.embed(sentence, language: item.language) else { return nil }
-            vectors.append(vector)
-        }
-        guard let selection = SemanticIndex.extractiveSelection(vectors, summaryCount: 3) else { return nil }
+
+        guard let vectors = await sentenceVectors(sents, language: item.language) else { return nil }
+        guard let selection = SemanticIndex.extractiveSelection(vectors, summaryCount: 0) else { return nil }
         let title = conciseTitle(from: sents[selection.title])
         let summary = sents.count > 4 ? selection.summary.map { sents[$0] }.joined(separator: " ") : nil
         let keywords = await rankedKeywords(for: item)
         return (title, summary, keywords)
+    }
+
+    /// One vector per sentence.
+    ///
+    /// The straightforward version — `for s in sents { await embedder.embed(s) }` — invoked the model up to 120
+    /// times per note, serially, on an actor. This asks for the token vectors of the joined text ONCE and pools
+    /// each sentence's own tokens out of that single result, which is exactly what the keyword pass next door
+    /// already did. Any sentence whose tokens don't line up falls back to its own embed, and if the one-pass
+    /// call isn't usable at all the whole thing falls back to the per-sentence loop — so this can be faster,
+    /// never worse.
+    private func sentenceVectors(_ sents: [String], language: String) async -> [Embedding]? {
+        var joined = ""
+        var ranges: [Range<String.Index>] = []
+        ranges.reserveCapacity(sents.count)
+        for sentence in sents {
+            let start = joined.endIndex
+            joined += sentence
+            ranges.append(start..<joined.endIndex)
+            joined += "\n"
+        }
+
+        if joined.count <= Self.extractiveOnePassCharCap,
+           let tokens = await embedder.tokenVectors(joined, language: language), !tokens.isEmpty {
+            var vectors: [Embedding] = []
+            vectors.reserveCapacity(sents.count)
+            for (index, range) in ranges.enumerated() {
+                let pooled = tokens.filter { $0.range.overlaps(range) }.map(\.vector)
+                if let vector = SemanticIndex.meanPool(pooled) {
+                    vectors.append(vector)
+                } else if let vector = await embedder.embed(sents[index], language: language) {
+                    vectors.append(vector)     // rare: a sentence no token overlapped — don't lose it
+                } else {
+                    return nil
+                }
+            }
+            return vectors
+        }
+
+        var vectors: [Embedding] = []
+        vectors.reserveCapacity(sents.count)
+        for sentence in sents {
+            guard let vector = await embedder.embed(sentence, language: language) else { return nil }
+            vectors.append(vector)
+        }
+        return vectors
     }
 
     /// KeyBERT-style keyword ranking, IN CONTEXT: embed the note ONCE (per-token vectors), pool each

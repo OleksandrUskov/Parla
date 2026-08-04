@@ -1081,7 +1081,7 @@ final class ParlaLogicTests: XCTestCase {
             m.embeddingIndex = [a.id: [1, 0]]; m.lemmaIndex = [a.id: ["текст"]]
             EmbeddingStore.save([a.id: [1, 0]])
             if let i = m.history.firstIndex(where: { $0.id == a.id }) {
-                m.history[i].aiModel = "extractive-v5"; m.history[i].title = "Авто"
+                m.history[i].aiModel = "extractive-v6"; m.history[i].title = "Авто"
                 m.history[i].summary = "старое саммари"; m.history[i].keywords = ["старое"]
                 m.history[i].actions = [ActionItem(text: "старая задача")]
             }
@@ -1975,7 +1975,7 @@ final class ParlaLogicTests: XCTestCase {
             await m.backfillInsights()
             let lt = m.history.first { $0.id == long.id }
             XCTAssertEqual(lt?.title, "Первое предложение тут.")   // central sentence (constant vectors → first)
-            XCTAssertEqual(lt?.aiModel, "extractive-v5")
+            XCTAssertEqual(lt?.aiModel, "extractive-v6")
             XCTAssertNotNil(lt?.summary)                           // 5 sentences > 4 → summary present
             XCTAssertNotNil(lt?.keywords)                          // embedding-ranked tags populated
             let st = m.history.first { $0.id == short.id }

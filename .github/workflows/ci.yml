@@ -48,7 +48,10 @@ jobs:
 
   ios:
     name: iOS · xcodebuild test (app + extensions)
-    runs-on: macos-15
+    # macos-26, not macos-15: the FoundationModels backend is gated on `canImport`, which is FALSE on the
+    # iOS 18 SDK — so on the older image the whole Apple-Intelligence path compiled to nothing and CI proved
+    # nothing about it. The macOS job already runs here.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen

@@ -128,22 +128,71 @@ public enum SemanticIndex {
     /// From per-sentence vectors, pick the most-central sentence (the title) and the top-`summaryCount`
     /// central sentences (the summary, returned in original document order for readability). Builds the
     /// cosine-similarity matrix and ranks by TextRank centrality. nil for empty; n==1 → (0, [0]). Pure.
+    /// `summaryCount <= 0` → choose the length from the note (see `adaptiveSummaryCount`).
     public static func extractiveSelection(_ vectors: [Embedding], summaryCount: Int) -> (title: Int, summary: [Int])? {
         let n = vectors.count
         guard n > 0 else { return nil }
         guard n > 1 else { return (0, [0]) }
+
+        // MEAN-CENTER before building the similarity matrix. `NLContextualEmbedding` is anisotropic: raw
+        // same-script cosines all crowd into ~0.6–0.96, so every sentence looked almost equally similar to
+        // every other, TextRank centrality came out nearly flat, and "the most central sentence" was close to
+        // arbitrary. This file already documented the anisotropy (see `centroid`) — the summary path was simply
+        // the one place that never applied the fix. Centering re-opens the dynamic range the ranking needs.
+        let basis: [Embedding] = centroid(vectors).map { mean in vectors.map { centered($0, by: mean) } } ?? vectors
+
         var sim = [[Double]](repeating: [Double](repeating: 0, count: n), count: n)
         for i in 0..<n {
             for j in (i + 1)..<n {
-                let c = cosine(vectors[i], vectors[j])
+                let c = cosine(basis[i], basis[j])
                 sim[i][j] = c; sim[j][i] = c
             }
         }
-        let byScore = textRank(similarity: sim).enumerated()
-            .sorted { $0.element > $1.element }.map { $0.offset }
+        let ranks = textRank(similarity: sim)
+        let byScore = ranks.enumerated().sorted { $0.element > $1.element }.map { $0.offset }
         let title = byScore[0]
-        let summary = Array(byScore.prefix(max(1, summaryCount))).sorted()   // document order, not score order
-        return (title, summary)
+
+        // Pick the summary with MMR rather than "top-k centrality". The k most central sentences are, by
+        // construction, the ones most similar to everything else — which makes them highly similar to EACH
+        // OTHER, so the old top-3 routinely said the same thing three times. MMR trades a little centrality
+        // for coverage, which is what a summary is actually for. λ=0.5 splits the difference evenly.
+        let k = summaryCount > 0 ? summaryCount : adaptiveSummaryCount(sentenceCount: n)
+        let picked = mmr(scores: byScore.map { ranks[$0] },
+                         vectors: byScore.map { basis[$0] },
+                         count: Swift.max(1, k),
+                         lambda: 0.5).map { byScore[$0] }
+        return (title, picked.sorted())   // document order, not score order
+    }
+
+    /// How many sentences a summary should be, given how many the note has. A hardcoded 3 gave a 40-minute
+    /// recording the same three sentences as a 30-second one. Grows with √n (diminishing returns), clamped so
+    /// a short note is never padded and a long one never turns into a second transcript. Pure.
+    public static func adaptiveSummaryCount(sentenceCount n: Int, minimum: Int = 2, maximum: Int = 7) -> Int {
+        guard n > 0 else { return 0 }
+        let scaled = Int(Double(n).squareRoot().rounded())
+        return Swift.min(Swift.max(scaled, minimum), Swift.min(maximum, n))
+    }
+
+    /// Evenly spaced sample of at most `limit` items, always keeping the first and the last.
+    ///
+    /// The extractive pass caps how many sentences it embeds, and that cap used to be `prefix(120)` — the LEAD
+    /// sentences. So a long recording was summarized from its opening minutes and everything after was
+    /// invisible to the summary, which is precisely backwards: length is exactly when coverage matters.
+    /// Pure, order-preserving, and returns the input unchanged when it already fits.
+    public static func spanningSample<T>(_ items: [T], limit: Int) -> [T] {
+        guard limit > 0 else { return [] }
+        let n = items.count
+        guard n > limit else { return items }
+        guard limit > 1 else { return [items[0]] }
+        var out: [T] = []
+        out.reserveCapacity(limit)
+        var lastIndex = -1
+        for step in 0..<limit {
+            // Spread across the full range inclusive of both ends; guard against a repeat from rounding.
+            let index = Int((Double(step) * Double(n - 1) / Double(limit - 1)).rounded())
+            if index != lastIndex { out.append(items[index]); lastIndex = index }
+        }
+        return out
     }
 
     /// How many keywords to keep from descending cosine scores — instead of a hardcoded count. Aims for a
