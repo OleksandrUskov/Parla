@@ -349,3 +349,9 @@
 "language.nudge.body"               = "Распознавали как %@ — из-за этого текст может быть заметно хуже.";
 "language.nudge.switch"             = "Переделать на %@";
 "language.nudge.dismiss"            = "Скрыть";
+
+/* Decode failures: one honest reason each, instead of one hardcoded English sentence for all ten sites. */
+"error.decode.unsupported"          = "Parla не умеет читать аудио в этом формате.";
+"error.decode.cancelled"            = "Отменено.";
+"error.decode.timeout"              = "Чтение файла заняло слишком много времени и было остановлено.";
+"error.decode.corrupt"              = "Похоже, запись повреждена — прочитать её не удалось.";

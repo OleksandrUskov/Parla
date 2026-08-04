@@ -32,6 +32,10 @@ public final class AppModel {
     /// non-nil → the model heard a different language than the user pinned, confidently enough to say so.
     /// Best-effort and dismissible: never blocks anything, never rewrites a transcript on its own.
     public var languageSuggestion: LanguageSuggestion?
+
+    /// The in-flight decode's stop switch. Held here because the decode runs in a detached task that cannot see
+    /// task cancellation, so this is the only channel the Cancel button has into it.
+    @ObservationIgnored var decodeControl: DecodeControl?
     public var history: [TranscriptItem] = HistoryStore.load()
     public var selection: TranscriptItem.ID?
     public var pendingOpen: TranscriptItem.ID?        // a deep-link (parla://note / widget / Handoff) asked to open this note; drained by the History shell

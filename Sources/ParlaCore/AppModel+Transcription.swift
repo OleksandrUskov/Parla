@@ -50,6 +50,9 @@ extension AppModel {
         // (cancelled queued jobs used to leak their copies.)
         transcriptionQueue.forEach { $0.urls.forEach { Self.pruneImportedSource($0.path) } }
         transcriptionQueue.removeAll()
+        // Stop the DECODE too, not just the task. A detached decode ignores task cancellation, so before this
+        // the Cancel button did nothing at all until the decode finished on its own — on a long file, minutes.
+        decodeControl?.cancel()
         guard let task = currentTranscriptionTask else { return }
         cancelling = true          // "Stopping…" until the current file/chunk finishes and the loop breaks
         task.cancel()
@@ -232,8 +235,13 @@ extension AppModel {
             tempWav = nil
         } else {
             let decoder = self.decoder      // capture the seam (the native in-process decoder in production, stub in tests)
+            // `Task.detached` does NOT inherit cancellation, which is exactly why Cancel did nothing during a
+            // decode. The control is the way in: the button flips it and the read loop throws.
+            let control = DecodeControl()
+            decodeControl = control
+            defer { decodeControl = nil }
             let wav = try await Task.detached(priority: .userInitiated) {
-                try decoder.decodeToWav16k(url)
+                try decoder.decodeToWav16k(url, control: control)
             }.value
             decodePath = wav.path
             tempWav = wav
@@ -265,8 +273,11 @@ extension AppModel {
     /// as a placeholder so the rest of the transcript survives.
     private func transcribeChunked(source: URL, model: String, audioDuration: Double) async throws -> EngineResult {
         let decoder = self.decoder
+        let control = DecodeControl()
+        decodeControl = control
+        defer { decodeControl = nil }
         let chunks = try await Task.detached(priority: .userInitiated) {
-            try decoder.splitIntoChunks(source, chunkLength: AudioChunker.chunkLengthSec)
+            try decoder.splitIntoChunks(source, chunkLength: AudioChunker.chunkLengthSec, control: control)
         }.value
         let chunkDir = chunks.first?.deletingLastPathComponent()
         defer { if let chunkDir { try? FileManager.default.removeItem(at: chunkDir) } }

@@ -24,15 +24,21 @@ public struct OpusAudioDecoder: AudioDecoding {
     public init() {}
 
     private static let opusExtensions: Set<String> = ["ogg", "oga", "opus"]
+    /// How many gap-only reads in a row still count as "a damaged but readable file" rather than a wedge.
+    /// 512 x up to 5760 frames is well over a minute of pure gaps — far past anything a real recording produces.
+    static let maxConsecutiveHoles = 512
+
     private static let opusSampleRate = 48_000.0    // Opusfile decodes at the Opus-native rate
     private static let avAssetSampleRate = 16_000.0 // AVAssetReader resamples to the engine's rate for us
 
     // MARK: - AudioDecoding
 
-    public func decodeToWav16k(_ src: URL) throws -> URL {
+    public func decodeToWav16k(_ src: URL) throws -> URL { try decodeToWav16k(src, control: nil) }
+
+    public func decodeToWav16k(_ src: URL, control: DecodeControl?) throws -> URL {
         let dest = FileManager.default.temporaryDirectory
             .appendingPathComponent("parla-decode-\(UUID().uuidString).wav")
-        try Self.writeMonoWav(from: src, to: dest)
+        try Self.writeMonoWav(from: src, to: dest, control: control)
         return dest
     }
 
@@ -40,6 +46,10 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// caller removes it, deriving it from the first chunk URL). An empty result → the caller falls back to a
     /// single pass; since it can't derive a dir from zero chunks, this cleans its own temp dir in that case.
     public func splitIntoChunks(_ src: URL, chunkLength: Double) throws -> [URL] {
+        try splitIntoChunks(src, chunkLength: chunkLength, control: nil)
+    }
+
+    public func splitIntoChunks(_ src: URL, chunkLength: Double, control: DecodeControl?) throws -> [URL] {
         let lane = try Self.lane(for: src)
         guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else {
             throw AudioDecodingError.noDecoderAvailable
@@ -51,7 +61,7 @@ public struct OpusAudioDecoder: AudioDecoding {
         let framesPerChunk = AVAudioFrameCount(max(1, chunkLength * lane.sampleRate))
         let writer = ChunkWriter(dir: dir, format: format, framesPerChunk: framesPerChunk)
         do {
-            try lane.read(src, format) { try writer.append($0) }
+            try lane.read(src, format, control) { try writer.append($0) }
             writer.close()
         } catch {
             try? FileManager.default.removeItem(at: dir)    // failed split → don't leak the temp chunk dir
@@ -76,7 +86,7 @@ public struct OpusAudioDecoder: AudioDecoding {
     // MARK: - Lane selection
 
     /// A lane streams mono Float32 buffers (at `sampleRate`) from `src` into a `sink`, one small buffer at a time.
-    private typealias FrameReader = (_ src: URL, _ format: AVAudioFormat,
+    private typealias FrameReader = (_ src: URL, _ format: AVAudioFormat, _ control: DecodeControl?,
                                      _ sink: (AVAudioPCMBuffer) throws -> Void) throws -> Void
 
     private static func lane(for src: URL) throws -> (read: FrameReader, sampleRate: Double) {
@@ -126,14 +136,14 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// Decode `src` (either lane) → a mono Float32 WAV at `dest` that AVAudioFile/AVAudioPlayer can open. Shared by
     /// `decodeToWav16k` (temp dest → engine input) and `renderPlayableWav` (cache dest → in-app player). Cleans up a
     /// partial or 0-frame WAV so a failed/empty decode can't masquerade as a valid (silent) file downstream.
-    private static func writeMonoWav(from src: URL, to dest: URL) throws {
+    private static func writeMonoWav(from src: URL, to dest: URL, control: DecodeControl? = nil) throws {
         let lane = try lane(for: src)
         guard let format = monoFloatFormat(sampleRate: lane.sampleRate) else {
             throw AudioDecodingError.noDecoderAvailable
         }
         let out = try AVAudioFile(forWriting: dest, settings: format.settings)
         do {
-            try lane.read(src, format) { try out.write(from: $0) }
+            try lane.read(src, format, control) { try out.write(from: $0) }
         } catch {
             try? FileManager.default.removeItem(at: dest)   // drop a partial WAV so it can't masquerade as decoded
             throw error
@@ -149,7 +159,7 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// `op_open_file` reads the container incrementally from disk; each `op_read_float` page is downmixed to
     /// mono and handed to `sink`. O(one page) memory regardless of length. The single reused `mono` buffer is
     /// safe because `sink` consumes it synchronously (AVAudioFile.write / ChunkWriter copy on write).
-    private static func readOpusFrames(_ src: URL, _ format: AVAudioFormat,
+    private static func readOpusFrames(_ src: URL, _ format: AVAudioFormat, _ control: DecodeControl?,
                                        _ sink: (AVAudioPCMBuffer) throws -> Void) throws {
         var err: Int32 = 0
         guard let file = op_open_file(src.path, &err), err == 0 else { throw AudioDecodingError.noDecoderAvailable }
@@ -168,12 +178,22 @@ public struct OpusAudioDecoder: AudioDecoding {
         }
         var interleaved = [Float](repeating: 0, count: capacity)
 
+        // A damaged Ogg can return OP_HOLE forever. `continue` on it was an UNBOUNDED retry: one corrupt file
+        // and the decode spins until the user force-quits. Gaps are genuinely recoverable, so they are still
+        // skipped — just not infinitely.
+        var consecutiveHoles = 0
         while true {
+            try control?.check()                                           // the user's Cancel, and the watchdog
             var li: Int32 = -1
             let n = interleaved.withUnsafeMutableBufferPointer {
                 op_read_float(file, $0.baseAddress, Int32($0.count), &li)   // frames PER CHANNEL; fills `li` (the link)
             }
-            if n == OP_HOLE { continue }                                   // recoverable gap (corrupt/missing page) → keep going
+            if n == OP_HOLE {                                              // recoverable gap (corrupt/missing page)
+                consecutiveHoles += 1
+                if consecutiveHoles > Self.maxConsecutiveHoles { throw AudioDecodingError.corruptStream }
+                continue
+            }
+            consecutiveHoles = 0
             if n < 0 { throw AudioDecodingError.noDecoderAvailable }        // genuine error (OP_EREAD/OP_EBADPACKET/…)
             if n == 0 { break }                                            // EOF
 
@@ -216,7 +236,7 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// Drain the first audio track one `CMSampleBuffer` at a time into `sink`. The synchronous
     /// `tracks(withMediaType:)` is intentional: this seam is `throws`-sync and always runs off the main actor
     /// (`Task.detached` in the pipeline), so the brief synchronous property load is fine.
-    private static func readAVAssetFrames(_ src: URL, _ format: AVAudioFormat,
+    private static func readAVAssetFrames(_ src: URL, _ format: AVAudioFormat, _ control: DecodeControl?,
                                           _ sink: (AVAudioPCMBuffer) throws -> Void) throws {
         let asset = AVURLAsset(url: src)
         let audioTracks = asset.tracks(withMediaType: .audio)
@@ -234,6 +254,8 @@ public struct OpusAudioDecoder: AudioDecoding {
         guard reader.startReading() else { throw reader.error ?? AudioDecodingError.noDecoderAvailable }
 
         while reader.status == .reading {
+            // Cancel/watchdog: without this, `reader.cancelReading()` never happens and a stuck demux runs on.
+            do { try control?.check() } catch { reader.cancelReading(); throw error }
             guard let sample = output.copyNextSampleBuffer() else { break }
             defer { CMSampleBufferInvalidate(sample) }   // drop the backing store promptly (streaming)
             guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
