@@ -5,7 +5,7 @@ import SwiftUI
 // The player transport + tap-to-seek segment list + long-audio chapters + digest — relocated VERBATIM from the
 // macOS `MainPane.swift` into ParlaCore as `public` SwiftUI, so the macOS and iOS apps render the SAME views
 // (true cross-platform parity, zero duplication). They depend only on `AppModel` / `PlaybackController` / pure
-// Core helpers, all already here. `.help(_:)` is iOS-13.4+ so it needs no shim. (IOS_P1_4_UI §2.)
+// Core helpers, all already here. `.help(_:)` is iOS-13.4+ so it needs no shim.
 
 /// Transport: play/pause + scrubber + time. Degrades to a single note line if there's no audio
 /// or the format isn't playable by the built-in player.

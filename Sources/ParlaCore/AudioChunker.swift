@@ -82,7 +82,7 @@ public enum AudioChunker {
 }
 
 /// One chapter of a long recording: a `size`-second window of the timeline plus the segments in it.
-/// Derived at render time from `segments` — never persisted (see LONG_AUDIO_CHUNKING blueprint §4).
+/// Derived at render time from `segments` — never persisted.
 public struct Chapter: Identifiable, Equatable {
     public let index: Int          // 0-based display order
     public let startSec: Double    // window start (bucket * size)

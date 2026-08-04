@@ -47,7 +47,7 @@ extension AppModel {
         // Free the import-container copies of every QUEUED job we're dropping (iOS): they were copied upfront and
         // will never be transcribed now, and — unlike the in-flight batch — they're not referenced by
         // `lastAttemptedURLs`, so «Try again» can't need them. No-op on macOS originals (imports-root prefix guard).
-        // (Full-review D6/S4/R3 — cancelled queued jobs used to leak their copies.)
+        // (cancelled queued jobs used to leak their copies.)
         transcriptionQueue.forEach { $0.urls.forEach { Self.pruneImportedSource($0.path) } }
         transcriptionQueue.removeAll()
         guard let task = currentTranscriptionTask else { return }
@@ -156,7 +156,7 @@ extension AppModel {
                 failures.append("\(url.lastPathComponent) (\(msg))")
                 // NB: do NOT prune url's iOS import copy here — `lastAttemptedURLs` still points at it and «Try again»
                 // (retryLast) must be able to re-decode it. Abandoned failed copies are swept at next launch by
-                // pruneImportedOrphans (AppModel.iOS()). (Full-review D6/S4 fix of the R5 «Try again» regression.)
+                // pruneImportedOrphans (AppModel.iOS()). (fixes the «Try again» regression.)
             }
         }
         if Task.isCancelled {                 // user hit Cancel: don't beep / notify / show a "done" toast

@@ -31,7 +31,7 @@ final class EndToEndTranscriptionTests: XCTestCase {
         let engine = TranscriptionEngine()
         try await engine.ensureLoaded(model: "openai_whisper-tiny", progress: { _ in })
 
-        print("✅ P1.3-B: Opus decode + WhisperKit model download/load succeed on iOS "
+        print("✅ the decode work-B: Opus decode + WhisperKit model download/load succeed on iOS "
               + "(\(audio.length) frames @ \(Int(audio.fileFormat.sampleRate)) Hz). Full text inference = device-verified.")
     }
 }

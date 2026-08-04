@@ -61,7 +61,7 @@ enum ShareInbox {
     /// container copy for. copyIntoContainer is best-effort per file and an inbox file is the user's ONLY copy of a
     /// shared note, so a file it couldn't copy must be KEPT to retry on the next foreground — deleting "regardless"
     /// loses it silently. Inbox filenames are unique (one directory), so matching by lastPathComponent is exact.
-    /// PURE (no I/O) so the data-loss guard is unit-tested. (Full-review D2/S2 + D8)
+    /// PURE (no I/O) so the data-loss guard is unit-tested.
     static func toRemove(pending: [URL], containerURLs: [URL]) -> [URL] {
         let copied = Set(containerURLs.map { $0.lastPathComponent })
         return pending.filter { copied.contains($0.lastPathComponent) }
@@ -87,7 +87,7 @@ enum ShareInbox {
             let containerURLs = await Task.detached(priority: .userInitiated) {
                 let urls = ImportCoordinator.copyIntoContainer(pending)   // group files aren't scoped → a plain copy
                 // Remove ONLY the inbox files we actually copied (see toRemove below): an inbox file is the user's
-                // ONLY copy of what they shared, so a copy failure must not delete it. (Full-review D2/S2)
+                // ONLY copy of what they shared, so a copy failure must not delete it.
                 for src in toRemove(pending: pending, containerURLs: urls) {
                     try? FileManager.default.removeItem(at: src)
                 }

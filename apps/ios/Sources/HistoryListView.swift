@@ -62,7 +62,7 @@ struct HistoryListView: View {
         }
         // Drain a note-open request (parla:// deep-link, widget/Handoff/Shortcuts, AND a "Related" tap — all route
         // through the pendingOpen channel, which every shell drains). `.task` covers cold launch (the request arrived
-        // before this shell mounted); `.onChange` covers one while running. (Full-review D2/S1: Related now uses
+        // before this shell mounted); `.onChange` covers one while running. (Related now uses
         // pendingOpen, so it navigates here without a selection→path bridge that fought the batch auto-push.)
         .task { drainPendingOpen() }
         .onChange(of: model.pendingOpen) { _, _ in drainPendingOpen() }

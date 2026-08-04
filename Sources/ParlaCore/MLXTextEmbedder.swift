@@ -116,7 +116,7 @@ public actor MLXTextEmbedder: TextEmbedder {
 
     private var container: EmbedderModelContainer?
     private var loadTask: Task<EmbedderModelContainer?, Never>?
-    private var generation = 0   // bumped by unload()/delete → a load in flight won't cache a now-stale model (D5/S3)
+    private var generation = 0   // bumped by unload()/delete → a load in flight won't cache a now-stale model
 
     /// Get-or-load the container, single-flight. nil if the model isn't downloaded or the load fails.
     private func loaded() async -> EmbedderModelContainer? {
@@ -137,7 +137,7 @@ public actor MLXTextEmbedder: TextEmbedder {
         // could otherwise resurrect ~0.4GB the delete was meant to free). The retrievalEmbedder routes by disk
         // presence, so ranking is unaffected either way. Clear loadTask ONLY when it's still ours (past the guard) —
         // if unload cancelled + a concurrent loaded() installed a fresh task, nil-ing here would orphan it → a
-        // duplicate model load. (Full-review D5/S3 + the R4 clobber it opened.)
+        // duplicate model load. (and the clobber it opened.)
         guard gen == generation else { return nil }
         loadTask = nil
         container = c

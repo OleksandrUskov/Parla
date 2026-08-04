@@ -30,11 +30,11 @@ final class OpusDecodeTests: XCTestCase {
         XCTAssertEqual(file.fileFormat.channelCount, 1, "decoder must yield mono")
         let seconds = Double(file.length) / file.fileFormat.sampleRate
         XCTAssertGreaterThan(seconds, 1, "expected > 1 s of audio from a real voice note")
-        print("✅ P1.3 seam decode: \(file.length) frames @ \(Int(file.fileFormat.sampleRate)) Hz "
+        print("✅ seam decode: \(file.length) frames @ \(Int(file.fileFormat.sampleRate)) Hz "
               + "≈ \(String(format: "%.1f", seconds)) s, ch=\(file.fileFormat.channelCount)")
     }
 
-    // Full-review D1 F3 regression: `renderPlayableWav` must produce an AVAudioPlayer-playable rendition for an
+    // Regression: `renderPlayableWav` must produce an AVAudioPlayer-playable rendition for an
     // imported Telegram Ogg/Opus (it used to `throw .noDecoderAvailable`, so `AudioStore.makePlayable` returned nil
     // and in-app playback was a silent no-op on iOS while macOS played the same import). Fixture-gated like above.
     func testRenderPlayableWavYieldsAPlayableRendition() throws {

@@ -5,7 +5,7 @@ import SwiftUI
 /// `showToast`/`hideToast` seams are inert by default (Core stays UI-toolkit-free); `AppModel.iOS()` wires them
 /// to this shared center and the root mounts `.parlaToast()` to render it. Without it, ALL dictation feedback
 /// (mic-permission-denied, busy, failed, empty, done/copied) and the batch-complete toasts were silently
-/// invisible on iOS — the seam stayed its Core no-op default. (Full-review D1/F1.)
+/// invisible on iOS — the seam stayed its Core no-op default.
 ///
 /// A single `@MainActor @Observable` singleton (mirrors `AppModel`'s style): a Main-actor-isolated `static let`
 /// so building the instance is isolation-clean under Swift 6, and reachable from the `AppModel.iOS()` factory

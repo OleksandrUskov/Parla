@@ -69,7 +69,7 @@ final class ShareInboxTests: XCTestCase {
         XCTAssertTrue(ShareInbox.pendingFiles(in: dir).isEmpty)
     }
 
-    /// Full-review D2/S2 + D8: `toRemove` must delete ONLY inbox files that copyIntoContainer actually copied — a
+    /// `toRemove` must delete ONLY inbox files that copyIntoContainer actually copied — a
     /// file it skipped (returned no container URL for) is the user's only copy and MUST be kept to retry. This pins
     /// the data-loss guard that used to be "remove pending regardless".
     func testToRemoveKeepsFilesThatFailedToCopy() {

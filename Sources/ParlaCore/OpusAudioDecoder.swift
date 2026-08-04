@@ -19,7 +19,7 @@ import opus
 ///
 /// `splitIntoChunks` streams either lane into `ChunkWriter`, which cuts EXACTLY on `chunkLength`-second
 /// boundaries so the pipeline's nominal per-chunk timeline offsets (`AudioChunker.stitch`, `k * chunkLength`)
-/// stay accurate with no compounding drift. webm is scoped OUT of iOS v1 (§2 — no clean in-process decoder).
+/// stay accurate with no compounding drift. webm is scoped OUT of iOS v1 (no clean in-process decoder).
 public struct OpusAudioDecoder: AudioDecoding {
     public init() {}
 

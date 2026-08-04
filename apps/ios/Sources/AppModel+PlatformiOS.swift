@@ -23,7 +23,7 @@ extension AppModel {
         m.decoder = OpusAudioDecoder()
 
         // Launch-time sweep of abandoned import copies (failed-and-not-retried, cancelled-queued, crashed) — safe
-        // here because nothing is in-flight/queued yet and lastAttemptedURLs is empty. (Full-review D6/S4)
+        // here because nothing is in-flight/queued yet and lastAttemptedURLs is empty.
         AppModel.pruneImportedOrphans(keeping: m.history)
 
         m.copyToClipboard = { text in UIPasteboard.general.string = text }
@@ -31,12 +31,12 @@ extension AppModel {
 
         // Dictation + batch feedback → the iOS toast surface (macOS uses the QuickToast panel). Without this the
         // seams stay their Core no-op defaults and every dictation message (mic-denied, busy, failed, empty,
-        // done/copied) + the batch-complete toasts are silently invisible on iOS. (Full-review D1/F1.)
+        // done/copied) + the batch-complete toasts are silently invisible on iOS.
         m.showToast = { text, sticky in ToastCenter.shared.show(text, sticky: sticky) }
         m.hideToast = { ToastCenter.shared.hide() }
 
         // Completion cue → system sound (macOS uses NSSound Glass/Basso). Gated by the soundOnComplete toggle
-        // (default on, like macOS); unwired before, so that Settings toggle did nothing on iOS. (Full-review D1/F2.)
+        // (default on, like macOS); unwired before, so that Settings toggle did nothing on iOS.
         m.playCompletionSound = { success in success ? CompletionSound.success() : CompletionSound.failure() }
 
         // RAM-adaptive default model — jetsam is the iOS ceiling, so pick the largest tier that fits this

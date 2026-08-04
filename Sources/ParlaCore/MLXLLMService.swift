@@ -19,7 +19,7 @@ import MLX           // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cach
 // transcript is never touched. Model + container stay actor-internal (mirror `NLEmbedder`/`TranscriptionEngine`).
 // Build note: MLX ships Metal shaders → the .app must be built via xcodebuild (see build_app.sh).
 
-// MARK: Model spec + on-disk location (§6: in-app non-gated download, cache under Application Support)
+// MARK: Model spec + on-disk location (in-app non-gated download, cache under Application Support)
 
 public enum MLXModelSpec {
     /// The non-thinking Instruct-2507 4-bit build (no `<think>` preamble before the JSON). Apache-2.0, public/non-gated.

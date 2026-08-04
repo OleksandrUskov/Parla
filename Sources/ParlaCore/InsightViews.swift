@@ -9,7 +9,7 @@ import SwiftUI
 // block shows only when its toggle is on AND there's content, so the surface stays clean for short/plain notes
 // and degrades to nothing on iOS where a field's backend isn't available (e.g. generative action-items).
 // The whole view collapses to `EmptyView` when empty, so an insight-less note gets no phantom spacing in the
-// parent stack — matching the macOS `@ViewBuilder` it replaced. (IOS_P1_4_UI §2.)
+// parent stack — matching the macOS `@ViewBuilder` it replaced.
 
 /// AI insight fields under the header: keyword tags + a collapsible summary + an action-items checklist.
 public struct InsightsView: View {
@@ -145,7 +145,7 @@ public struct RelatedNotesView: View {
                     // `selection = item.id` bookkeeping (yanking a reader on a background/queued insert). pendingOpen
                     // is the deliberate-navigation signal, kept distinct from that bookkeeping. Clear search first: a
                     // related note is a TOPIC match, may be absent from filteredHistory, so the drains re-resolve it.
-                    // (Full-review D2/S1)
+                    //
                     Button { model.searchQuery = ""; model.pendingOpen = note.id } label: {
                         HStack(spacing: 8) {
                             Text(model.showTitles ? note.displayTitle : note.sourceName)

@@ -55,7 +55,7 @@ private struct RootView: View {
             }
         }
         .keepAwake(while: model.isBusy)
-        .parlaToast()   // dictation + batch feedback surface (macOS QuickToast counterpart) — D1/F1
+        .parlaToast()   // dictation + batch feedback surface (macOS QuickToast counterpart)
 
         // Pro entitlement: wire the live isPro into the free-tier gate + start StoreKit (load product,
         // resolve the current entitlement, listen for Transaction.updates). Idempotent.
