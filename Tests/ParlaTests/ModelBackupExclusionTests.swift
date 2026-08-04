@@ -41,6 +41,17 @@ final class ModelBackupExclusionTests: XCTestCase {
         XCTAssertFalse(ModelStorage.isExcludedFromBackup(dir))
     }
 
+    /// MLX cannot run on the iOS simulator at all, and an Apple-Silicon simulator answers `arch(arm64)` — so an
+    /// arch-only check would offer a ~2.3 GB download there and crash on first use. Inert today (this backend is
+    /// macOS-only), pinned now so it stays correct when MLX reaches the iOS build.
+    func testMLXIsNeverConsideredSupportedOnASimulator() {
+        #if targetEnvironment(simulator)
+        XCTAssertFalse(MLXLLMService.isSupportedHardware, "the simulator must never be offered the MLX download")
+        #else
+        XCTAssertEqual(MLXLLMService.isSupportedHardware, true, "real Apple Silicon supports MLX")
+        #endif
+    }
+
     #if os(macOS)
     /// Both MLX stores must live under Application Support — one deletable tree with one "disk used" number — and
     /// never in Documents, where the user sees (and syncs) them.

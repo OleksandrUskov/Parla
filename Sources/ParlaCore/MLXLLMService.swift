@@ -237,8 +237,15 @@ public struct MLXLLMService: LocalLLMService {
 
     /// MLX runs on Apple Silicon only. The app ships arm64; under Rosetta (x86_64) this is false → the backend
     /// reports `.noAppleSilicon` and the UI hides the download. Also drives whether the MLX model row is shown.
+    ///
+    /// The simulator clause is NOT redundant: an Apple-Silicon iOS simulator is `arch(arm64)` too, so an
+    /// `arch(arm64)`-only test answers "yes, supported" there — and MLX cannot run on the simulator at all.
+    /// Inert while this file is macOS-only, deliberately written now so the day MLX enters the iOS build the
+    /// simulator does not start offering a ~2.3 GB download and then crash on first generation.
     public static var isSupportedHardware: Bool {
-        #if arch(arm64)
+        #if targetEnvironment(simulator)
+        return false
+        #elseif arch(arm64)
         return true
         #else
         return false

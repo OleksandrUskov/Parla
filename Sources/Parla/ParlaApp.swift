@@ -36,6 +36,7 @@ struct ParlaApp: App {
                     if Onboarding.shouldShowOnboarding(didOnboard: didOnboard, hasHistory: !model.history.isEmpty) {
                         showOnboarding = true            // fresh start only — upgraders with history skip it
                     }
+                    model.startMemoryPressureMonitor()   // give the model's weights back when the SYSTEM asks (never mid-job)
                     NotificationClickHandler.install()   // click on completion notification → bring window forward
                     let sp = ServicesProvider(model: model)   // "Transcribe with Parla" in the Services menu
                     NSApp.servicesProvider = sp

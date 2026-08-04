@@ -4431,6 +4431,40 @@ final class ParlaLogicTests: XCTestCase {
 
 // MARK: - Test double for the transcription backend
 
+
+// MARK: - Memory pressure
+
+extension ParlaLogicTests {
+
+    /// `WhisperKit.unloadModels()` existed from day one and was called NOWHERE — the model stayed resident for
+    /// the life of the process. The policy is now: give the weights back when the SYSTEM asks, never mid-job.
+    @MainActor
+    func testReleaseIdleMemoryUnloadsTheEngineWhenNothingIsRunning() async {
+        let engine = FakeEngine()
+        let m = AppModel(engine: engine, ai: FakeAIService(availabilityToReturn: .modelUnavailable))
+        XCTAssertFalse(m.isBusy, "precondition: idle")
+
+        await m.releaseIdleMemory()
+        XCTAssertEqual(engine.unloadCalls, 1, "an idle app must hand the model's memory back under pressure")
+    }
+
+    /// The half that protects the user: unloading mid-job would abort or badly stall a running transcription.
+    @MainActor
+    func testReleaseIdleMemoryLeavesTheEngineAloneWhileBusy() async {
+        let engine = FakeEngine()
+        let m = AppModel(engine: engine, ai: FakeAIService(availabilityToReturn: .modelUnavailable))
+        m.recordingStartedAt = Date()          // dictation in flight → isBusy
+        XCTAssertTrue(m.isBusy, "precondition: busy")
+
+        await m.releaseIdleMemory()
+        XCTAssertEqual(engine.unloadCalls, 0, "never yank the model out from under a running job")
+
+        m.recordingStartedAt = nil
+        await m.releaseIdleMemory()
+        XCTAssertEqual(engine.unloadCalls, 1, "…and release it once the job is done")
+    }
+}
+
 /// Fake `TranscribingEngine`: returns canned results (or throws), counting calls. Single-flight in
 /// tests (each engine call is awaited in turn), so the unchecked Sendable is safe.
 /// Test helper: a Sendable box so a Task can be handed its own handle (for a self-cancelling test).
@@ -4445,7 +4479,10 @@ private final class FakeEngine: TranscribingEngine, @unchecked Sendable {
     private(set) var transcribedPaths: [String] = []   // the decode path handed to each transcribe call
     private(set) var transcribedSampleCounts: [Int] = []   // buffer sizes handed to the streaming seam
     private(set) var deletedModels: [String] = []
+    private(set) var unloadCalls = 0
     var onTranscribe: (@Sendable (Int) -> Void)? = nil   // test hook: fired with the 1-based transcribe-call count (mid-decode)
+
+    func unload() async { unloadCalls += 1 }
 
     init(results: [EngineResult] = [], throwOnTranscribe: Bool = false) {
         self.results = results

@@ -329,6 +329,34 @@ public final class AppModel {
         refreshDownloaded()
     }
 
+    // MARK: - Memory pressure
+
+    @ObservationIgnored private var memoryPressureSource: (any DispatchSourceMemoryPressure)?
+
+    /// Start listening for the system's own "memory is tight" signal and give the transcription weights back
+    /// when it fires. Call once at launch.
+    ///
+    /// Why this exists: the engine loads its model on first use and kept it forever, because nothing ever called
+    /// `unload()`. Unloading on a timer (or after every note) would trade a real, felt reload delay for memory
+    /// nobody was short of — so the trigger is the OS telling us it actually needs the memory back, and only
+    /// while no job is running.
+    public func startMemoryPressureMonitor() {
+        guard memoryPressureSource == nil else { return }
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
+        source.setEventHandler { [weak self] in
+            Task { @MainActor in await self?.releaseIdleMemory() }
+        }
+        source.resume()
+        memoryPressureSource = source
+    }
+
+    /// Hand the model's memory back if — and only if — nothing is running. Separated from the dispatch source
+    /// so the policy itself is testable without provoking real memory pressure.
+    public func releaseIdleMemory() async {
+        guard !isBusy else { return }   // never yank the model out from under a running job
+        await engine.unload()
+    }
+
     public var isBusy: Bool {
         if recordingStartedAt != nil { return true }   // recording a dictation blocks other jobs (single-flight)
         if requestingMic { return true }                // mic-permission check in flight — hold the lane (no gap)

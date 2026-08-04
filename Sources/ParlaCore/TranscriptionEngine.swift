@@ -34,6 +34,14 @@ public protocol TranscribingEngine: Sendable {
     /// The caller owns windowing + absolute-time bookkeeping; returned segment times are buffer-relative.
     func transcribe(samples: [Float], language: String?, model: String) async throws -> EngineResult
     func deleteModel(_ name: String) async throws
+    /// Release the loaded model's weights. The next `transcribe` transparently reloads, so this is a pure
+    /// memory/latency trade the CALLER decides — see `AppModel.releaseIdleMemory()`.
+    func unload() async
+}
+
+extension TranscribingEngine {
+    /// Default no-op: an engine that holds nothing has nothing to release (test doubles, future backends).
+    public func unload() async {}
 }
 
 /// Thin wrapper around WhisperKit. Keeps the loaded model and reuses it.
@@ -157,6 +165,21 @@ public actor TranscriptionEngine {
             try FileManager.default.removeItem(at: folder)
         }
         if loadedModel == name { whisperKit = nil; loadedModel = nil }
+    }
+
+    /// Release the loaded weights. `WhisperKit.unloadModels()` has existed since day one and this app never
+    /// called it — once loaded, ~600 MB–1.5 GB of CoreML weights stayed resident for the life of the process.
+    /// On a Mac that is merely rude; on an iPhone, where the process has a hard memory budget and jetsam kills
+    /// without warning, it is the difference between surviving a summary and being killed mid-note.
+    ///
+    /// Dropping the reference alone is NOT enough — `unloadModels()` is what tears down the CoreML models
+    /// themselves. A load in flight is left alone: cancelling it would only make the caller reload immediately.
+    public func unload() async {
+        guard loadInFlight == nil else { return }
+        guard let wk = whisperKit else { return }
+        await wk.unloadModels()
+        whisperKit = nil
+        loadedModel = nil
     }
 
     public func transcribe(wavPath: String, language: String?, model: String, translate: Bool = false) async throws -> EngineResult {

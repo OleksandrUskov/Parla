@@ -20,7 +20,12 @@ struct ParlaiOSApp: App {
                 .environment(purchases)
                 .environment(\.locale, model.resolvedLocale)   // reading resolvedLocale here → re-render on language change (mirrors macOS scene root)
                 .preferredColorScheme(.dark)   // Parla is dark-theme only, like the Mac app
-                .task { ParlaRuntime.model = model }   // app-bound App Intents (Siri/Shortcuts) reach the live model
+                .task {
+                    ParlaRuntime.model = model         // app-bound App Intents (Siri/Shortcuts) reach the live model
+                    // On iPhone this is not housekeeping: the process has a hard memory budget and jetsam kills
+                    // without warning, so handing the transcription weights back when the OS asks is survival.
+                    model.startMemoryPressureMonitor()
+                }
         }
     }
 }
