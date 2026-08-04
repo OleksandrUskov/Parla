@@ -50,26 +50,32 @@ public struct OpusAudioDecoder: AudioDecoding {
     }
 
     public func splitIntoChunks(_ src: URL, chunkLength: Double, control: DecodeControl?) throws -> [URL] {
-        let lane = try Self.lane(for: src)
-        guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else {
-            throw AudioDecodingError.noDecoderAvailable
-        }
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("parla-chunks-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Same lane fallback as the single-pass decode: an Ogg-Vorbis file must not lose the long-audio path
+        // just because libopusfile can't read it.
+        var lastError: Error = AudioDecodingError.noDecoderAvailable
+        for lane in Self.lanes(for: src) {
+            guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else { continue }
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("parla-chunks-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        let framesPerChunk = AVAudioFrameCount(max(1, chunkLength * lane.sampleRate))
-        let writer = ChunkWriter(dir: dir, format: format, framesPerChunk: framesPerChunk)
-        do {
-            try lane.read(src, format, control) { try writer.append($0) }
-            writer.close()
-        } catch {
-            try? FileManager.default.removeItem(at: dir)    // failed split → don't leak the temp chunk dir
-            throw error
+            let framesPerChunk = AVAudioFrameCount(max(1, chunkLength * lane.sampleRate))
+            let writer = ChunkWriter(dir: dir, format: format, framesPerChunk: framesPerChunk)
+            do {
+                try lane.read(src, format, control) { try writer.append($0) }
+                writer.close()
+            } catch {
+                writer.close()
+                try? FileManager.default.removeItem(at: dir)    // failed split → don't leak the temp chunk dir
+                if let e = error as? AudioDecodingError, e == .cancelled || e == .timedOut { throw e }
+                lastError = error
+                continue
+            }
+            let urls = writer.urls
+            if urls.isEmpty { try? FileManager.default.removeItem(at: dir); continue }   // try the next lane
+            return urls
         }
-        let urls = writer.urls
-        if urls.isEmpty { try? FileManager.default.removeItem(at: dir) }
-        return urls
+        throw lastError
     }
 
     public var isChunkingAvailable: Bool { true }
@@ -89,11 +95,19 @@ public struct OpusAudioDecoder: AudioDecoding {
     private typealias FrameReader = (_ src: URL, _ format: AVAudioFormat, _ control: DecodeControl?,
                                      _ sink: (AVAudioPCMBuffer) throws -> Void) throws -> Void
 
-    private static func lane(for src: URL) throws -> (read: FrameReader, sampleRate: Double) {
+    /// Candidate lanes for `src`, best first. An Ogg file gets TWO: libopusfile, then AVAssetReader.
+    ///
+    /// That second one matters. `looksLikeOgg` routes every `OggS` file to opusfile, which decodes Ogg-**Opus**
+    /// only — so an Ogg-Vorbis file (also `.ogg`) failed outright, even though AVFoundation reads it perfectly
+    /// well. Measured on a synthesised file: AVFoundation reports 1 track / 3.13 s for Ogg-Vorbis. It was a
+    /// silent format regression against the previous ffmpeg-era build, and it costs one retry to undo.
+    /// (Ogg-FLAC is NOT rescued by this — AVFoundation opens the container but reports 0.00 s, measured. It
+    /// simply fails with a clear error instead of a misleading one.)
+    private static func lanes(for src: URL) -> [(read: FrameReader, sampleRate: Double)] {
         if looksLikeOgg(src) {
-            return (readOpusFrames, opusSampleRate)
+            return [(readOpusFrames, opusSampleRate), (readAVAssetFrames, avAssetSampleRate)]
         }
-        return (readAVAssetFrames, avAssetSampleRate)
+        return [(readAVAssetFrames, avAssetSampleRate)]
     }
 
     /// Route to the Opus lane when the extension says so (ogg/oga/opus) OR the file's header carries the Ogg
@@ -137,21 +151,29 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// `decodeToWav16k` (temp dest → engine input) and `renderPlayableWav` (cache dest → in-app player). Cleans up a
     /// partial or 0-frame WAV so a failed/empty decode can't masquerade as a valid (silent) file downstream.
     private static func writeMonoWav(from src: URL, to dest: URL, control: DecodeControl? = nil) throws {
-        let lane = try lane(for: src)
-        guard let format = monoFloatFormat(sampleRate: lane.sampleRate) else {
-            throw AudioDecodingError.noDecoderAvailable
+        var lastError: Error = AudioDecodingError.noDecoderAvailable
+        for lane in lanes(for: src) {
+            guard let format = monoFloatFormat(sampleRate: lane.sampleRate) else { continue }
+            do {
+                // The writer MUST go out of scope before the file is read back: `AVAudioFile` flushes on deinit,
+                // so validating while it is still alive reads a length of 0 and rejects a perfectly good decode.
+                var frames: AVAudioFramePosition = 0
+                do {
+                    let out = try AVAudioFile(forWriting: dest, settings: format.settings)
+                    try lane.read(src, format, control) { try out.write(from: $0) }
+                    frames = out.length
+                }
+                guard frames > 0 else { throw AudioDecodingError.noDecoderAvailable }   // opened, produced nothing
+                return
+            } catch {
+                try? FileManager.default.removeItem(at: dest)   // drop a partial WAV so it can't look decoded
+                // A cancel or a watchdog trip is the user's/our decision, not "this lane can't read it" — trying
+                // the next lane would ignore exactly what the caller asked for.
+                if let e = error as? AudioDecodingError, e == .cancelled || e == .timedOut { throw e }
+                lastError = error
+            }
         }
-        let out = try AVAudioFile(forWriting: dest, settings: format.settings)
-        do {
-            try lane.read(src, format, control) { try out.write(from: $0) }
-        } catch {
-            try? FileManager.default.removeItem(at: dest)   // drop a partial WAV so it can't masquerade as decoded
-            throw error
-        }
-        guard out.length > 0 else {
-            try? FileManager.default.removeItem(at: dest)
-            throw AudioDecodingError.noDecoderAvailable
-        }
+        throw lastError
     }
 
     // MARK: - Lane 1 read loop — Ogg/Opus (libopusfile), 48 kHz

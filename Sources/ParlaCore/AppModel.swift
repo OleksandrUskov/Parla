@@ -406,10 +406,12 @@ public final class AppModel {
     public var lastTranscriptText: String { history.first?.text ?? "" }
 
     // «What counts as audio» — a cross-domain utility (used by transcription, watching, and the buffer).
-    // Phase 2c (native-first decode) dropped webm/amr/wma — AVFoundation can't demux Matroska/WebM and has no
-    // reliable AMR/WMA decoder — so they're no longer advertised as importable (they'd only hard-fail on decode).
+    // Phase 2c (native-first decode) dropped webm/mkv — AVFoundation cannot demux Matroska/WebM, so advertising
+    // them would only hard-fail at decode time. `amr` was dropped in the same sweep on the assumption that
+    // AVFoundation had no AMR decoder; measured, it does — a synthesised .amr reports 1 track / 3.02 s and decodes
+    // through Lane 2 — and `.3gp` (the same codec family) was kept anyway, so the drop was also self-inconsistent.
     public nonisolated static let audioExts: Set<String> = [
-        "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac",
+        "ogg", "oga", "opus", "m4a", "mp3", "wav", "aac", "flac", "amr",
         "mp4", "mov", "m4v", "3gp", "aiff", "aif", "caf",
     ]
 
