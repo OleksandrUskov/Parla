@@ -519,6 +519,15 @@ extension AppModel {
     /// title is preserved. Tagged per backend (`generativeTag(forLanguage:)`). TOCTOU-safe: re-finds the item after
     /// the await and skips it if the text changed.
     public func enrichInsights() async {
+        // Pro, and SILENTLY so — no `aiPowerIsGated()` here. That helper sets `paywallReason`, which is right for
+        // a button the user pressed and wrong for this: enrichment runs by itself after every transcription, so
+        // upselling here would throw a paywall in the user's face on every single note. A free user simply keeps
+        // the extractive title/summary/keywords, which are computed locally and cost nothing.
+        //
+        // This gate was missing entirely, and the hole was not theoretical: Apple's on-device model needs NO
+        // download, so an English-speaking free user was getting the full generative upgrade that the paywall
+        // sells as Pro. The model downloads were gated; the one path that needs no download was not.
+        guard isProUser() else { return }
         let targets = history.filter {
             !Self.isAtCurrentGenerativeVersion($0.aiModel)   // not at a CURRENT generative tag (either backend) →
                                                              // reprocess (new note, extractive, OR an outdated version)

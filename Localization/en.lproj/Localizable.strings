@@ -313,8 +313,8 @@
 "paywall.feature.batch.detail"    = "Queue many files at once or auto-transcribe a watched folder.";
 "paywall.feature.export"          = "Subtitle export";
 "paywall.feature.export.detail"   = "Export to SRT, VTT and JSON, not just plain text.";
-"paywall.feature.ai"              = "On-device AI (RU/UK)";
-"paywall.feature.ai.detail"       = "Generative titles and summaries from the local model.";
+"paywall.feature.ai"              = "On-device generative AI";
+"paywall.feature.ai.detail"       = "Model-written summaries, chapter recaps and action items. Uses Apple Intelligence where your language is supported; Russian and Ukrainian use an optional download, on Mac.";
 "paywall.cta.price"               = "Unlock Pro — %@";
 "paywall.cta.unavailable"         = "Temporarily unavailable";
 "paywall.restore"                 = "Restore purchase";
@@ -334,8 +334,7 @@
 "paywall.locked.export" = "Export to SRT, VTT and JSON is a Pro feature.";
 "paywall.locked.batch"       = "Transcribing several files at once is a Pro feature.";
 "paywall.locked.folderwatch" = "Watching a folder for new recordings is a Pro feature.";
-"paywall.locked.aipower"     = "Generative AI — regenerate, per-chapter summaries and Related — is a Pro feature.";
-
+"paywall.locked.aipower"     = "Model-written summaries, chapter recaps and action items are a Pro feature. Automatic titles, summaries and keywords stay free.";
 /* Tip jar (D3) */
 "tip.section" = "Tip the developer";
 "tip.blurb"   = "Parla is free and fully on-device. If it helps you, a small tip is always optional — thank you.";

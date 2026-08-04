@@ -834,6 +834,54 @@ final class ParlaLogicTests: XCTestCase {
             ["one", "two", "three", "four", "five", "six"])   // dedupe case-insens (keep first) + cap 6
     }
 
+    /// The generative upgrade is Pro. This gate was missing entirely: Apple's on-device model needs NO download,
+    /// so an English-speaking free user received the very thing the paywall sells. The downloads were gated; the
+    /// one path that needs no download was not.
+    @MainActor func testGenerativeEnrichmentIsProOnly() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "Model title", summary: "Model summary",
+                                    actions: [ActionItem(text: "do it")], keywords: ["gen"])
+
+            let free = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned),
+                                embedder: FakeEmbedder())
+            free.isProUser = { false }
+            var a = self.makeItem(text: "обсудили альфа и бета", lang: "ru")
+            a.title = "Extractive title"; a.summary = "Extractive summary"; a.keywords = ["извлечённое"]
+            free.history = [a]
+            await free.enrichInsights()
+            XCTAssertEqual(free.history.first?.title, "Extractive title", "a free user keeps the extractive insights")
+            XCTAssertEqual(free.history.first?.summary, "Extractive summary")
+            XCTAssertEqual(free.history.first?.keywords, ["извлечённое"])
+            XCTAssertNil(free.history.first?.actions, "action items only exist generatively — never for free")
+
+            let pro = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned),
+                               embedder: FakeEmbedder())
+            pro.isProUser = { true }
+            var b = self.makeItem(text: "обсудили альфа и бета", lang: "ru")
+            b.title = "Extractive title"; b.summary = "Extractive summary"; b.keywords = ["извлечённое"]
+            pro.history = [b]
+            await pro.enrichInsights()
+            XCTAssertEqual(pro.history.first?.title, "Model title", "Pro gets the generative upgrade")
+            XCTAssertEqual(pro.history.first?.actions?.count, 1)
+        }
+    }
+
+    /// The gate must be SILENT. `aiPowerIsGated()` sets `paywallReason`, which is right for a button the user
+    /// pressed and wrong here — enrichment runs automatically after every note, so upselling would throw a
+    /// paywall in the user's face each time.
+    @MainActor func testGenerativeGateNeverPopsThePaywallByItself() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(),
+                             ai: FakeAIService(availabilityToReturn: .ready,
+                                               canned: AIInsights(title: "T", summary: "S", actions: [])),
+                             embedder: FakeEmbedder())
+            m.isProUser = { false }
+            m.history = [self.makeItem(text: "какой-то текст", lang: "ru")]
+            await m.enrichInsights()
+            XCTAssertNil(m.paywallReason, "an automatic pass must never present the paywall")
+        }
+    }
+
     /// Generative keywords UPGRADE the extractive ones; an empty generative list keeps the extractive default
     /// (so an un-downloaded model behaves exactly as before).
     @MainActor func testEnrichKeywordsUpgradeButEmptyKeepsExtractive() async {
