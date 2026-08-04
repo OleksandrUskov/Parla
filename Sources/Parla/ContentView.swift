@@ -32,7 +32,9 @@ struct ContentView: View {
                 }
             HStack(spacing: 0) {
                 SidebarView().frame(width: sidebarWidth)
-                MainPane()
+                // The wrong-language nudge rides above the reading pane: it is about the note just produced,
+                // and it must be impossible to miss without being possible to trip over.
+                MainPane().languageNudge(model)
             }
             .padding(.top, titleBarReserve)              // reserve the traffic-light strip ourselves…
             .ignoresSafeArea(.container, edges: .top)     // …and don't depend on the title-bar safe-area inset

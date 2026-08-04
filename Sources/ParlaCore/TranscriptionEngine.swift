@@ -14,9 +14,21 @@ public enum EngineError: LocalizedError {
 
 public struct EngineResult: Sendable {
     public var text: String
+    /// The language the decode ran in — i.e. what the model was TOLD, when the user pinned one.
     public var language: String
     public var segments: [Segment]
     public var duration: Double
+    /// What the model actually HEARD, filled in only when a language was pinned (with `nil` the model detects
+    /// anyway and `language` above already is the answer). The gap between told and heard is the whole point:
+    /// a wrong pin measured 49.85% word errors against 5.57% on identical audio, and nothing noticed.
+    public var heard: HeardLanguage? = nil
+}
+
+/// The model's own read of the audio's language, with its confidence (a probability, 0...1).
+public struct HeardLanguage: Sendable, Equatable {
+    public var language: String
+    public var confidence: Double
+    public init(language: String, confidence: Double) { self.language = language; self.confidence = confidence }
 }
 
 /// Model load stage — exposed for the progress bar.
@@ -198,12 +210,21 @@ public actor TranscriptionEngine {
         let results: [TranscriptionResult] = try await kit.transcribe(audioPath: wavPath, decodeOptions: options)
         let elapsed = Date().timeIntervalSince(start)
 
+        // Ask what the model HEARD whenever the caller pinned a language — pinning turns detection off above
+        // (`detectLanguage: language == nil`), so without this the app can never notice a wrong pin. One encoder
+        // pass over the first 30 s; negligible next to the decode that just ran.
+        var heard: HeardLanguage? = nil
+        if language != nil, let d = try? await kit.detectLanguage(audioPath: wavPath) {
+            // `langProbs` are LOG probabilities — exponentiate to get something a threshold can be reasoned about.
+            heard = HeardLanguage(language: d.language, confidence: Foundation.exp(Double(d.langProbs[d.language] ?? -.infinity)))
+        }
+
         let mapped = mapResults(results, language: language)
         // duration = the ACTUAL audio length, not the processing time (`elapsed`). Fall back to the
         // last segment end, then to elapsed, if the file can't be probed.
         let audioLen = AudioDuration.seconds(ofFileAt: wavPath) ?? mapped.segments.map(\.end).max() ?? elapsed
         return EngineResult(text: mapped.text, language: mapped.language,
-                            segments: mapped.segments, duration: audioLen)
+                            segments: mapped.segments, duration: audioLen, heard: heard)
     }
 
     /// Streaming seam: transcribe an in-memory 16 kHz mono Float buffer — the live
@@ -219,6 +240,8 @@ public actor TranscriptionEngine {
 
         let options = DecodingOptions(task: .transcribe, language: language, detectLanguage: language == nil)
         let results: [TranscriptionResult] = try await kit.transcribe(audioArray: samples, decodeOptions: options)
+        // No detection on the streaming path: dictation windows are ~1-2 s of a live mic, far too little for a
+        // reliable read, and the user is speaking right now — the moment to question the language is a file import.
         let mapped = mapResults(results, language: language)
         let duration = Double(samples.count) / 16_000.0   // 16 kHz mono → exact length, no file to probe
         return EngineResult(text: mapped.text, language: mapped.language,

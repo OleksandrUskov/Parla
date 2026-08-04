@@ -44,3 +44,27 @@ extension AppModel {
         return true
     }
 }
+
+// MARK: - Wrong-language nudge
+
+extension AppModel {
+    /// Accept the suggestion: switch the speech language to what the model actually heard and run the note
+    /// again. The setting is app-wide and persisted, because a user who pinned the wrong language once is
+    /// almost certainly about to import more audio in that same real language.
+    public func applyLanguageSuggestion() {
+        guard let suggestion = languageSuggestion,
+              let item = history.first(where: { $0.id == suggestion.id }) else { return }
+        languageSuggestion = nil
+        language = suggestion.detected
+        retranscribe(item, with: item.model, allowingSameModel: true)
+    }
+
+    /// Decline. Deliberately no "never ask again": the check is per-note and only fires above a measured
+    /// confidence, so a user who is right simply dismisses it and it does not come back for that note.
+    public func dismissLanguageSuggestion() { languageSuggestion = nil }
+
+    /// Display name for a language subtag, in the user's UI language ("ru" → "Russian" / «русский»).
+    public func languageDisplayName(_ subtag: String) -> String {
+        Locale(identifier: uiLanguage.code).localizedString(forLanguageCode: subtag)?.capitalized ?? subtag.uppercased()
+    }
+}

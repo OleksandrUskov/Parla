@@ -344,3 +344,9 @@
 /* House cross-promo (D2) */
 "house.section" = "More from the developer";
 "paywall.redeem" = "Redeem a code";
+
+/* Wrong-language nudge: the model heard a different language than the user pinned. */
+"language.nudge.title"              = "This recording sounds like %@";
+"language.nudge.body"               = "It was transcribed as %@, which can make the text far less accurate.";
+"language.nudge.switch"             = "Redo in %@";
+"language.nudge.dismiss"            = "Dismiss";

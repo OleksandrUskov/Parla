@@ -29,6 +29,9 @@ public protocol FileWatching: AnyObject {
 public final class AppModel {
     public var phase: EnginePhase = .idle
     public var paywallReason: PaywallReason?          // non-nil → present the paywall (set by the free-tier length gate; the UI clears it on dismiss)
+    /// non-nil → the model heard a different language than the user pinned, confidently enough to say so.
+    /// Best-effort and dismissible: never blocks anything, never rewrites a transcript on its own.
+    public var languageSuggestion: LanguageSuggestion?
     public var history: [TranscriptItem] = HistoryStore.load()
     public var selection: TranscriptItem.ID?
     public var pendingOpen: TranscriptItem.ID?        // a deep-link (parla://note / widget / Handoff) asked to open this note; drained by the History shell

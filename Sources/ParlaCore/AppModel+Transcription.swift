@@ -139,7 +139,10 @@ extension AppModel {
                 history.insert(item, at: 0)
                 selection = item.id
                 HistoryStore.save(history)
-                Task { await refreshSemanticIndex() }   // extractive title/summary + search embedding (P1)
+                // A pinned language that doesn't match the audio is the most expensive silent failure in the
+                // app (measured: 49.85% word errors against 5.57%), and until now nothing surfaced it.
+                languageSuggestion = LanguageMismatch.suggestion(for: item.id, pinned: language, heard: r.heard)
+                Task { await refreshSemanticIndex() }   // extractive title/summary + search embedding
                 if autoCopy, !r.text.isEmpty { copy(item.text) }
                 succeeded += 1
                 rememberSource(url)            // for «repeat last file»
@@ -334,9 +337,11 @@ extension AppModel {
     }
 
     /// Re-run an entry on a different model, replacing its contents IN PLACE (same id/position).
-    public func retranscribe(_ item: TranscriptItem, with model: String) {
+    public func retranscribe(_ item: TranscriptItem, with model: String, allowingSameModel: Bool = false) {
         guard !isBusy, downloadingModel == nil else { return }
-        guard model != item.model else { return }            // same model — nothing to recompute
+        // Same model is normally a no-op — except when something OTHER than the model changed, which is exactly
+        // the wrong-language case: same weights, different language, completely different transcript.
+        guard allowingSameModel || model != item.model else { return }
         // Free-tier length gate: re-transcribing an over-cap note is a fresh transcription too, so gate it for a
         // non-Pro user (parity with a fresh drop — otherwise a migrated/refunded free user re-runs a long history
         // note unlimited for free). Uses the note's KNOWN duration, so it also covers Ogg/Opus that the fresh-drop

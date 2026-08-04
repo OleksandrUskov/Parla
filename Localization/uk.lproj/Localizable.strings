@@ -344,3 +344,9 @@
 /* House cross-promo (D2) */
 "house.section" = "Інші застосунки розробника";
 "paywall.redeem" = "Активувати код";
+
+/* Wrong-language nudge: the model heard a different language than the user pinned. */
+"language.nudge.title"              = "Схоже, цей запис — %@";
+"language.nudge.body"               = "Розпізнавали як %@ — через це текст може бути помітно гіршим.";
+"language.nudge.switch"             = "Переробити як %@";
+"language.nudge.dismiss"            = "Сховати";
