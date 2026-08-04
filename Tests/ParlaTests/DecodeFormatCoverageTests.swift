@@ -75,3 +75,61 @@ final class DecodeFormatCoverageTests: XCTestCase {
         }
     }
 }
+
+/// The playback rendition. `renderPlayableM4a` threw unconditionally, so every note fell through to a PCM WAV —
+/// about 11.5 MB per minute for an Opus voice note against AAC's fraction of that. A 45-minute recording came to
+/// roughly 520 MB against a 500 MB cache cap, i.e. one long note could evict the whole cache including itself.
+final class PlaybackRenditionTests: XCTestCase {
+
+    private func fixture(_ name: String, _ ext: String) throws -> URL {
+        try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures"))
+    }
+
+    func testAacRenditionIsProducedAndPlayable() throws {
+        let src = try fixture("tone", "ogg")
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent("play-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: dest) }
+
+        try OpusAudioDecoder().renderPlayableM4a(from: src, to: dest)
+
+        let player = try AVAudioPlayer(contentsOf: dest)   // the actual contract: AVAudioPlayer opens it
+        XCTAssertGreaterThan(player.duration, 2, "the fixture is 3 s")
+        XCTAssertEqual(try AVAudioFile(forReading: dest).fileFormat.channelCount, 1)
+    }
+
+    /// THE point of the change, measured rather than asserted: AAC must be dramatically smaller than the PCM WAV
+    /// the app was falling back to.
+    func testAacIsFarSmallerThanTheWavItReplaces() throws {
+        let src = try fixture("tone", "ogg")
+        let m4a = FileManager.default.temporaryDirectory.appendingPathComponent("s-\(UUID().uuidString).m4a")
+        let wav = FileManager.default.temporaryDirectory.appendingPathComponent("s-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: m4a); try? FileManager.default.removeItem(at: wav) }
+
+        let decoder = OpusAudioDecoder()
+        try decoder.renderPlayableM4a(from: src, to: m4a)
+        try decoder.renderPlayableWav(from: src, to: wav)
+
+        let a = try FileManager.default.attributesOfItem(atPath: m4a.path)[.size] as! Int
+        let w = try FileManager.default.attributesOfItem(atPath: wav.path)[.size] as! Int
+        XCTAssertLessThan(a * 4, w, "AAC should be several times smaller — got \(a) vs \(w) bytes")
+    }
+
+    /// The Ogg-Vorbis lane fallback has to work for renditions too, or those notes silently lose their player.
+    func testRenditionFallsBackForNonOpusOgg() throws {
+        let src = try fixture("vorbis", "ogg")
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent("v-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: dest) }
+        try OpusAudioDecoder().renderPlayableM4a(from: src, to: dest)
+        XCTAssertGreaterThan(try AVAudioPlayer(contentsOf: dest).duration, 2)
+    }
+
+    /// A failed render must not leave a stub file behind that the player would later try to open.
+    func testAFailedRenderLeavesNothingBehind() {
+        let bogus = FileManager.default.temporaryDirectory.appendingPathComponent("nope-\(UUID().uuidString).xyz")
+        try? Data("not audio".utf8).write(to: bogus)
+        defer { try? FileManager.default.removeItem(at: bogus) }
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent("f-\(UUID().uuidString).m4a")
+        XCTAssertThrowsError(try OpusAudioDecoder().renderPlayableM4a(from: bogus, to: dest))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dest.path))
+    }
+}

@@ -83,10 +83,99 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// In-app playback rendition. Reuses the same decode lanes that feed WhisperKit to write a mono
     /// Float32 WAV the built-in `AVAudioPlayer` can open — so an imported Telegram Ogg/Opus (or video, whose
     /// original container AVAudioPlayer can't open) is PLAYABLE. This decoder serves both iOS and macOS now.
-    /// `renderPlayableM4a` stays unimplemented on purpose: `AudioStore.makePlayable`
-    /// tries M4a first, then falls back to this WAV (larger, but the audio cache is capped/managed). webm is
-    /// scoped out of iOS v1 either way (no in-process decoder → both renditions throw → no player, by design).
-    public func renderPlayableM4a(from src: URL, to dest: URL) throws { throw AudioDecodingError.noDecoderAvailable }
+    /// Compact AAC `.m4a` rendition for the in-app player.
+    ///
+    /// This used to throw unconditionally, so EVERY note fell through to the PCM WAV fallback — roughly
+    /// 11.5 MB per minute for an Opus voice note against AAC's ~0.7. A 45-minute recording alone came to about
+    /// 520 MB against a 500 MB cache cap: one long note could evict the entire cache, including itself. The
+    /// caller also logged "AAC playback render failed" on every single import, which read as a bug to anyone
+    /// tailing the logs and was really just this stub announcing itself.
+    ///
+    /// Decoded through the same lanes as everything else, then encoded with AVAssetWriter. Note the rendition
+    /// keeps the lane's sample rate — 48 kHz for Opus, 16 kHz for the AVAssetReader lane — so video playback is
+    /// still mono 16 kHz. That is unchanged here and is a separate improvement; this commit is about the 16×
+    /// size difference, which is what was actually breaking the cache.
+    public func renderPlayableM4a(from src: URL, to dest: URL) throws {
+        var lastError: Error = AudioDecodingError.noDecoderAvailable
+        for lane in Self.lanes(for: src) {
+            guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else { continue }
+            do {
+                try Self.encodeAAC(src, format: format, lane: lane.read, to: dest)
+                return
+            } catch {
+                try? FileManager.default.removeItem(at: dest)
+                lastError = error
+            }
+        }
+        throw lastError
+    }
+
+    /// Stream one lane's mono Float32 buffers into an AAC `.m4a`. Nothing is held in memory beyond a buffer at a
+    /// time, so a three-hour recording costs the same as a thirty-second one.
+    private static func encodeAAC(_ src: URL, format: AVAudioFormat, lane: FrameReader, to dest: URL) throws {
+        let writer = try AVAssetWriter(outputURL: dest, fileType: .m4a)
+        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderBitRateKey: 32_000,        // mono speech; the source is already a 16 kHz-class voice note
+        ])
+        input.expectsMediaDataInRealTime = false
+        guard writer.canAdd(input) else { throw AudioDecodingError.noDecoderAvailable }
+        writer.add(input)
+        guard writer.startWriting() else { throw writer.error ?? AudioDecodingError.noDecoderAvailable }
+        writer.startSession(atSourceTime: .zero)
+
+        var written: AVAudioFramePosition = 0
+        do {
+            try lane(src, format, nil) { buffer in
+                while !input.isReadyForMoreMediaData { usleep(1_000) }
+                guard let sample = try Self.sampleBuffer(from: buffer, at: written) else { return }
+                guard input.append(sample) else { throw writer.error ?? AudioDecodingError.noDecoderAvailable }
+                written += AVAudioFramePosition(buffer.frameLength)
+            }
+        } catch {
+            writer.cancelWriting()
+            throw error
+        }
+        input.markAsFinished()
+
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        guard writer.status == .completed, written > 0 else {
+            throw writer.error ?? AudioDecodingError.noDecoderAvailable
+        }
+    }
+
+    /// Wrap a PCM buffer as a timed `CMSampleBuffer` the writer can append. `at` is the running frame position,
+    /// so the encoder receives a continuous timeline instead of every buffer claiming to start at zero.
+    private static func sampleBuffer(from pcm: AVAudioPCMBuffer, at frame: AVAudioFramePosition) throws -> CMSampleBuffer? {
+        guard pcm.frameLength > 0 else { return nil }
+        var asbd = pcm.format.streamDescription.pointee
+        var formatDesc: CMAudioFormatDescription?
+        guard CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: &asbd, layoutSize: 0, layout: nil,
+                                             magicCookieSize: 0, magicCookie: nil, extensions: nil,
+                                             formatDescriptionOut: &formatDesc) == noErr, let formatDesc
+        else { throw AudioDecodingError.noDecoderAvailable }
+
+        let scale = CMTimeScale(pcm.format.sampleRate)
+        var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: scale),
+                                        presentationTimeStamp: CMTime(value: frame, timescale: scale),
+                                        decodeTimeStamp: .invalid)
+        var sample: CMSampleBuffer?
+        guard CMSampleBufferCreate(allocator: kCFAllocatorDefault, dataBuffer: nil, dataReady: false,
+                                   makeDataReadyCallback: nil, refcon: nil, formatDescription: formatDesc,
+                                   sampleCount: CMItemCount(pcm.frameLength), sampleTimingEntryCount: 1,
+                                   sampleTimingArray: &timing, sampleSizeEntryCount: 0, sampleSizeArray: nil,
+                                   sampleBufferOut: &sample) == noErr, let sample
+        else { throw AudioDecodingError.noDecoderAvailable }
+        guard CMSampleBufferSetDataBufferFromAudioBufferList(sample, blockBufferAllocator: kCFAllocatorDefault,
+                                                            blockBufferMemoryAllocator: kCFAllocatorDefault,
+                                                            flags: 0, bufferList: pcm.mutableAudioBufferList) == noErr
+        else { throw AudioDecodingError.noDecoderAvailable }
+        return sample
+    }
     public func renderPlayableWav(from src: URL, to dest: URL) throws { try Self.writeMonoWav(from: src, to: dest) }
 
     // MARK: - Lane selection
