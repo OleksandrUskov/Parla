@@ -7,6 +7,11 @@ import XCTest
 /// noticed, because the output was correct either way; only the cost was wrong.
 ///
 /// This counts the decoder calls, so the regression is caught by shape rather than by someone re-reading the code.
+///
+/// NOTE: every model here is built with an explicit `NoopEmbedder`. `handleDrop` kicks off `refreshSemanticIndex`
+/// as a fire-and-forget task, and the DEFAULT embedder picks the MLX one whenever the download-tier model happens
+/// to be present on the machine — which then reaches for a Metal library `swift test` does not build, and aborts
+/// the whole test process from a background task, at a different point every run.
 final class NoDoubleDecodeTests: XCTestCase {
 
     /// Counts what the pipeline asks of the decoder. Returns real (tiny) WAVs so the flow can continue.
@@ -64,7 +69,7 @@ final class NoDoubleDecodeTests: XCTestCase {
     @MainActor func testALongSourceIsNeverFullyDecodedBeforeChunking() async {
         await withIsolatedHistory {
             let counting = CountingDecoder()
-            let m = AppModel(engine: FakeEngineForDecode(), ai: NoopAIService())
+            let m = AppModel(engine: FakeEngineForDecode(), ai: NoopAIService(), embedder: NoopEmbedder())
             m.decoder = counting
             m.isProUser = { true }                                  // length gate is not what is under test
             m.mediaDuration = { _ in 45 * 60 }                      // 45 minutes → well past the chunking threshold
@@ -84,7 +89,7 @@ final class NoDoubleDecodeTests: XCTestCase {
     @MainActor func testAShortSourceStillTakesTheSinglePassDecode() async {
         await withIsolatedHistory {
             let counting = CountingDecoder()
-            let m = AppModel(engine: FakeEngineForDecode(), ai: NoopAIService())
+            let m = AppModel(engine: FakeEngineForDecode(), ai: NoopAIService(), embedder: NoopEmbedder())
             m.decoder = counting
             m.isProUser = { true }
             m.mediaDuration = { _ in 30 }                           // 30 s
@@ -104,7 +109,7 @@ final class NoDoubleDecodeTests: XCTestCase {
     @MainActor func testAnUnknownSourceDurationFallsBackToDecodingFirst() async {
         await withIsolatedHistory {
             let counting = CountingDecoder()
-            let m = AppModel(engine: FakeEngineForDecode(), ai: NoopAIService())
+            let m = AppModel(engine: FakeEngineForDecode(), ai: NoopAIService(), embedder: NoopEmbedder())
             m.decoder = counting
             m.isProUser = { true }
             m.mediaDuration = { _ in nil }                          // probe cannot tell

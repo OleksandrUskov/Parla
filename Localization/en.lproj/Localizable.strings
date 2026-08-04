@@ -355,3 +355,7 @@
 "error.decode.cancelled"            = "Cancelled.";
 "error.decode.timeout"              = "Reading this file took too long and was stopped.";
 "error.decode.corrupt"              = "This recording appears to be damaged and could not be read.";
+"error.decode.nodecoder"            = "No audio decoder is available on this platform.";
+"error.decode.unsupported.ext"      = "Parla can't read this file format (.%@).";
+"error.decode.noaudio"              = "This file has no audio track.";
+"error.decode.empty"                = "This file contained no audio.";

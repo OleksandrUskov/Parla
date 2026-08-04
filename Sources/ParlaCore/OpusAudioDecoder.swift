@@ -52,7 +52,7 @@ public struct OpusAudioDecoder: AudioDecoding {
     public func splitIntoChunks(_ src: URL, chunkLength: Double, control: DecodeControl?) throws -> [URL] {
         // Same lane fallback as the single-pass decode: an Ogg-Vorbis file must not lose the long-audio path
         // just because libopusfile can't read it.
-        var lastError: Error = AudioDecodingError.noDecoderAvailable
+        var lastError: Error = AudioDecodingError.unsupportedContainer(src.pathExtension)
         for lane in Self.lanes(for: src) {
             guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else { continue }
             let dir = FileManager.default.temporaryDirectory
@@ -96,7 +96,7 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// still mono 16 kHz. That is unchanged here and is a separate improvement; this commit is about the 16×
     /// size difference, which is what was actually breaking the cache.
     public func renderPlayableM4a(from src: URL, to dest: URL) throws {
-        var lastError: Error = AudioDecodingError.noDecoderAvailable
+        var lastError: Error = AudioDecodingError.unsupportedContainer(src.pathExtension)
         for lane in Self.lanes(for: src) {
             guard let format = Self.monoFloatFormat(sampleRate: lane.sampleRate) else { continue }
             do {
@@ -121,9 +121,9 @@ public struct OpusAudioDecoder: AudioDecoding {
             AVEncoderBitRateKey: 32_000,        // mono speech; the source is already a 16 kHz-class voice note
         ])
         input.expectsMediaDataInRealTime = false
-        guard writer.canAdd(input) else { throw AudioDecodingError.noDecoderAvailable }
+        guard writer.canAdd(input) else { throw AudioDecodingError.unsupportedContainer(src.pathExtension) }
         writer.add(input)
-        guard writer.startWriting() else { throw writer.error ?? AudioDecodingError.noDecoderAvailable }
+        guard writer.startWriting() else { throw writer.error ?? AudioDecodingError.unsupportedContainer(src.pathExtension) }
         writer.startSession(atSourceTime: .zero)
 
         var written: AVAudioFramePosition = 0
@@ -131,7 +131,7 @@ public struct OpusAudioDecoder: AudioDecoding {
             try lane(src, format, nil) { buffer in
                 while !input.isReadyForMoreMediaData { usleep(1_000) }
                 guard let sample = try Self.sampleBuffer(from: buffer, at: written) else { return }
-                guard input.append(sample) else { throw writer.error ?? AudioDecodingError.noDecoderAvailable }
+                guard input.append(sample) else { throw writer.error ?? AudioDecodingError.unsupportedContainer(src.pathExtension) }
                 written += AVAudioFramePosition(buffer.frameLength)
             }
         } catch {
@@ -144,7 +144,7 @@ public struct OpusAudioDecoder: AudioDecoding {
         writer.finishWriting { done.signal() }
         done.wait()
         guard writer.status == .completed, written > 0 else {
-            throw writer.error ?? AudioDecodingError.noDecoderAvailable
+            throw writer.error ?? AudioDecodingError.unsupportedContainer(src.pathExtension)
         }
     }
 
@@ -157,7 +157,7 @@ public struct OpusAudioDecoder: AudioDecoding {
         guard CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: &asbd, layoutSize: 0, layout: nil,
                                              magicCookieSize: 0, magicCookie: nil, extensions: nil,
                                              formatDescriptionOut: &formatDesc) == noErr, let formatDesc
-        else { throw AudioDecodingError.noDecoderAvailable }
+        else { throw AudioDecodingError.emptyOutput }   // CoreMedia refused to wrap the buffer
 
         let scale = CMTimeScale(pcm.format.sampleRate)
         var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: scale),
@@ -169,11 +169,11 @@ public struct OpusAudioDecoder: AudioDecoding {
                                    sampleCount: CMItemCount(pcm.frameLength), sampleTimingEntryCount: 1,
                                    sampleTimingArray: &timing, sampleSizeEntryCount: 0, sampleSizeArray: nil,
                                    sampleBufferOut: &sample) == noErr, let sample
-        else { throw AudioDecodingError.noDecoderAvailable }
+        else { throw AudioDecodingError.emptyOutput }   // CoreMedia refused to wrap the buffer
         guard CMSampleBufferSetDataBufferFromAudioBufferList(sample, blockBufferAllocator: kCFAllocatorDefault,
                                                             blockBufferMemoryAllocator: kCFAllocatorDefault,
                                                             flags: 0, bufferList: pcm.mutableAudioBufferList) == noErr
-        else { throw AudioDecodingError.noDecoderAvailable }
+        else { throw AudioDecodingError.emptyOutput }   // CoreMedia refused to wrap the buffer
         return sample
     }
     public func renderPlayableWav(from src: URL, to dest: URL) throws { try Self.writeMonoWav(from: src, to: dest) }
@@ -240,7 +240,7 @@ public struct OpusAudioDecoder: AudioDecoding {
     /// `decodeToWav16k` (temp dest → engine input) and `renderPlayableWav` (cache dest → in-app player). Cleans up a
     /// partial or 0-frame WAV so a failed/empty decode can't masquerade as a valid (silent) file downstream.
     private static func writeMonoWav(from src: URL, to dest: URL, control: DecodeControl? = nil) throws {
-        var lastError: Error = AudioDecodingError.noDecoderAvailable
+        var lastError: Error = AudioDecodingError.unsupportedContainer(src.pathExtension)
         for lane in lanes(for: src) {
             guard let format = monoFloatFormat(sampleRate: lane.sampleRate) else { continue }
             do {
@@ -252,7 +252,7 @@ public struct OpusAudioDecoder: AudioDecoding {
                     try lane.read(src, format, control) { try out.write(from: $0) }
                     frames = out.length
                 }
-                guard frames > 0 else { throw AudioDecodingError.noDecoderAvailable }   // opened, produced nothing
+                guard frames > 0 else { throw AudioDecodingError.emptyOutput }   // opened fine, produced no audio
                 return
             } catch {
                 try? FileManager.default.removeItem(at: dest)   // drop a partial WAV so it can't look decoded
@@ -273,11 +273,14 @@ public struct OpusAudioDecoder: AudioDecoding {
     private static func readOpusFrames(_ src: URL, _ format: AVAudioFormat, _ control: DecodeControl?,
                                        _ sink: (AVAudioPCMBuffer) throws -> Void) throws {
         var err: Int32 = 0
-        guard let file = op_open_file(src.path, &err), err == 0 else { throw AudioDecodingError.noDecoderAvailable }
+        guard let file = op_open_file(src.path, &err), err == 0 else {
+            // OP_ENOTFORMAT etc: an Ogg container that is not Ogg-Opus. The caller retries on the AVAssetReader lane.
+            throw AudioDecodingError.unsupportedContainer(src.pathExtension)
+        }
         defer { op_free(file) }
 
         let firstChannels = Int(op_channel_count(file, -1))
-        guard firstChannels > 0 else { throw AudioDecodingError.noDecoderAvailable }
+        guard firstChannels > 0 else { throw AudioDecodingError.corruptStream }   // a link claiming zero channels
 
         // `op_read_float` never writes past the buffer size we pass, so a fixed buffer is overflow-safe for ANY
         // link's channel count. Size it (and the mono buffer) for the first link's count: that also covers the
@@ -285,7 +288,7 @@ public struct OpusAudioDecoder: AudioDecoding {
         // which the mono buffer must be able to hold). Telegram voice is single-link mono → capacity == 5760.
         let capacity = 5760 * firstChannels                                // Opusfile yields ≤ 5760 frames/channel per call
         guard let mono = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(capacity)) else {
-            throw AudioDecodingError.noDecoderAvailable
+            throw AudioDecodingError.unsupportedContainer(src.pathExtension)   // buffer alloc — vanishingly rare
         }
         var interleaved = [Float](repeating: 0, count: capacity)
 
@@ -305,7 +308,7 @@ public struct OpusAudioDecoder: AudioDecoding {
                 continue
             }
             consecutiveHoles = 0
-            if n < 0 { throw AudioDecodingError.noDecoderAvailable }        // genuine error (OP_EREAD/OP_EBADPACKET/…)
+            if n < 0 { throw AudioDecodingError.corruptStream }             // OP_EREAD / OP_EBADPACKET — damaged bytes
             if n == 0 { break }                                            // EOF
 
             // Re-read THIS link's channel count — a chained stream can change it link-to-link, and a stale count
@@ -355,14 +358,18 @@ public struct OpusAudioDecoder: AudioDecoding {
         // mic + system audio, multi-language m4v) can list a non-default track first, and `.first` would
         // silently transcribe the wrong/silent one. Falls back to the first track when none flags enabled.
         guard let track = audioTracks.first(where: { $0.isEnabled }) ?? audioTracks.first else {
-            throw AudioDecodingError.noDecoderAvailable   // no audio stream / unreadable container
+            // Distinguish "we didn't understand this container" from "we understood it and it has no audio".
+            // AVURLAsset happily opens ANY file and then reports no tracks, so without this check a junk file and
+            // a genuine silent-video both said "no audio track" — one of which is a lie the user can act on wrongly.
+            throw asset.tracks.isEmpty ? AudioDecodingError.unsupportedContainer(src.pathExtension)
+                                       : AudioDecodingError.noAudioTrack
         }
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: pcm16kMonoSettings)
         output.alwaysCopiesSampleData = false
-        guard reader.canAdd(output) else { throw AudioDecodingError.noDecoderAvailable }
+        guard reader.canAdd(output) else { throw AudioDecodingError.unsupportedContainer(src.pathExtension) }
         reader.add(output)
-        guard reader.startReading() else { throw reader.error ?? AudioDecodingError.noDecoderAvailable }
+        guard reader.startReading() else { throw reader.error ?? AudioDecodingError.unsupportedContainer(src.pathExtension) }
 
         while reader.status == .reading {
             // Cancel/watchdog: without this, `reader.cancelReading()` never happens and a stuck demux runs on.
@@ -381,7 +388,7 @@ public struct OpusAudioDecoder: AudioDecoding {
             guard status == kCMBlockBufferNoErr else { continue }
             try sink(buf)
         }
-        if reader.status == .failed { throw reader.error ?? AudioDecodingError.noDecoderAvailable }
+        if reader.status == .failed { throw reader.error ?? AudioDecodingError.corruptStream }
     }
 }
 
@@ -424,7 +431,7 @@ private final class ChunkWriter {
             if framesInCurrent >= framesPerChunk { try rollover() }
             let take = min(framesPerChunk - framesInCurrent, total - offset)
             guard let slice = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: take) else {
-                throw AudioDecodingError.noDecoderAvailable
+                throw AudioDecodingError.emptyOutput   // slice allocation failed — cannot continue
             }
             slice.frameLength = take
             slice.floatChannelData![0].update(from: src + Int(offset), count: Int(take))

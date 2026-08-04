@@ -121,3 +121,64 @@ final class DecodeControlTests: XCTestCase {
         return url
     }
 }
+
+/// Every decode failure used to arrive as ONE hardcoded English sentence, for all fourteen throw sites: a cancel
+/// and a corrupt file were indistinguishable, the message blamed "this platform" when the file was the problem,
+/// and it was never translated — in an app whose audience reads Russian and Ukrainian.
+final class DecodeErrorTaxonomyTests: XCTestCase {
+
+    /// Distinct cases must produce distinct messages. A taxonomy that all reads the same is not a taxonomy.
+    func testEachCaseHasItsOwnMessage() {
+        let cases: [AudioDecodingError] = [
+            .noDecoderAvailable, .unsupportedContainer("webm"), .noAudioTrack,
+            .emptyOutput, .corruptStream, .cancelled, .timedOut,
+        ]
+        let messages = cases.map { $0.errorDescription ?? "" }
+        XCTAssertFalse(messages.contains(""), "every case must carry a message")
+        XCTAssertEqual(Set(messages).count, cases.count, "…and they must differ: \(messages)")
+    }
+
+    /// Every case's message must actually EXIST in all three catalogues, and the format-specific one must carry
+    /// its placeholder. Checked against the `.strings` files rather than the runtime bundle: under `swift test`
+    /// there is no app bundle, so `L()` returns the raw key — asserting on it would prove nothing either way.
+    func testEveryMessageIsTranslatedInAllThreeCatalogues() throws {
+        let needed = ["error.decode.nodecoder", "error.decode.unsupported", "error.decode.unsupported.ext",
+                      "error.decode.noaudio", "error.decode.empty", "error.decode.corrupt",
+                      "error.decode.cancelled", "error.decode.timeout"]
+        for lang in ["en", "ru", "uk"] {
+            let url = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("Localization/\(lang).lproj/Localizable.strings")
+            let catalogue = NSDictionary(contentsOf: url) as? [String: String] ?? [:]
+            XCTAssertGreaterThan(catalogue.count, 100, "\(lang) catalogue unreadable")
+            for key in needed {
+                let value = catalogue[key] ?? ""
+                XCTAssertFalse(value.isEmpty, "\(lang) is missing \(key)")
+                XCTAssertNotEqual(value, key, "\(lang)/\(key) is just the key echoed back")
+            }
+            XCTAssertTrue(catalogue["error.decode.unsupported.ext"]?.contains("%@") ?? false,
+                          "\(lang): the format-specific message must name the extension")
+        }
+    }
+
+    /// A cancel must never be reported as a broken file, and a wedge must never be reported as a cancel — they
+    /// mean different things to the person reading the error.
+    func testCancelAndTimeoutStayDistinct() {
+        XCTAssertNotEqual(AudioDecodingError.cancelled, AudioDecodingError.timedOut)
+        XCTAssertNotEqual(AudioDecodingError.cancelled.errorDescription, AudioDecodingError.corruptStream.errorDescription)
+    }
+
+    /// A real unreadable file must now report WHY, rather than the old catch-all.
+    func testAnUnreadableFileReportsUnsupportedRatherThanTheGenericError() throws {
+        let bogus = FileManager.default.temporaryDirectory.appendingPathComponent("junk-\(UUID().uuidString).xyz")
+        try Data("definitely not audio".utf8).write(to: bogus)
+        defer { try? FileManager.default.removeItem(at: bogus) }
+
+        XCTAssertThrowsError(try OpusAudioDecoder().decodeToWav16k(bogus)) { error in
+            guard case .unsupportedContainer(let ext)? = error as? AudioDecodingError else {
+                return XCTFail("expected .unsupportedContainer, got \(error)")
+            }
+            XCTAssertEqual(ext, "xyz")
+        }
+    }
+}

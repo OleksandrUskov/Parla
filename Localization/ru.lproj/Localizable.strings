@@ -355,3 +355,7 @@
 "error.decode.cancelled"            = "Отменено.";
 "error.decode.timeout"              = "Чтение файла заняло слишком много времени и было остановлено.";
 "error.decode.corrupt"              = "Похоже, запись повреждена — прочитать её не удалось.";
+"error.decode.nodecoder"            = "На этой платформе нет аудиодекодера.";
+"error.decode.unsupported.ext"      = "Parla не умеет читать этот формат (.%@).";
+"error.decode.noaudio"              = "В этом файле нет звуковой дорожки.";
+"error.decode.empty"                = "В этом файле не оказалось звука.";

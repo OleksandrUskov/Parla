@@ -66,21 +66,36 @@ public protocol AudioDecoding: Sendable {
 
 /// Thrown by the inert Core decoder when no platform decoder has been wired in (e.g. a unit test that
 /// exercises a decode path without injecting one). Production always wires a real decoder via the app factory.
-public enum AudioDecodingError: LocalizedError {
+public enum AudioDecodingError: LocalizedError, Equatable {
+    /// No decoder is wired in at all — the inert Core default, not a property of the file.
     case noDecoderAvailable
+    /// No lane could read this container. Carries the extension so the message can name it.
+    case unsupportedContainer(String)
+    /// The container opened but has no audio stream (a silent screen recording, a video with the audio stripped).
+    case noAudioTrack
+    /// It decoded, and produced zero frames — an empty or truncated file. Must never pass for a silent recording.
+    case emptyOutput
+    /// The stream kept returning gaps instead of audio. An unbounded `OP_HOLE` retry could spin here forever.
+    case corruptStream
     /// The user pressed Cancel while the file was still being decoded.
     case cancelled
     /// The decode ran past its deadline — a wedge, not slowness. Replaces the watchdog the ffmpeg subprocess had.
     case timedOut
-    /// The stream kept returning gaps instead of audio. An unbounded `OP_HOLE` retry could spin here forever.
-    case corruptStream
 
+    /// Every failure used to arrive as ONE hardcoded English sentence — "No audio decoder is available on this
+    /// platform." — for all fourteen throw sites. It was misleading (the platform HAS a decoder; this FILE is the
+    /// problem), it was identical for a cancel and for a corrupt file, and it was never translated, in an app whose
+    /// target audience reads Russian and Ukrainian.
     public var errorDescription: String? {
         switch self {
-        case .noDecoderAvailable: return L("error.decode.unsupported")
-        case .cancelled:          return L("error.decode.cancelled")
-        case .timedOut:           return L("error.decode.timeout")
-        case .corruptStream:      return L("error.decode.corrupt")
+        case .noDecoderAvailable:             return L("error.decode.nodecoder")
+        case .unsupportedContainer(let ext):  return ext.isEmpty ? L("error.decode.unsupported")
+                                                               : Lf("error.decode.unsupported.ext", ext)
+        case .noAudioTrack:                   return L("error.decode.noaudio")
+        case .emptyOutput:                    return L("error.decode.empty")
+        case .corruptStream:                  return L("error.decode.corrupt")
+        case .cancelled:                      return L("error.decode.cancelled")
+        case .timedOut:                       return L("error.decode.timeout")
         }
     }
 }

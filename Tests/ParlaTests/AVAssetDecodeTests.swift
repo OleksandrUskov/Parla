@@ -91,10 +91,13 @@ final class AVAssetDecodeTests: XCTestCase {
         XCTAssertTrue(input.append(sampleBuffer), "AAC append failed")
         input.markAsFinished()
 
+        // 120 s, not 15: this synthesises AAC through the SOFTWARE encoder, and on a loaded CI simulator that can
+        // take far longer than on a developer's Mac. The old 15 s passed locally for months and then failed on the
+        // runner the first time CI actually executed this suite — a slow machine, not a broken encoder.
         let done = XCTestExpectation(description: "writer finished")
         writer.finishWriting { done.fulfill() }
-        wait(for: [done], timeout: 15)
-        XCTAssertEqual(writer.status, .completed, "AAC writer failed: \(String(describing: writer.error))")
+        wait(for: [done], timeout: 120)
+        XCTAssertEqual(writer.status, .completed, "AAC writer did not finish: status=\(writer.status.rawValue) error=\(String(describing: writer.error))")
         return url
     }
 
