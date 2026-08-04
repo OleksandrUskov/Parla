@@ -622,9 +622,12 @@ extension AppModel {
     /// Sentences considered by the extractive pass. The similarity matrix is O(n²) and every sentence costs an
     /// embedding, so this stays capped — but the sample now SPANS the note instead of taking its opening.
     static let extractiveSentenceCap = 120
-    /// Upper bound on the text handed to the one-pass embedder. Beyond it, fall back to per-sentence embedding
-    /// (slower, but bounded and proven) rather than feeding the model an unbounded string.
-    static let extractiveOnePassCharCap = 20_000
+    /// MEASURED, so nobody re-opens this: batching sentences into fewer embedder calls does NOT make the
+    /// extractive pass faster. `NLContextualEmbedding` stops after 256 token vectors (~950 Cyrillic chars) and
+    /// returns nothing for the rest, so "embed the whole note in one call" silently drops most of it — and once
+    /// you batch correctly to stay under that window you are feeding the model the same total token count, which
+    /// is what it actually charges for. Timed on real notes through this exact function: 1.0x / 1.2x / 0.9x
+    /// versus the plain per-sentence loop, i.e. noise. The simple loop below is the right code.
 
     public func extractiveInsights(for item: TranscriptItem) async -> (title: String, summary: String?, keywords: [String])? {
         let all = sentences(in: item.text)
@@ -639,42 +642,11 @@ extension AppModel {
         return (title, summary, keywords)
     }
 
-    /// One vector per sentence.
-    ///
-    /// The straightforward version — `for s in sents { await embedder.embed(s) }` — invoked the model up to 120
-    /// times per note, serially, on an actor. This asks for the token vectors of the joined text ONCE and pools
-    /// each sentence's own tokens out of that single result, which is exactly what the keyword pass next door
-    /// already did. Any sentence whose tokens don't line up falls back to its own embed, and if the one-pass
-    /// call isn't usable at all the whole thing falls back to the per-sentence loop — so this can be faster,
-    /// never worse.
+    /// One vector per sentence. Deliberately the simple loop — see the note on `embedWindowChars` above:
+    /// batching was implemented, measured, and found to buy nothing, so it was removed rather than kept for
+    /// the look of it. This runs once per note, off the user's critical path (the transcription it follows
+    /// took minutes), so ~5 s here is not a stall anyone waits on.
     private func sentenceVectors(_ sents: [String], language: String) async -> [Embedding]? {
-        var joined = ""
-        var ranges: [Range<String.Index>] = []
-        ranges.reserveCapacity(sents.count)
-        for sentence in sents {
-            let start = joined.endIndex
-            joined += sentence
-            ranges.append(start..<joined.endIndex)
-            joined += "\n"
-        }
-
-        if joined.count <= Self.extractiveOnePassCharCap,
-           let tokens = await embedder.tokenVectors(joined, language: language), !tokens.isEmpty {
-            var vectors: [Embedding] = []
-            vectors.reserveCapacity(sents.count)
-            for (index, range) in ranges.enumerated() {
-                let pooled = tokens.filter { $0.range.overlaps(range) }.map(\.vector)
-                if let vector = SemanticIndex.meanPool(pooled) {
-                    vectors.append(vector)
-                } else if let vector = await embedder.embed(sents[index], language: language) {
-                    vectors.append(vector)     // rare: a sentence no token overlapped — don't lose it
-                } else {
-                    return nil
-                }
-            }
-            return vectors
-        }
-
         var vectors: [Embedding] = []
         vectors.reserveCapacity(sents.count)
         for sentence in sents {
