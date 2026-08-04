@@ -1,11 +1,19 @@
 import Foundation
 
-// FoundationModels = macOS-only for Parla (Backend A, EN, macOS 26). The `&& os(macOS)` is LOAD-BEARING
-// for the iOS build: the iOS-26 SDK satisfies `canImport(FoundationModels)`, so without it the `@Generable`
-// macro on `GeneratedInsights` expands into iOS-26-only symbols (`GenerationSchema`/`GeneratedContent`/…)
-// under the iOS-17 deployment floor → "only available in iOS 26.0 or newer". iOS has no
-// generative Apple-Intelligence backend in v1; it degrades to `.unsupportedOS` + the extractive path.
-#if canImport(FoundationModels) && os(macOS)
+// FoundationModels = Backend A (Apple's on-device model), now on BOTH platforms: macOS 26 / iOS 26.
+//
+// This used to be walled off with `&& os(macOS)` because the iOS-26 SDK satisfies `canImport(FoundationModels)`,
+// so the `@Generable` macro on `GeneratedInsights` expanded into iOS-26-only symbols
+// (`GenerationSchema`/`GeneratedContent`/…) under our iOS-17 deployment floor → "only available in iOS 26.0 or
+// newer". That diagnosis was right; the remedy (exclude iOS entirely) was too blunt. The correct fix is ordinary
+// availability plumbing: `@available(macOS 26, iOS 26, *)` on the generated type and the code that touches it,
+// with `if #available` at every entry point. Below either floor the type still exists and reports
+// `.unsupportedOS`, so the app links and runs unchanged on macOS 14 / iOS 17.
+//
+// Worth stating plainly, because it decides how much this is worth: Apple's model covers ~16 languages and
+// NONE of them are Slavic. So this backend serves Parla's ENGLISH-and-friends audience — real paying users of a
+// shipped product — while Russian/Ukrainian are served by the MLX backend and the extractive path.
+#if canImport(FoundationModels)
 import FoundationModels
 #endif
 
@@ -114,31 +122,50 @@ public func completeSentences(_ s: String) -> String {
 /// type still exists and reports `.unsupportedOS`, so the rest of the app links and runs unchanged on
 /// the macOS-14 floor. P0 implements only the gate; `insights` is wired in P2 (`@Generable` output).
 public struct FoundationModelsService: LocalLLMService {
-    /// Cheap, language-aware pre-gate. The framework's live list
-    /// (`SystemLanguageModel.supportedLanguages`, macOS 26) is the source of truth and refines this at
-    /// runtime in P2; this static set is the conservative pre-gate. **Load-bearing for Parla: English
-    /// IS supported, Russian/Ukrainian are NOT** — the reason the embedding + MLX paths exist at all.
+    /// A hardcoded LOWER BOUND on what Apple's model supports — a hint for callers that cannot ask the
+    /// framework (below the OS floor, or with Apple Intelligence off). It is **not** a gate: Apple keeps adding
+    /// languages, so any static list goes stale, and a stale list can only ever *understate* the capability.
+    /// **Load-bearing for Parla: English IS supported, Russian/Ukrainian are NOT** — the reason the embedding
+    /// + MLX paths exist at all.
     public static let knownSupportedLanguages: Set<String> = ["en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh"]
 
+    /// Cheap "could Apple's model serve this language?" hint, used for provenance tagging. The live set may only
+    /// WIDEN the static bound, never narrow it — narrowing is what wrongly told users their language was
+    /// unsupported. The real decision is `availability(forLanguage:)`.
     public static func maySupport(language: String) -> Bool {
-        knownSupportedLanguages.contains(languagePrimarySubtag(language))
+        let subtag = languagePrimarySubtag(language)
+        #if canImport(FoundationModels)
+        if #available(macOS 26, iOS 26, *), case .available = SystemLanguageModel.default.availability,
+           SystemLanguageModel.default.supportedLanguages.contains(where: { $0.languageCode?.identifier == subtag }) {
+            return true
+        }
+        #endif
+        return knownSupportedLanguages.contains(subtag)
+    }
+
+    /// The pure decision, extracted from the framework call so it can be TESTED on any machine — with or without
+    /// Apple Intelligence switched on, on a CI runner that has neither.
+    ///
+    /// The bug this pins: `knownSupportedLanguages` used to be consulted FIRST, as a `guard`, before the model's
+    /// live set. A hardcoded list can only ever *understate* what Apple supports, so every language added after
+    /// that line was written (Danish, Dutch, Norwegian, Swedish, Turkish, …) was reported "unsupported" to users
+    /// whose model handled it perfectly well. The live set is the ONLY source of truth here.
+    public static func decide(modelAvailable: Bool,
+                              liveSupportedSubtags: Set<String>,
+                              language: String) -> AIAvailability {
+        guard modelAvailable else { return .modelUnavailable }   // device not eligible / AI off / still downloading
+        return liveSupportedSubtags.contains(languagePrimarySubtag(language)) ? .ready : .languageUnsupported
     }
 
     public func availability(forLanguage language: String) -> AIAvailability {
-        #if canImport(FoundationModels) && os(macOS)
-        if #available(macOS 26, *) {
-            let subtag = languagePrimarySubtag(language)
-            guard Self.maySupport(language: language) else { return .languageUnsupported }
-            switch SystemLanguageModel.default.availability {
-            case .available:
-                // Refine the static pre-gate against the model's LIVE supported set (the source of truth): a
-                // language in `knownSupportedLanguages` but not actually installed/supported must NOT reach the
-                // session (avoids a guaranteed `unsupportedLanguageOrLocale` generation).
-                guard SystemLanguageModel.default.supportedLanguages
-                    .contains(where: { $0.languageCode?.identifier == subtag }) else { return .languageUnsupported }
-                return .ready
-            default: return .modelUnavailable   // device not eligible / AI off / model not ready
+        #if canImport(FoundationModels)
+        if #available(macOS 26, iOS 26, *) {
+            let model = SystemLanguageModel.default
+            let live = Set(model.supportedLanguages.compactMap { $0.languageCode?.identifier })
+            if case .available = model.availability {
+                return Self.decide(modelAvailable: true, liveSupportedSubtags: live, language: language)
             }
+            return Self.decide(modelAvailable: false, liveSupportedSubtags: live, language: language)
         }
         #endif
         return .unsupportedOS
@@ -172,8 +199,8 @@ public struct FoundationModelsService: LocalLLMService {
     """
 
     public func insights(forTranscript text: String, language: String) async throws -> AIInsights {
-        #if canImport(FoundationModels) && os(macOS)
-        if #available(macOS 26, *) {
+        #if canImport(FoundationModels)
+        if #available(macOS 26, iOS 26, *) {
             guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { throw AIError.unavailable }   // nothing to summarize → don't fabricate
@@ -193,8 +220,8 @@ public struct FoundationModelsService: LocalLLMService {
 
     /// Comprehensive free-form summary (long-note map-reduce). Plain (non-guided) generation with a higher token cap.
     public func summarize(_ text: String, language: String) async throws -> String {
-        #if canImport(FoundationModels) && os(macOS)
-        if #available(macOS 26, *) {
+        #if canImport(FoundationModels)
+        if #available(macOS 26, iOS 26, *) {
             guard case .ready = availability(forLanguage: language) else { throw AIError.unavailable }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { throw AIError.unavailable }
@@ -207,8 +234,8 @@ public struct FoundationModelsService: LocalLLMService {
         throw AIError.unavailable
     }
 
-    #if canImport(FoundationModels) && os(macOS)
-    @available(macOS 26, *)
+    #if canImport(FoundationModels)
+    @available(macOS 26, iOS 26, *)
     private static func generate(_ text: String) async throws -> AIInsights {
         let response = try await LanguageModelSession(instructions: instructions)
             .respond(to: text, generating: GeneratedInsights.self, options: GenerationOptions(maximumResponseTokens: maxResponseTokens))
@@ -217,10 +244,10 @@ public struct FoundationModelsService: LocalLLMService {
     #endif
 }
 
-#if canImport(FoundationModels) && os(macOS)
+#if canImport(FoundationModels)
 /// Guided-decoding output type: the framework generates DIRECTLY into this struct (no parsing/regex), which is
 /// FoundationModels' headline feature. `@Guide` steers each field. Mapped to the backend-neutral `AIInsights`.
-@available(macOS 26, *)
+@available(macOS 26, iOS 26, *)
 @Generable
 public struct GeneratedInsights {
     @Guide(description: "A concise title for the note — at most about six words, in the SAME language as the transcript")
