@@ -523,12 +523,18 @@ struct TranscriptCard: View {
 
     @State private var isEditing = false
     @State private var draft = ""
+    /// Which note the open draft belongs to. `item` can move under an open editor at any moment — a queued file
+    /// finishing, a folder-watch hit, dictation, «Repeat last file», a Services / parla:// call — and the drop
+    /// zone stays live during a transcription, so the card is never torn down. Without this the commit target
+    /// would follow the NEW selection.
+    @State private var editingID: UUID?
     @FocusState private var editorFocused: Bool
     @State private var player = PlaybackController()
     @State private var ttsPlayer = PlaybackController()   // read-aloud (TTS) — a separate player from the note's source audio
     @State private var synthesizingTTS = false            // brief spinner while the voice synthesizes the transcript
     @State private var isEditingTitle = false
     @State private var titleDraft = ""
+    @State private var editingTitleID: UUID?
     @FocusState private var titleFocused: Bool
     @State private var showDigest = false      // right pane: Transcript vs Digest (per-chapter summaries) reading mode
 
@@ -570,12 +576,23 @@ struct TranscriptCard: View {
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
         // Pinned fills the remaining height (so the transcript scroll has room); classic sizes to content.
         .frame(maxWidth: .infinity, maxHeight: pinned ? CGFloat.infinity : nil, alignment: .top)
-        // Selection change (or a new transcript): discard any in-progress edit (so we don't
-        // write it into someone else's record) and reload the player with the new record's audio.
+        // Selection change (or a new transcript): COMMIT any in-progress edit to the note it began on, then
+        // follow the new selection, and reload the player with the new record's audio.
         // initial:true — also load on first appearance.
-        .onChange(of: item.id, initial: true) { _, _ in
-            if isEditing { cancelEdit() }
-            if isEditingTitle { cancelTitleEdit() }
+        .onChange(of: item.id, initial: true) { _, newID in
+            // Save, don't discard. Hand-correcting a garbled transcript is the most valuable manual work in the
+            // app, and the selection can be stolen by something the user never initiated from this card — a
+            // queued file landing, folder-watch, dictation, «Repeat last file», a Services / parla:// call — with
+            // the drop zone live throughout, so the card is never torn down. Both commits target
+            // `editingID`/`editingTitleID`, which makes writing into the newly selected record impossible; that
+            // risk was the original reason this discarded, and it no longer exists.
+            if isEditing || isEditingTitle {
+                if isEditing { commitEdit() }
+                if isEditingTitle { commitTitle() }
+                // `saveEdit` pulls `selection` back onto the note it wrote — right for an ordinary in-place edit,
+                // wrong here, where the point is to save AND move on. Restore what we were switching to.
+                model.selection = newID
+            }
             showDigest = false               // ...and on the Transcript view, not the Digest
             player.load(audioURL)
             ttsPlayer.stop()                 // switching notes stops any in-progress read-aloud
@@ -889,39 +906,46 @@ struct TranscriptCard: View {
     private func beginEdit() {
         player.stop()              // editing text — don't play
         draft = item.text          // ALWAYS plain text, not display(timestamps:)
+        editingID = item.id        // ...and remember WHOSE text it is — `item` can move under us mid-edit
         isEditing = true
         editorFocused = true
     }
     private func cancelEdit() {
         isEditing = false
+        editingID = nil
         editorFocused = false
     }
     private func commitEdit() {
         // saveEdit invalidates the item's vector/lemmas synchronously; kick the (async, best-effort) re-embed +
         // re-lemmatize here in the UI layer so a store mutation never spawns a Task that could outlive a test.
-        if model.saveEdit(draft, for: item.id) {
+        // Target the note the edit STARTED on: on a selection steal `item` is already someone else.
+        if model.saveEdit(draft, for: editingID ?? item.id) {
             Task { await model.refreshSemanticIndex() }
         }
         isEditing = false
+        editingID = nil
         editorFocused = false
     }
 
     private func beginTitleEdit() {
         titleDraft = item.title ?? ""   // start from the real title (empty if none) — not the sourceName fallback
+        editingTitleID = item.id
         isEditingTitle = true
         titleFocused = true
     }
     private func cancelTitleEdit() {
         isEditingTitle = false
+        editingTitleID = nil
         titleFocused = false
     }
     private func commitTitle() {
         // setTitle invalidates the doc-vector synchronously (title is part of embedText); kick the re-embed here
         // in the UI layer so a store mutation never spawns a Task that could outlive a test (see commitEdit).
-        if model.setTitle(titleDraft, for: item.id) {
+        if model.setTitle(titleDraft, for: editingTitleID ?? item.id) {
             Task { await model.refreshSemanticIndex() }
         }
         isEditingTitle = false
+        editingTitleID = nil
         titleFocused = false
     }
 
