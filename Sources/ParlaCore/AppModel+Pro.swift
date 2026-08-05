@@ -27,6 +27,21 @@ extension AppModel {
         return true
     }
 
+    /// The other half of the same gate: QUEUEING work behind a job that is already running.
+    /// `batchIsGated` only ever saw the size of a single drop, and nothing looked at queue depth — so a free
+    /// user assembled an unlimited unattended batch simply by dropping files one at a time, which is precisely
+    /// what the paywall sells («Queue many files at once») and what `ProFeature.batch`'s own doc says it must
+    /// cover ("a second queued job"). The UI even advertised the bypass with its "+N queued" badge.
+    /// Returns true (and upsells) when a non-Pro user adds a job while one is in flight or already waiting.
+    public func queueIsGated() -> Bool {
+        guard !isProUser() else { return false }
+        // Deliberately NOT `isBusy`: that is also true while a MODEL DOWNLOAD runs, and being made to wait for
+        // the model is not the batch feature. Only real transcription work counts.
+        guard currentTranscriptionTask != nil || !transcriptionQueue.isEmpty else { return false }
+        paywallReason = .featureLocked(.batch)
+        return true
+    }
+
     /// Folder-watch (auto-transcribe a watched folder, macOS) is Pro. Returns true (and upsells) if a non-Pro
     /// user is turning it ON; the caller then leaves the toggle off.
     public func folderWatchEnableGated(_ turningOn: Bool) -> Bool {

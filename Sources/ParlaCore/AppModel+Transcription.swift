@@ -17,7 +17,11 @@ extension AppModel {
     }
 
     /// Append a manual-drop batch to the queue and pump the lane.
+    /// A SECOND job, stacked behind one that is already running, is the same Pro feature as a multi-file drop —
+    /// see `queueIsGated`. The input is not destroyed when this fires: the iOS import copies survive the launch
+    /// sweep's grace period, so buying Pro and retrying still works.
     public func enqueueManual(_ urls: [URL]) {
+        if queueIsGated() { return }
         transcriptionQueue.append(TranscriptionJob(urls: urls))
         pumpQueues()
     }

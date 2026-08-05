@@ -3882,6 +3882,55 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: deadDir.path), "past the grace period an unreferenced copy is swept")
     }
 
+    // MARK: Free-tier batch gate — the queue-depth half
+
+    /// batchIsGated only ever inspected the size of ONE drop, and nothing inspected queue depth. A free user
+    /// therefore got an unlimited unattended batch by dropping files one at a time — the exact feature the
+    /// paywall sells («Queue many files at once»), advertised back at them by the "+N queued" badge.
+    @MainActor func testAFreeUserCannotStackASecondJobBehindARunningOne() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.isProUser = { false }
+        m.transcriptionQueue = [TranscriptionJob(urls: [URL(fileURLWithPath: "/tmp/a.m4a")])]   // one already waiting
+
+        m.enqueueManual([URL(fileURLWithPath: "/tmp/b.m4a")])
+
+        XCTAssertEqual(m.transcriptionQueue.count, 1, "the second job is refused, not queued")
+        XCTAssertEqual(m.paywallReason, .featureLocked(.batch), "…and the user is told why")
+    }
+
+    @MainActor func testAProUserCanStackJobs() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.isProUser = { true }
+        m.downloadingModel = "x"   // hold the lane shut so the enqueue is observable before it drains
+        m.transcriptionQueue = [TranscriptionJob(urls: [URL(fileURLWithPath: "/tmp/a.m4a")])]
+
+        m.enqueueManual([URL(fileURLWithPath: "/tmp/b.m4a")])
+
+        XCTAssertEqual(m.transcriptionQueue.count, 2, "Pro queues freely")
+        XCTAssertNil(m.paywallReason)
+    }
+
+    /// The gate keys on real transcription work, NOT on `isBusy`: `isBusy` is also true while the MODEL is
+    /// downloading, and making a free user wait for the model is not the batch feature they would be upsold for.
+    @MainActor func testAModelDownloadDoesNotCountAsAQueuedJob() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.isProUser = { false }
+        m.downloadingModel = "whisper"   // busy, but nothing is transcribing
+
+        m.enqueueManual([URL(fileURLWithPath: "/tmp/a.m4a")])
+
+        XCTAssertEqual(m.transcriptionQueue.count, 1, "the drop is accepted and simply waits for the model")
+        XCTAssertNil(m.paywallReason)
+    }
+
+    /// The FIRST drop must never be gated — free is "one file at a time", not "no files".
+    @MainActor func testAFreeUsersFirstDropIsNotGated() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.isProUser = { false }
+        m.enqueueManual([URL(fileURLWithPath: "/tmp/a.m4a")])
+        XCTAssertNil(m.paywallReason, "an idle free user dropping one file is the free tier working as sold")
+    }
+
     // MARK: MLX snapshot completeness — drives BOTH availability and the no-network short-circuit
 
     private func writeSnapshot(_ dir: URL, files: [String: String]) throws {
