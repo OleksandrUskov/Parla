@@ -3882,6 +3882,93 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: deadDir.path), "past the grace period an unreferenced copy is swept")
     }
 
+    // MARK: backfillInsights TOCTOU — an edit landing mid-embed must not be overwritten
+
+    /// backfillInsights re-found the note by id after its multi-second per-sentence embed, but never checked
+    /// that the TEXT was still the same. An edit landing meanwhile got the PRE-edit title/summary/keywords
+    /// written over it and stamped `extractive-v6` -- the very tag the `targets` filter excludes, so the note
+    /// was then never reprocessed and kept insights describing text it no longer contained.
+    /// enrichInsights and backfillEmbeddings have always checked this; this pins the third sibling.
+    @MainActor func testBackfillInsightsSkipsANoteEditedDuringItsEmbed() async {
+        await withTemporaryHistoryStoreAsync {
+            let embedder = HookEmbedder()
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .modelUnavailable),
+                             embedder: embedder)
+            var it = self.makeItem(text: "старый текст заметки про погоду и дела", lang: "ru")
+            it.aiModel = nil          // → a backfill target
+            m.history = [it]
+            let id = it.id
+            // The user edits the note WHILE the embed is in flight (the main actor is free — backfill awaits).
+            embedder.hook = { [weak m] in
+                guard let m, let i = m.history.firstIndex(where: { $0.id == id }) else { return }
+                m.history[i].text = "новый текст, пользователь всё переписал"
+                embedder.hook = nil   // once
+            }
+
+            await m.backfillInsights()
+
+            let after = m.history.first(where: { $0.id == id })
+            XCTAssertEqual(after?.text, "новый текст, пользователь всё переписал", "the edit stands")
+            XCTAssertNil(after?.aiModel,
+                         "a note edited mid-embed must stay unstamped so a later pass reprocesses it")
+        }
+    }
+
+    // MARK: Action items — regeneration must not un-tick the user's checkboxes
+
+    /// enrichInsights re-runs over the WHOLE history whenever a generative tag is bumped, which the tags' own
+    /// comments prescribe on any prompt change. It assigned `actions` wholesale, and a fresh ActionItem always
+    /// has done == false, so every box the user had ticked was silently cleared and persisted.
+    func testCarryOverDoneFlagsKeepsTheUsersTicks() {
+        let previous = [ActionItem(text: "позвонить в банк", done: true),
+                        ActionItem(text: "купить билеты", done: false)]
+        let fresh = [ActionItem(text: "Позвонить в банк"),      // same task, re-cased by a new prompt
+                     ActionItem(text: "купить билеты"),
+                     ActionItem(text: "новая задача")]
+        let merged = AppModel.carryOverDoneFlags(fresh, from: previous)
+        XCTAssertEqual(merged.map(\.done), [true, false, false],
+                       "a ticked task stays ticked across a regeneration, matched case-insensitively")
+        XCTAssertEqual(merged.count, 3, "the fresh list still decides WHICH actions exist")
+    }
+
+    func testCarryOverDoneFlagsIsANoOpWithoutTicks() {
+        let fresh = [ActionItem(text: "a"), ActionItem(text: "b")]
+        XCTAssertEqual(AppModel.carryOverDoneFlags(fresh, from: [ActionItem(text: "a", done: false)]).map(\.done),
+                       [false, false])
+        XCTAssertEqual(AppModel.carryOverDoneFlags(fresh, from: []).map(\.text), ["a", "b"])
+    }
+
+    /// A task the user ticked that the new run no longer produces is simply gone — the model decides the list.
+    func testCarryOverDoneFlagsDoesNotResurrectDroppedTasks() {
+        let merged = AppModel.carryOverDoneFlags([ActionItem(text: "b")],
+                                                 from: [ActionItem(text: "a", done: true)])
+        XCTAssertEqual(merged.map(\.text), ["b"])
+    }
+
+    /// The CALL-SITE guard: enrichInsights must run its regenerated actions through the carry-over, not assign
+    /// them raw. Bumping a generative tag re-enriches the whole history, so without this every ticked box in
+    /// every note is cleared at once.
+    @MainActor func testEnrichInsightsKeepsTickedActionsAcrossARegeneration() async {
+        await withTemporaryHistoryStoreAsync {
+            let canned = AIInsights(title: "T", summary: "S",
+                                    actions: [ActionItem(text: "позвонить в банк"), ActionItem(text: "новое дело")])
+            let m = AppModel(engine: FakeEngine(), ai: FakeAIService(availabilityToReturn: .ready, canned: canned),
+                             embedder: FakeEmbedder())
+            m.isProUser = { true }                       // enrichInsights is Pro-gated, silently
+            var it = self.makeItem(text: "какой-то осмысленный текст заметки", lang: "ru")
+            it.actions = [ActionItem(text: "позвонить в банк", done: true)]   // the user ticked this off
+            it.aiModel = nil                             // → a target for enrichment
+            m.history = [it]
+
+            await m.enrichInsights()
+
+            let actions = m.history.first?.actions ?? []
+            XCTAssertEqual(actions.first(where: { $0.text == "позвонить в банк" })?.done, true,
+                           "the user's tick survives a regeneration")
+            XCTAssertEqual(actions.count, 2, "the fresh list still decides which actions exist")
+        }
+    }
+
     // MARK: Chapter summaries — a failed chapter must not cost the user a summary it already had
 
     /// «Regenerate all summaries» rebuilds the set chapter by chapter, and chapterSummaryText returns nil on the

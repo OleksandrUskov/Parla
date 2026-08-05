@@ -301,6 +301,21 @@ extension AppModel {
         await MLXEngine.shared.unload()
     }
 
+    /// Re-apply the user's `done` ticks to a freshly generated action list, matched on the item's text
+    /// (case- and whitespace-insensitively, since a reworded prompt often changes only capitalisation).
+    /// A regenerated list is model output; the ticks are the user's own data and must outlive it.
+    /// Pure, so the carry-over is unit-tested rather than assumed.
+    nonisolated static func carryOverDoneFlags(_ fresh: [ActionItem], from previous: [ActionItem]) -> [ActionItem] {
+        guard !previous.isEmpty else { return fresh }
+        let doneKeys = Set(previous.filter(\.done).map { $0.text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) })
+        guard !doneKeys.isEmpty else { return fresh }
+        return fresh.map { item in
+            var copy = item
+            if doneKeys.contains(item.text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)) { copy.done = true }
+            return copy
+        }
+    }
+
     /// Fold freshly-generated chapter summaries into an existing set, matched on the STABLE window key (the same
     /// ±0.5 s comparison `regenerateChapterSummary` uses). A chapter absent from `fresh` keeps whatever it had:
     /// a per-chapter generation failure is ordinary and must never cost the user a summary they already had.
@@ -460,8 +475,15 @@ extension AppModel {
         guard !targets.isEmpty || !keywordTopUp.isEmpty else { return }
         var changed = false
         for item in targets {
+            // TOCTOU: `extractiveInsights` embeds sentence by sentence and takes seconds per note, on the main
+            // actor, while `isBusy` is false — so the user can be editing that very note meanwhile. Re-finding by
+            // id alone is not enough: the id survives an edit. Without the text check the pre-edit title/summary/
+            // keywords were written back over the new text AND stamped `extractive-v6`, which is exactly the tag
+            // the `targets` filter above excludes — so the note was never reprocessed and kept insights that
+            // described text it no longer contains. `enrichInsights` and `backfillEmbeddings` already check this.
             guard let result = await extractiveInsights(for: item),
-                  let idx = history.firstIndex(where: { $0.id == item.id }) else { continue }
+                  let idx = history.firstIndex(where: { $0.id == item.id }),
+                  history[idx].text == item.text else { continue }
             if history[idx].title == nil, history[idx].titleEdited != true { history[idx].title = result.title }
             if let summary = result.summary { history[idx].summary = summary }
             if !result.keywords.isEmpty { history[idx].keywords = result.keywords }
@@ -569,7 +591,12 @@ extension AppModel {
                       history[idx].text == item.text else { continue }   // edited mid-generate → skip; a later pass redoes it
                 if history[idx].titleEdited != true, !result.title.isEmpty { history[idx].title = result.title }
                 if !result.summary.isEmpty { history[idx].summary = result.summary }
-                history[idx].actions = result.actions.isEmpty ? nil : result.actions
+                // Carry the user's ticks across. A fresh ActionItem always has `done == false`, so assigning
+                // wholesale un-ticked everything the user had checked off — and this path re-runs across the
+                // WHOLE history whenever `mlxModelTag`/`foundationModelTag` is bumped, which the tags' own
+                // comments prescribe on any prompt change. Silent, persisted, no undo.
+                let merged = Self.carryOverDoneFlags(result.actions, from: history[idx].actions ?? [])
+                history[idx].actions = merged.isEmpty ? nil : merged
                 // Generative keywords UPGRADE the extractive ones; if the model returned none, keep extractive
                 // (so an un-downloaded model = the old extractive-keyword default).
                 if !result.keywords.isEmpty { history[idx].keywords = result.keywords }
