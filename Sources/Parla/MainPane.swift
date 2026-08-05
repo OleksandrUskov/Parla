@@ -532,6 +532,12 @@ struct TranscriptCard: View {
     @State private var player = PlaybackController()
     @State private var ttsPlayer = PlaybackController()   // read-aloud (TTS) — a separate player from the note's source audio
     @State private var synthesizingTTS = false            // brief spinner while the voice synthesizes the transcript
+    /// The in-flight read-aloud synthesis. Stored so it can be CANCELLED: `synthesize` writes the whole utterance
+    /// through AVSpeechSynthesizer, which takes seconds on a long transcript, and the selection can be stolen in
+    /// that window by something the user never initiated (a queued file landing, folder-watch, dictation,
+    /// «Repeat last file», a Services / parla:// call). Unstored, it finished and spoke the PREVIOUS note over
+    /// the one now on screen. The iOS twin has had this; macOS had drifted.
+    @State private var ttsTask: Task<Void, Never>?
     @State private var isEditingTitle = false
     @State private var titleDraft = ""
     @State private var editingTitleID: UUID?
@@ -595,6 +601,8 @@ struct TranscriptCard: View {
             }
             showDigest = false               // ...and on the Transcript view, not the Digest
             player.load(audioURL)
+            ttsTask?.cancel()                // ...including one still synthesizing, which would otherwise
+            ttsTask = nil                    // start playing the OLD note's audio seconds from now
             ttsPlayer.stop()                 // switching notes stops any in-progress read-aloud
             model.refreshRelatedNotes()      // the open note changed → recompute its doc↔doc "Related"
         }
@@ -604,7 +612,7 @@ struct TranscriptCard: View {
         // transcription and the card shows a misleading "format not supported" until the note is reopened.
         // `player.load` is idempotent by URL, so the overlap with the id-change load never double-loads.
         .onChange(of: audioURL) { _, url in player.load(url) }
-        .onDisappear { player.stop(); ttsPlayer.stop() }
+        .onDisappear { ttsTask?.cancel(); ttsTask = nil; player.stop(); ttsPlayer.stop() }
         // Handoff: advertise "view this transcript" while it's the open card so another device (iOS) can
         // continue it. id-only; the other device opens the note locally by id.
         .userActivity(AppModel.viewTranscriptActivityType, isActive: true) { activity in
@@ -782,10 +790,14 @@ struct TranscriptCard: View {
                        ?? model.tts.voices(forLanguage: "").first else { return }
         player.stop()               // one audio at a time — pause the note's source player
         synthesizingTTS = true
-        Task {
+        ttsTask?.cancel()
+        ttsTask = Task {
             defer { synthesizingTTS = false }
             do {
                 let url = try await model.tts.synthesize(speech, voice: voice)
+                // Note switched (or the card went away) mid-synthesis? Then this audio belongs to a transcript the
+                // user is no longer looking at — playing it is ghost audio with the speaker icon on the wrong note.
+                guard !Task.isCancelled else { return }
                 ttsPlayer.load(url)
                 ttsPlayer.togglePlay()
             } catch {

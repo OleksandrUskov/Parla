@@ -25,6 +25,10 @@ final class QuickToast {
         guard !sticky else { return }
         hideTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.8))
+            // `try?` swallows CancellationError, so without this a task cancelled above would fall straight
+            // through and hide the panel we just ordered front — including a STICKY «Recognizing…», which is the
+            // only feedback a windowless hotkey run has. The iOS twin (ToastCenter) already guards this.
+            guard !Task.isCancelled else { return }
             self?.panel?.orderOut(nil)
         }
     }
