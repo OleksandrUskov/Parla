@@ -8,6 +8,7 @@
 // inherit main-actor isolation, so there is no second thread to race with. ActivityKit is documented as callable
 // from any context. What is suppressed is the SDK's missing annotation, not a real concurrency hazard here.
 @preconcurrency import ActivityKit
+import Foundation
 import ParlaCore
 
 /// Drives the transcription Live Activity from the app. Best-effort + additive: EVERY ActivityKit
@@ -18,6 +19,25 @@ import ParlaCore
 @MainActor
 final class TranscriptionActivityController {
     private var activity: Activity<ParlaTranscriptionAttributes>?
+
+    /// How long an activity may go without an update before the system marks it stale. A transcription pushes a
+    /// phase change per chunk, so silence for this long means the job is gone, not slow. Belt to the braces of
+    /// the launch sweep below: it is what the Lock Screen falls back to if the process dies mid-job and the user
+    /// does not reopen the app.
+    private static let staleAfter: TimeInterval = 30 * 60
+
+    /// End any activity left over from a PREVIOUS process. Nothing here ever read
+    /// `Activity<…>.activities`, so a force-quit or a jetsam kill mid-transcription — which this codebase
+    /// expects, see KeepAwake and ParlaiOSApp's own comments — left "Расшифровка… 3/35" frozen on the Lock
+    /// Screen for the system's whole 8h window. Worse, the next launch started with `activity == nil`, so the
+    /// next transcription requested a SECOND card beside the dead one, and repeated kills stacked them until
+    /// ActivityKit's per-app limit made `request` throw and new transcriptions silently got no activity at all.
+    /// A live activity cannot outlive its process by design here: no transcription survives a process death.
+    init() {
+        let orphans = Activity<ParlaTranscriptionAttributes>.activities
+        guard !orphans.isEmpty else { return }
+        Task { for a in orphans { await a.end(nil, dismissalPolicy: .immediate) } }
+    }
 
     /// Map the engine phase → the activity. Start on the first transcription phase, update per-chunk, end on
     /// idle/failed. The standalone model DOWNLOAD is intentionally excluded (user default: transcription only).
@@ -42,7 +62,7 @@ final class TranscriptionActivityController {
     private func upsert(label: String, title: String, done: Int, total: Int) {
         let state = ParlaTranscriptionAttributes.ContentState(label: label, title: title, done: done, total: total)
         if let activity {
-            Task { await activity.update(ActivityContent(state: state, staleDate: nil)) }
+            Task { await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(Self.staleAfter))) }
             return
         }
         // Start a new activity — only if the user hasn't disabled Live Activities. Any throw is swallowed.
@@ -50,7 +70,7 @@ final class TranscriptionActivityController {
         do {
             activity = try Activity.request(
                 attributes: ParlaTranscriptionAttributes(),
-                content: ActivityContent(state: state, staleDate: nil))
+                content: ActivityContent(state: state, staleDate: Date().addingTimeInterval(Self.staleAfter)))
         } catch {
             activity = nil   // best-effort: a failed request never disrupts the transcription
         }

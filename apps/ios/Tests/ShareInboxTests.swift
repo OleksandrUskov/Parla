@@ -72,6 +72,45 @@ final class ShareInboxTests: XCTestCase {
     /// `toRemove` must delete ONLY inbox files that copyIntoContainer actually copied — a
     /// file it skipped (returned no container URL for) is the user's only copy and MUST be kept to retry. This pins
     /// the data-loss guard that used to be "remove pending regardless".
+    /// The extension activates for ANY file (no UTI predicate — it cannot link ParlaCore and so cannot sniff),
+    /// and copies whatever it is handed. `pendingFiles` filtered those out and `toRemove` only ever deleted what
+    /// was successfully COPIED, so a shared PDF or screenshot lived in the App Group container for the life of
+    /// the install — charged to Parla in Settings → iPhone Storage with no in-app way to reclaim it.
+    func testUnusableSelectsWhatTheAppCanNeverRead() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inbox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        for name in ["talk.pdf", "shot.png", "clip.webm", "voice.ogg", "rec.m4a", "half.m4a.part"] {
+            try Data("x".utf8).write(to: dir.appendingPathComponent(name))
+        }
+        let items = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+
+        let doomed = Set(ShareInbox.unusable(in: items).map(\.lastPathComponent))
+
+        XCTAssertEqual(doomed, ["talk.pdf", "shot.png", "clip.webm"], "only what we can never read")
+        XCTAssertFalse(doomed.contains("half.m4a.part"),
+                       "an in-flight copy belongs to sweepStaleParts, which knows not to touch a live one")
+        XCTAssertFalse(doomed.contains("voice.ogg"))
+        XCTAssertFalse(doomed.contains("rec.m4a"))
+    }
+
+    /// An extension-less Telegram voice note lands as `.dat` and IS readable (content-sniffed) — it must survive.
+    func testUnusableKeepsAnExtensionlessOggThatOnlySniffingRecognises() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inbox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let ogg = dir.appendingPathComponent("voice.dat")
+        try Data("OggS".utf8 + Data(repeating: 0, count: 64)).write(to: ogg)     // Ogg magic
+        let junk = dir.appendingPathComponent("junk.dat")
+        try Data(repeating: 7, count: 64).write(to: junk)                        // not Ogg
+
+        let doomed = Set(ShareInbox.unusable(in: [ogg, junk]).map(\.lastPathComponent))
+
+        XCTAssertEqual(doomed, ["junk.dat"], "a sniffable Ogg is kept; opaque junk is not")
+    }
+
     func testToRemoveKeepsFilesThatFailedToCopy() {
         let inbox = URL(fileURLWithPath: "/inbox")
         let a = inbox.appendingPathComponent("a.ogg")

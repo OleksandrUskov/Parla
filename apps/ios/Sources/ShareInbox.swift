@@ -46,6 +46,20 @@ enum ShareInbox {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
+    /// Inbox entries the app can never do anything with. The Share Extension's activation rule accepts ANY file
+    /// (`NSExtensionActivationSupportsFileWithMaxCount`, no UTI predicate — deliberately broad, since the
+    /// extension cannot link ParlaCore and so cannot sniff), and it copies whatever it is handed. `pendingFiles`
+    /// then filters these out and `toRemove` only ever deletes what was successfully copied, so a shared PDF,
+    /// screenshot or `.webm` sat in the App Group container FOREVER: charged to Parla in Settings → iPhone
+    /// Storage, with no in-app way to reclaim it short of deleting the app.
+    /// Safe to delete: this is Parla's own copy in its own container, the original is untouched wherever the user
+    /// shared it from, and `isTranscribable` has already said we can never read it. `.part` files are excluded —
+    /// those belong to `sweepStaleParts`, which knows not to touch one that could still be in flight.
+    /// PURE (no I/O) so the "never delete something we could still use" line is unit-tested.
+    static func unusable(in items: [URL]) -> [URL] {
+        items.filter { !$0.lastPathComponent.hasSuffix(partSuffix) && !AppModel.isTranscribable($0) }
+    }
+
     /// Sweep `.part` files abandoned by a crashed/killed share (older than a day — never touch one that could
     /// still be in flight). Cheap, best-effort, keeps the shared container from accumulating dead bytes.
     static func sweepStaleParts(in dir: URL, olderThan age: TimeInterval = 86_400, now: Date = Date()) {
@@ -79,6 +93,10 @@ enum ShareInbox {
     @MainActor static func drain(into model: AppModel) {
         guard !isDraining, let inbox = inboxURL() else { return }
         sweepStaleParts(in: inbox)                 // clear leftovers from a crashed share (never an in-flight one)
+        // …and drop what we can never read, or it accumulates in the shared container for the life of the install.
+        let all = (try? FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil,
+                                                                options: [.skipsHiddenFiles])) ?? []
+        for u in unusable(in: all) { try? FileManager.default.removeItem(at: u) }
         let pending = pendingFiles(in: inbox)
         guard !pending.isEmpty else { return }
         isDraining = true

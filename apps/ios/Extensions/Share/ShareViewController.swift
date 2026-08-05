@@ -21,8 +21,16 @@ class ShareViewController: UIViewController {
     private func handleShare() {
         let attachments = (extensionContext?.inputItems as? [NSExtensionItem] ?? [])
             .flatMap { $0.attachments ?? [] }
-        guard !attachments.isEmpty, let inbox = inboxURL() else { return complete() }
+        guard !attachments.isEmpty else { return complete() }
+        // A nil App Group container means the entitlement is missing from the provisioning profile — the single
+        // most likely device-only failure here, and it USED to be indistinguishable from success: the share sheet
+        // dismissed with its normal confirmation and the note simply never appeared, which reads to the user as
+        // "I forgot to open Parla". Report it instead; the host app then shows a real failure.
+        guard let inbox = inboxURL() else {
+            return fail("Parla could not reach its shared storage.")
+        }
 
+        let landed = Counter()
         let group = DispatchGroup()
         for provider in attachments {
             // Load the item as its OWN declared type (registeredTypeIdentifiers is ordered most-specific-first)
@@ -46,12 +54,19 @@ class ShareViewController: UIViewController {
                 do {
                     try FileManager.default.copyItem(at: url, to: part)
                     try FileManager.default.moveItem(at: part, to: dest)
+                    landed.increment()
                 } catch {
                     try? FileManager.default.removeItem(at: part)   // never leave half a file behind
                 }
             }
         }
-        group.notify(queue: .main) { [weak self] in self?.complete() }
+        // Success only if SOMETHING actually landed. A partial batch still completes — the files that made it
+        // will import, and claiming total failure would be its own lie — but "nothing at all" must not be
+        // reported as done.
+        group.notify(queue: .main) { [weak self] in
+            guard let self else { return }
+            landed.value > 0 ? self.complete() : self.fail("Parla could not read the shared file.")
+        }
     }
 
     private func inboxURL() -> URL? {
@@ -72,4 +87,20 @@ class ShareViewController: UIViewController {
     private func complete() {
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
+
+    /// Tell the share sheet it failed, rather than dismissing as if it had worked.
+    private func fail(_ message: String) {
+        let error = NSError(domain: "com.parla.ios.share", code: 1,
+                            userInfo: [NSLocalizedDescriptionKey: message])
+        extensionContext?.cancelRequest(withError: error)
+    }
+}
+
+/// Tiny lock-guarded counter: `loadFileRepresentation` calls back on an arbitrary queue, so the per-file
+/// outcomes are tallied across threads before `group.notify` reads the total.
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func increment() { lock.lock(); count += 1; lock.unlock() }
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
 }
