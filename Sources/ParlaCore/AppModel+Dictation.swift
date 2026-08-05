@@ -70,15 +70,21 @@ extension AppModel {
         guard canDictate else { showToast(L("toast.busy"), false); return }
         guard recorder == nil, !requestingMic else { return }
         requestingMic = true   // claim the lane synchronously (→ isBusy) so a drop can't race in during the prompt
+        dictationStopRequested = false
         Task {
             // Clear the claim + re-pump the watch lane if the dictation aborts before a recorder is committed
-            // (mic denied, start throws, or a newer start won).
-            defer { requestingMic = false; if recorder == nil { pumpQueues() } }
+            // (mic denied, start throws, a newer start won, or the user let go during the prompt).
+            defer { requestingMic = false; dictationStopRequested = false; if recorder == nil { pumpQueues() } }
             // Ask for mic permission BEFORE any recording UI appears. On first use the system prompt shows with
             // NOTHING claiming to record yet — the chip / timer / "Listening…" only start once capture actually
             // does (below). Avoids the "it's already recording while asking permission" feeling + a timer that
             // counts the dialog time.
             let granted = await MicRecorder.ensureMicAccess()
+            // HOLD-TO-TALK, first run: the system prompt appears while the key is held, and the user must let go
+            // to click Allow. That key-up ran on the main actor while we were suspended here, so honour it —
+            // otherwise the mic goes live with nothing held and records until the 120 s cap, which is a live
+            // microphone the user believes is off.
+            guard !dictationStopRequested else { return }
             // A newer start already committed a recorder → don't start a SECOND engine (orphans the first).
             guard recorder == nil else { return }
             guard granted else { showToast(L("toast.mic.denied"), false); return }
@@ -98,6 +104,11 @@ extension AppModel {
 
     /// Stop the recorder and transcribe the captured WAV (reusing the standard result path).
     public func stopAndTranscribeDictation() {
+        // A stop can arrive BEFORE capture begins: on first use `startDictation` is suspended on the system
+        // mic-permission prompt, and `isRecordingDictation` (== recordingStartedAt != nil) is still false, so this
+        // used to return here and the request vanished. The handling further down anticipated this case but was
+        // unreachable. Record the intent instead; the suspended start checks it when it resumes.
+        if requestingMic, !isRecordingDictation { dictationStopRequested = true; return }
         guard isRecordingDictation else { return }
         // Capture what the user SAW streaming (confirmed + the live tail) BEFORE stopStreamingLoop clears it.
         let streamed = streamedDictationText()

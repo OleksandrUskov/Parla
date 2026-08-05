@@ -3956,6 +3956,32 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(manifest.contains("<key>NSPrivacyTracking</key>\n    <false/>"), "no tracking, ever")
     }
 
+    // MARK: Hold-to-talk — a key-up during the mic prompt must not be swallowed
+
+    /// First hold-to-talk use: startDictation suspends on the system mic-permission prompt, so
+    /// `recordingStartedAt` — and therefore `isRecordingDictation` — is still nil. The user has to LET GO of the
+    /// hotkey to click Allow, and that key-up hit `guard isRecordingDictation else { return }` and vanished. The
+    /// suspended start then committed the recorder anyway: the mic went live with nothing held and recorded until
+    /// the 120 s cap. A live microphone the user believes is off.
+    @MainActor func testAStopDuringTheMicPromptIsRememberedNotDropped() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.requestingMic = true          // the prompt is up; startDictation is suspended on ensureMicAccess()
+        XCTAssertFalse(m.isRecordingDictation, "precondition: capture has NOT begun yet")
+
+        m.stopAndTranscribeDictation()  // the user releases the key to click Allow
+
+        XCTAssertTrue(m.dictationStopRequested,
+                      "the key-up must be recorded so the resuming start abandons instead of opening the mic")
+    }
+
+    /// …and it must stay a no-op when nothing is pending, or an idle stop would poison the NEXT dictation.
+    @MainActor func testAStopWhenNothingIsPendingChangesNothing() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.stopAndTranscribeDictation()
+        XCTAssertFalse(m.dictationStopRequested)
+        XCTAssertFalse(m.requestingMic)
+    }
+
     // MARK: Free-tier batch gate — the queue-depth half
 
     /// batchIsGated only ever inspected the size of ONE drop, and nothing inspected queue depth. A free user

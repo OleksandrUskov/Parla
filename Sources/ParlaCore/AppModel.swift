@@ -123,6 +123,10 @@ public final class AppModel {
     public var watcher: (any FileWatching)?                   // +FolderWatch (macOS FolderWatcher via the FileWatching seam)
     public var recorder: MicRecorder?                         // +Dictation (live mic capture)
     public var recordingStartedAt: Date?                      // +Dictation: non-nil while recording (drives isBusy + the chip timer)
+    /// A stop arrived while the mic-permission prompt was still up, i.e. BEFORE `recordingStartedAt` existed.
+    /// Without this the request was silently dropped and capture began with the hotkey already released — see
+    /// `stopAndTranscribeDictation`. Cleared when a start claims the lane and when the pending start is abandoned.
+    public var dictationStopRequested = false
     public var requestingMic = false                          // +Dictation: holds the lane during the mic-permission check,
                                                        // BEFORE any recording UI shows (recordingStartedAt stays nil)
     public var streamingTask: Task<Void, Never>?              // +DictationStream: the live decode loop (single-flight)
