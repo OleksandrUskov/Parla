@@ -147,6 +147,13 @@ public final class AppModel {
     public var watchQueue: [URL] = []                         // waiting for transcription (single-flight)
     public var transcriptionQueue: [TranscriptionJob] = []    // manual drops waiting for the lane — stack "5, then 5 more"; shares the isBusy lane with watchQueue
     public var currentTranscriptionTask: Task<Void, Never>?   // the running MANUAL job — for Cancel (mirrors streamingTask); nil for watch/dictation runs
+    /// Which job owns `currentTranscriptionTask` right now. A job's continuation may run LONG after the lane was
+    /// released — `phase` goes `.idle` before the tail work (notification, audio prune, and on the re-transcribe
+    /// path a full `refreshSemanticIndex`, which can be minutes with MLX) — and a new job legitimately starts in
+    /// that window. Clearing the handle unconditionally then destroyed the NEW job's handle, and since both
+    /// Cancel buttons render only while `currentTranscriptionTask != nil`, that job became uncancellable.
+    /// Bumped when a job takes the lane; a continuation only clears what it still owns.
+    public var transcriptionLaneToken = 0
     public var cancelling = false                             // a cancel was requested; the in-flight file/chunk finishes before it stops ("Stopping…")
     public var lastSeen: [String: WatchedFileStat] = [:]      // snapshot of the previous pass (stability)
     public var processedKeys: [String] = []                   // FIFO order of processed dedupKeys

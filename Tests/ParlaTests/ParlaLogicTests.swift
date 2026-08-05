@@ -3956,6 +3956,49 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(manifest.contains("<key>NSPrivacyTracking</key>\n    <false/>"), "no tracking, ever")
     }
 
+    // MARK: The transcription lane handle — a finishing job must not disown a running one
+
+    /// A job's continuation runs AFTER the lane is released: `phase` goes .idle before the tail work (the
+    /// completion notification, the audio prune, and on the re-transcribe path a whole refreshSemanticIndex,
+    /// which is minutes with MLX). A new job legitimately starts in that window — and the finishing job then
+    /// cleared `currentTranscriptionTask` unconditionally, destroying the NEW job's handle. Both Cancel buttons
+    /// (MainPane and the iOS chip) render only while that handle is non-nil, so the running transcription became
+    /// uncancellable and its queue unpurgeable.
+    ///
+    /// Simulated at the state level: the token is what the continuations test, and this pins that a stale owner
+    /// cannot clear a newer owner's handle.
+    @MainActor func testAFinishingJobDoesNotClearANewerJobsCancelHandle() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+
+        m.transcriptionLaneToken += 1
+        let staleToken = m.transcriptionLaneToken          // job A takes the lane
+        m.currentTranscriptionTask = Task { }
+
+        m.transcriptionLaneToken += 1                       // job B takes it during A's tail
+        let liveHandle = Task<Void, Never> { }
+        m.currentTranscriptionTask = liveHandle
+
+        // A's continuation finally runs.
+        if m.transcriptionLaneToken == staleToken { m.currentTranscriptionTask = nil }
+
+        XCTAssertNotNil(m.currentTranscriptionTask, "the running job keeps its Cancel handle")
+        liveHandle.cancel()
+    }
+
+    /// …and the owner must still clear its own handle, or Cancel would linger forever after a job ends.
+    @MainActor func testAJobStillClearsItsOwnHandle() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.transcriptionLaneToken += 1
+        let token = m.transcriptionLaneToken
+        m.currentTranscriptionTask = Task { }
+        m.cancelling = true
+
+        if m.transcriptionLaneToken == token { m.currentTranscriptionTask = nil; m.cancelling = false }
+
+        XCTAssertNil(m.currentTranscriptionTask)
+        XCTAssertFalse(m.cancelling)
+    }
+
     // MARK: Hold-to-talk — a key-up during the mic prompt must not be swallowed
 
     /// First hold-to-talk use: startDictation suspends on the system mic-permission prompt, so

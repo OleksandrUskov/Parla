@@ -35,10 +35,16 @@ extension AppModel {
         guard !isBusy, downloadingModel == nil, !transcriptionQueue.isEmpty else { return }
         let job = transcriptionQueue.removeFirst()
         phase = .preparing("…")   // claim the phase synchronously — closes the double-start race
+        transcriptionLaneToken += 1
+        let token = transcriptionLaneToken
         currentTranscriptionTask = Task {
             await transcribe(urls: job.urls)
-            currentTranscriptionTask = nil
-            cancelling = false    // robustness: clear "Stopping…" however transcribe exited (belt-and-suspenders vs the in-loop reset)
+            // Only clear what we still OWN: `phase` is released before this job's tail finishes, so a new job can
+            // already hold the lane — clearing unconditionally used to destroy ITS handle and hide its Cancel.
+            if transcriptionLaneToken == token {
+                currentTranscriptionTask = nil
+                cancelling = false    // robustness: clear "Stopping…" however transcribe exited (belt-and-suspenders vs the in-loop reset)
+            }
             pumpQueues()          // lane freed → pull the next job
         }
     }
@@ -408,11 +414,18 @@ extension AppModel {
         // lastAttemptedURLs) can't fire the wrong file/model if this re-transcribe fails.
         lastAttemptedURLs = []
         phase = .preparing(item.sourceName)                   // claim the phase synchronously — closes the race (like handleDrop)
+        transcriptionLaneToken += 1
+        let token = transcriptionLaneToken
         currentTranscriptionTask = Task {                     // stored → the chip's Cancel button works for a re-transcribe too
             await runRetranscribe(item, with: model)
-            currentTranscriptionTask = nil
-            cancelling = false    // clear "Stopping…" however runRetranscribe exited
-            pumpQueues()          // lane freed → start any file queued during this re-transcribe (nil FIRST so a new job's handle isn't clobbered)
+            // This path has the WIDEST window: runRetranscribe sets `phase = .idle` and then awaits
+            // refreshSemanticIndex(), which is seconds to minutes with MLX. Anything dropped in there takes the
+            // lane for real, so only clear the handle if it is still ours.
+            if transcriptionLaneToken == token {
+                currentTranscriptionTask = nil
+                cancelling = false    // clear "Stopping…" however runRetranscribe exited
+            }
+            pumpQueues()          // lane freed → start any file queued during this re-transcribe
         }
     }
 
