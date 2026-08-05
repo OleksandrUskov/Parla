@@ -3812,10 +3812,46 @@ final class ParlaLogicTests: XCTestCase {
         var item = makeItem(text: "t")
         item.sourcePath = keptFile.path
 
-        AppModel.pruneImportedOrphans(keeping: [item])
+        // now = a week and a day past the dirs' mtime → both are past the grace period, so only the
+        // reference-check decides. (The grace period itself is pinned by the two tests below.)
+        AppModel.pruneImportedOrphans(keeping: [item], now: Date().addingTimeInterval(694_800))
 
         XCTAssertTrue(fm.fileExists(atPath: keptDir.path), "a saved note's import copy is kept")
         XCTAssertFalse(fm.fileExists(atPath: orphanDir.path), "an unreferenced import copy is swept")
+    }
+
+    /// THE data-loss guard. A drop stopped by a Pro gate (batch, or the free length cap) produces no note, so its
+    /// import copy is "unreferenced" — while being the user's ONLY copy, because `ShareInbox.drain` has already
+    /// cleared the share inbox. Two voice notes shared from Telegram by a free user were paywalled and then, on
+    /// the next launch, deleted; buying Pro afterwards could not bring them back.
+    func testPruneImportedOrphansKeepsARecentUnreferencedCopyPendingAnUpgradeOrRetry() throws {
+        let fm = FileManager.default
+        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        let gatedDir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: gatedDir, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: gatedDir.appendingPathComponent("voice.ogg"))
+        defer { try? fm.removeItem(at: gatedDir) }
+
+        AppModel.pruneImportedOrphans(keeping: [])   // just shared, just paywalled, nothing in history
+
+        XCTAssertTrue(fm.fileExists(atPath: gatedDir.path),
+                      "a copy imported moments ago is the user's only one — it must survive the launch sweep")
+    }
+
+    /// …but the grace period must expire, or a crash between copy and save leaks bytes forever.
+    func testPruneImportedOrphansStillSweepsOnceTheGracePeriodHasPassed() throws {
+        let fm = FileManager.default
+        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        let deadDir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: deadDir, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: deadDir.appendingPathComponent("voice.ogg"))
+        defer { try? fm.removeItem(at: deadDir) }
+
+        AppModel.pruneImportedOrphans(keeping: [], now: Date().addingTimeInterval(694_800))   // 8 days on
+
+        XCTAssertFalse(fm.fileExists(atPath: deadDir.path), "past the grace period an unreferenced copy is swept")
     }
 
     // MARK: History resilience — one corrupt record must NOT wipe the archive (data-loss fix)

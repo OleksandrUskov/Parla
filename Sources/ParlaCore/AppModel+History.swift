@@ -79,17 +79,32 @@ extension AppModel {
     /// one, a cancelled queued job drops one — none of which delete()/clearHistory ever reach. Call at LAUNCH
     /// (`AppModel.iOS()`), where nothing is in-flight/queued and `lastAttemptedURLs` is empty, so it's race-free and
     /// never removes a copy still in use. A no-op on macOS (no imports/ dir). Mirrors AudioStore.pruneOrphans.
-    public nonisolated static func pruneImportedOrphans(keeping history: [TranscriptItem]) {
+    /// `age` is a GRACE PERIOD, and it is load-bearing: "unreferenced" does not mean "unwanted". A drop that hits
+    /// a Pro gate (batch, or the free length cap) produces no note, so its container copy is unreferenced — while
+    /// being the user's ONLY remaining copy, since `ShareInbox.drain` has already cleared the share inbox. Without
+    /// a grace period the next launch deleted it, so two voice notes shared from Telegram by a free user were
+    /// paywalled and then destroyed, and buying Pro afterwards could not bring them back. In-session retry works
+    /// off `lastAttemptedURLs`, but that is memory only — this is what survives a relaunch.
+    /// The cost is that a genuinely dead copy (crash between copy and save) lingers for a week. That is the right
+    /// side to err on: the bytes are the user's own audio.
+    public nonisolated static func pruneImportedOrphans(keeping history: [TranscriptItem],
+                                                        olderThan age: TimeInterval = 604_800,
+                                                        now: Date = Date()) {
         let fm = FileManager.default
         guard let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                         appropriateFor: nil, create: false) else { return }
         let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
-        guard let dirs = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
+        guard let dirs = try? fm.contentsOfDirectory(at: root,
+                                                     includingPropertiesForKeys: [.contentModificationDateKey])
+        else { return }
         // Referenced <uuid> dir names (each sourcePath is imports/<uuid>/<name>).
         let referenced = Set(history.compactMap { $0.sourcePath.map {
             URL(fileURLWithPath: $0).deletingLastPathComponent().lastPathComponent
         } })
         for dir in dirs where !referenced.contains(dir.lastPathComponent) {
+            // Unreadable timestamp → KEEP. Deleting on "I can't tell how old this is" is the destructive guess.
+            guard let mtime = (try? dir.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                  now.timeIntervalSince(mtime) > age else { continue }
             try? fm.removeItem(at: dir)
         }
     }
