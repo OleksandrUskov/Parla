@@ -33,6 +33,15 @@ public final class MicRecorder {
 
     private let vad: SilenceDetector?                 // nil = VAD off (zero overhead on the audio thread)
     private var onAutoStop: (@MainActor () -> Void)?  // stored so the VAD silence hook can route to it
+    /// Observers for the two events that silently KILL a running capture: an engine configuration change
+    /// (AirPods or a headset connecting, a USB mic unplugged, an audio-capable display attached, wake from
+    /// sleep) and, on iOS, a session interruption (an incoming call, Siri). CoreAudio stops the engine and
+    /// invalidates the tap, but `isRecording` and the elapsed timer are plain state set once in `start()` and
+    /// never re-derived — so the chip kept counting, the streaming preview froze mid-sentence, and the WAV
+    /// ended at the switch. Everything said afterwards was gone, and with VAD on the silence auto-stop could
+    /// not fire either (it only runs from the tap), so the session ran to the 120 s cap. This is the one place
+    /// the app records audio it cannot re-create.
+    private var interruptionObservers: [NSObjectProtocol] = []
 
     // Streaming: the live 16 kHz mono Float buffer WhisperKit consumes, shared between
     // the audio-thread sink (appends) and the main actor (snapshots) via an OSAllocatedUnfairLock — the
@@ -125,6 +134,7 @@ public final class MicRecorder {
 
         outputURL = url
         isRecording = true
+        installInterruptionObservers()
 
         if maxSeconds > 0 {
             // Only NOTIFY on timeout — the owner (AppModel) performs the single `stop()` that captures the
@@ -145,6 +155,7 @@ public final class MicRecorder {
     public func stop() -> URL? {
         guard isRecording else { return nil }
         autoStop?.cancel(); autoStop = nil
+        removeInterruptionObservers()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         isRecording = false
@@ -159,6 +170,33 @@ public final class MicRecorder {
 
     /// Route the VAD silence signal to the same auto-stop handler the 120 s cap uses. Always on the main actor.
     private func fireAutoStop() { onAutoStop?() }
+
+    /// Turn "the system just killed our capture" into the SAME single stop-and-transcribe the VAD and the 120 s
+    /// cap use, so the user keeps what was recorded and the UI stops claiming to listen. Both notifications are
+    /// delivered on the main queue, which is where `fireAutoStop` must run (mirrors the VAD hand-off).
+    private func installInterruptionObservers() {
+        let center = NotificationCenter.default
+        var tokens: [NSObjectProtocol] = []
+        tokens.append(center.addObserver(forName: .AVAudioEngineConfigurationChange,
+                                         object: engine, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.fireAutoStop() }
+        })
+        #if os(iOS)
+        tokens.append(center.addObserver(forName: AVAudioSession.interruptionNotification,
+                                         object: nil, queue: .main) { [weak self] note in
+            // Only `.began` — `.ended` arrives after the call/Siri finishes, by which point we have already stopped.
+            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+            MainActor.assumeIsolated { self?.fireAutoStop() }
+        })
+        #endif
+        interruptionObservers = tokens
+    }
+
+    private func removeInterruptionObservers() {
+        interruptionObservers.forEach(NotificationCenter.default.removeObserver)
+        interruptionObservers = []
+    }
 
     // MARK: Streaming — live Float buffer access
 
