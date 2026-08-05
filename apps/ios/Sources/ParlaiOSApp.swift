@@ -62,6 +62,9 @@ private struct RootView: View {
         .task {
             if model.isStoreBuild {   // freemium gate + StoreKit only in a store build; a from-source build stays FULL
                 model.isProUser = { purchases.grantsUnlimited }   // fail-open until the entitlement resolves (never gate a payer on a cold-launch share)
+                // …and let a gate WAIT for that resolution instead of acting on the fail-open guess, which was
+                // re-runnable on every cold launch (and on iOS every share drains straight into transcribe).
+                model.resolveEntitlements = { await purchases.awaitEntitlements() }
                 await purchases.start()
             }
         }

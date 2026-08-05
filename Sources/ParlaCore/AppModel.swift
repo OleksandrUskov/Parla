@@ -243,6 +243,14 @@ public final class AppModel {
     /// so a from-source build (or a wiring gap) is the FULL app. A test that exercises the free tier sets `{ false }`.
     public var isProUser: @MainActor () -> Bool = { true }
 
+    /// Make `isProUser` answer from FACT before a gate reads it. `PurchaseManager.grantsUnlimited` deliberately
+    /// fails open until StoreKit's first scan lands, so that a paying customer dropping a long file the instant
+    /// the app launches is never wrongly blocked — but that window is re-runnable (quit, relaunch, drop, repeat),
+    /// which turned a trade-off into an unlimited workaround. `transcribe` awaits this before gating, so both
+    /// sides win instead of one. Default no-op: a from-source build and every test are unaffected, and the
+    /// store apps wire it next to `isProUser`.
+    public var resolveEntitlements: @MainActor () async -> Void = {}
+
     /// Cheap container-duration probe for the free-tier length gate (reads the media index, no decode). Ogg/Opus
     /// (incl. extension-less Telegram voices) can't be read by AVFoundation → probe via opusfile's `op_pcm_total`
     /// first; everything else via `AVURLAsset`. Injected so tests can script a duration without a real fixture.

@@ -3999,6 +3999,56 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(m.cancelling)
     }
 
+    // MARK: The entitlement race — a gate must decide on fact, not on the fail-open guess
+
+    /// THE abuse this closes. `grantsUnlimited` reports Pro until StoreKit's first scan lands, so a free user who
+    /// dropped an over-cap file inside that launch window got it through — and could re-run the window at will by
+    /// quitting and relaunching. The gate now awaits resolution first. Modelled exactly: `isProUser` starts
+    /// answering "yes" (unresolved) and the seam flips it to the truth, as the real resolution does.
+    @MainActor func testTheLengthGateWaitsForTheRealEntitlementBeforeDeciding() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+            m.postNotification = { _, _ in }; m.soundOnComplete = false
+            var resolved = false
+            m.isProUser = { !resolved }                    // unresolved → fails OPEN, exactly like grantsUnlimited
+            m.resolveEntitlements = { resolved = true }    // …and the scan says: not a subscriber
+            m.mediaDuration = { _ in 1800 }                // 30 minutes — far past the 5-minute free cap
+
+            await m.transcribe(urls: [URL(fileURLWithPath: "/tmp/parla-long.m4a")])
+
+            XCTAssertTrue(resolved, "the gate must ask before it decides")
+            XCTAssertTrue(m.history.isEmpty, "an over-cap file must not slip through the launch window")
+            XCTAssertNotNil(m.paywallReason, "…and the user is told why")
+        }
+    }
+
+    /// The other half: a real payer must still never be blocked, whatever the timing.
+    @MainActor func testAResolvedPayerIsNotGated() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "ок", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake, ai: NoopAIService(), embedder: FakeEmbedder())
+            m.postNotification = { _, _ in }; m.soundOnComplete = false
+            m.isProUser = { true }
+            m.mediaDuration = { _ in 1800 }
+
+            await m.transcribe(urls: [URL(fileURLWithPath: "/tmp/parla-long.m4a")])
+
+            XCTAssertEqual(m.history.count, 1, "a payer's 30-minute file goes through")
+            XCTAssertNil(m.paywallReason)
+        }
+    }
+
+    /// An unreachable store must not hang a transcription — the wait is bounded, and on timeout we still fail
+    /// OPEN, because a store we cannot reach must never become a paywall for someone who already paid.
+    @MainActor func testAwaitEntitlementsGivesUpInsteadOfHanging() async {
+        let pm = PurchaseManager()                      // never started → the scan will never land
+        let started = Date()
+        await pm.awaitEntitlements(timeout: 0.2)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 3, "bounded, not open-ended")
+        XCTAssertFalse(pm.entitlementsResolved)
+        XCTAssertTrue(pm.grantsUnlimited, "still fails open on timeout — never block a payer")
+    }
+
     // MARK: Hold-to-talk — a key-up during the mic prompt must not be swallowed
 
     /// First hold-to-talk use: startDictation suspends on the system mic-permission prompt, so

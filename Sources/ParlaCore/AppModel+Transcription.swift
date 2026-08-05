@@ -103,6 +103,12 @@ extension AppModel {
 
     public func transcribe(urls: [URL], isWatcherRun: Bool = false) async {
         lastAttemptedURLs = urls   // remember for «Try again»
+        // Gate on FACT, not on the launch-window guess. Every gate below reads `isProUser`, which the store apps
+        // wire to a value that fails OPEN until StoreKit's first scan lands — right for a payer, but re-runnable
+        // by anyone who noticed (quit, relaunch, drop an over-cap file, repeat). No-op once resolved, which is
+        // almost always; bounded, so an unreachable store can never hang a transcription. The phase was already
+        // claimed synchronously by the caller, so this await cannot open a double-start race.
+        await resolveEntitlements()
         var files: [URL] = []
         for url in urls {
             if url.hasDirectoryPath { files.append(contentsOf: Self.audioFiles(in: url)) }

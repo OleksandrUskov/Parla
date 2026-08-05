@@ -31,6 +31,9 @@ struct ParlaApp: App {
                     appDelegate.model = model            // let the terminate-guard see in-flight work
                     if model.isStoreBuild {              // freemium gate + StoreKit only in an official store build; a from-source build stays FULL
                         model.isProUser = { [purchases] in purchases.grantsUnlimited }   // fail-open until the entitlement resolves (never gate a payer mid-cold-launch)
+                        // …and let a gate WAIT for that resolution instead of acting on the fail-open guess,
+                        // which was re-runnable on every cold launch.
+                        model.resolveEntitlements = { [purchases] in await purchases.awaitEntitlements() }
                         Task { await purchases.start() } // load product + resolve entitlement + start the Transaction.updates listener
                     }
                     if Onboarding.shouldShowOnboarding(didOnboard: didOnboard, hasHistory: !model.history.isEmpty) {

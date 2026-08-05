@@ -31,6 +31,29 @@ public final class PurchaseManager {
     /// False until `refreshEntitlements()` has run once (i.e. StoreKit has reported the current entitlements).
     public private(set) var entitlementsResolved = false
 
+    /// Wait, briefly, for the first entitlement scan — so a gate decides on FACT instead of on `grantsUnlimited`'s
+    /// fail-open guess. Returns instantly once resolved, which is the overwhelmingly common case: the scan reads
+    /// the on-device transaction store and completes in well under a second, and `start()` kicks it at launch.
+    ///
+    /// This exists because failing open is re-runnable: quit, relaunch, drop an over-cap file inside the window,
+    /// repeat. That turns a deliberate "never gate a payer" trade-off into an unlimited workaround for anyone who
+    /// notices. Waiting removes the trade-off rather than picking a side — the payer is never blocked AND the
+    /// free tier is never bypassed.
+    ///
+    /// A bounded poll rather than a continuation on purpose: the timeout has to be honoured even if the scan
+    /// never completes (an unreachable or misbehaving store must not hang a transcription), and a continuation
+    /// that must also be resumable by a racing timeout is a leak waiting to happen. This runs on the main actor
+    /// and each `sleep` yields, so the cost while waiting is nil.
+    public func awaitEntitlements(timeout: TimeInterval = 3) async {
+        guard !entitlementsResolved else { return }
+        let deadline = Date().addingTimeInterval(timeout)
+        while !entitlementsResolved, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        // Timed out → `grantsUnlimited` still fails open, deliberately: a store we cannot reach must never turn
+        // into a paywall for someone who has already paid.
+    }
+
     /// The purchasable Pro product once loaded (nil until `start()` loads it, or if the store is unreachable).
     public private(set) var proProduct: Product?
 
