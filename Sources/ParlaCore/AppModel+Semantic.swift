@@ -269,16 +269,27 @@ extension AppModel {
         // chapter summaries covers the entire recording at real length; `insights` still gives whole-recording
         // title/keywords. Best-effort. (Very long notes whose joined summaries exceed the input cap are truncated —
         // a hierarchical reduce is a later refinement.)
+        // MERGE, never replace. This runs behind a button that reads «Regenerate all summaries» once summaries
+        // exist, and `chapterSummaryText` returns nil on the ordinary failures (a truncated JSON the parser
+        // rejects, a guardrail refusal). Assigning `built` wholesale therefore DELETED the summary of every
+        // chapter that had one and failed this run — and if all of them failed, the Digest tab vanished.
+        // `regenerateChapterSummary` already gets this right for the single-chapter case ("keep old on fail").
+        let merged = Self.upsertChapterSummaries(built, into: item.chapterSummaries ?? [])
         var overall: AIInsights?
         var richSummary: String?
-        if !built.isEmpty {
-            let joined = built.map(\.summary).joined(separator: "\n")
+        if !merged.isEmpty {
+            // Reduce over the MERGED set: reducing over `built` alone produced an overall summary that silently
+            // omitted the surviving chapters while presenting itself as whole-recording coverage.
+            let joined = merged.map(\.summary).joined(separator: "\n")
             overall = try? await ai.insights(forTranscript: joined, language: item.language)   // title + keywords
-            richSummary = await hierarchicalSummary(of: built.map(\.summary), language: item.language)  // detailed summary, ANY length
+            richSummary = await hierarchicalSummary(of: merged.map(\.summary), language: item.language)  // detailed summary, ANY length
         }
         // TOCTOU (mirror enrichInsights): re-find after the awaits; an edit re-buckets chapters → drop the stale result.
         guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }
-        history[idx].chapterSummaries = built.isEmpty ? nil : built
+        // Re-merge against the CURRENT list, not the snapshot: a single-chapter regenerate may have landed while
+        // we were awaiting, and it must not be clobbered.
+        let final = Self.upsertChapterSummaries(built, into: history[idx].chapterSummaries ?? [])
+        history[idx].chapterSummaries = final.isEmpty ? nil : final
         if let richSummary, !richSummary.isEmpty { history[idx].summary = richSummary }       // DETAILED whole-recording summary
         else if let s = overall?.summary, !s.isEmpty { history[idx].summary = s }             // fallback: the brief reduce
         if let overall {
@@ -288,6 +299,20 @@ extension AppModel {
         HistoryStore.save(history)
         // Free the ~2.3GB MLX model after the batch (no-op for the FoundationModels/English path — never loaded).
         await MLXEngine.shared.unload()
+    }
+
+    /// Fold freshly-generated chapter summaries into an existing set, matched on the STABLE window key (the same
+    /// ±0.5 s comparison `regenerateChapterSummary` uses). A chapter absent from `fresh` keeps whatever it had:
+    /// a per-chapter generation failure is ordinary and must never cost the user a summary they already had.
+    /// Pure + sorted, so the merge itself is unit-tested rather than inferred.
+    nonisolated static func upsertChapterSummaries(_ fresh: [ChapterSummary],
+                                                   into existing: [ChapterSummary]) -> [ChapterSummary] {
+        var list = existing
+        for entry in fresh {
+            if let i = list.firstIndex(where: { abs($0.startSec - entry.startSec) < 0.5 }) { list[i] = entry }
+            else { list.append(entry) }
+        }
+        return list.sorted { $0.startSec < $1.startSec }
     }
 
     /// Regenerate (or first-generate) the summary for ONE chapter — so a single failed/poor chapter in a long

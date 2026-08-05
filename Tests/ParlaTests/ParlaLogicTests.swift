@@ -1538,6 +1538,34 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// THE call-site guard for the merge. «Regenerate all summaries» used to assign the freshly-built array
+    /// wholesale, so a chapter that had a summary and failed THIS run lost it — and per-chapter failure is
+    /// ordinary (a truncated JSON the parser rejects, a guardrail refusal). regenerateChapterSummary already
+    /// keeps the old one on failure; this pins the same contract for the all-chapters path.
+    @MainActor func testRegenerateAllChaptersKeepsTheSummaryOfAChapterThatFailsThisRun() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: PerChapterAIService(failMarker: "вторая"),
+                             embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная запись", segments: [
+                Segment(start: 0, end: 5, text: "первая глава тут"),
+                Segment(start: 130, end: 135, text: "вторая глава тут"),
+            ], lang: "ru")
+            it.durationSec = 700   // > 600 → long → two chapters at 0 and 120
+            it.chapterSummaries = [ChapterSummary(startSec: 0, endSec: 120, summary: "старая первая"),
+                                   ChapterSummary(startSec: 120, endSec: 240, summary: "старая вторая")]
+            m.history = [it]
+
+            await m.generateChapterSummaries(for: it.id)
+
+            let cs = m.history.first?.chapterSummaries ?? []
+            XCTAssertEqual(cs.count, 2, "the failing chapter must keep its previous summary, not be dropped")
+            XCTAssertEqual(cs.first(where: { $0.startSec == 120 })?.summary, "старая вторая",
+                           "chapter two failed this run — its earlier summary survives")
+            XCTAssertEqual(cs.first(where: { $0.startSec == 0 })?.summary, "ok",
+                           "chapter one succeeded — it is replaced")
+        }
+    }
+
     /// Map→reduce (P4 punch-list 8): after the per-chapter MAP, a REDUCE over the chapter summaries builds the
     /// WHOLE-recording overall summary (+title/keywords) — fixing the thin first-minutes summary on long notes.
     @MainActor func testGenerateChapterSummariesReducesOverallSummary() async {
@@ -3852,6 +3880,38 @@ final class ParlaLogicTests: XCTestCase {
         AppModel.pruneImportedOrphans(keeping: [], now: Date().addingTimeInterval(694_800))   // 8 days on
 
         XCTAssertFalse(fm.fileExists(atPath: deadDir.path), "past the grace period an unreferenced copy is swept")
+    }
+
+    // MARK: Chapter summaries — a failed chapter must not cost the user a summary it already had
+
+    /// «Regenerate all summaries» rebuilds the set chapter by chapter, and chapterSummaryText returns nil on the
+    /// ordinary failures (a truncated JSON the parser rejects, a guardrail refusal). Assigning the fresh array
+    /// wholesale deleted every chapter that had a summary and failed THIS run; if all failed, the Digest tab
+    /// disappeared. regenerateChapterSummary already keeps the old one on failure — this is the same contract
+    /// for the all-chapters path.
+    func testUpsertChapterSummariesKeepsChaptersMissingFromThisRun() {
+        let existing = [ChapterSummary(startSec: 0, endSec: 600, summary: "old one"),
+                        ChapterSummary(startSec: 600, endSec: 1200, summary: "old two")]
+        let fresh = [ChapterSummary(startSec: 0, endSec: 600, summary: "new one")]   // chapter two failed this run
+        let merged = AppModel.upsertChapterSummaries(fresh, into: existing)
+        XCTAssertEqual(merged.count, 2, "a chapter that failed this run keeps its previous summary")
+        XCTAssertEqual(merged[0].summary, "new one", "a chapter that succeeded is replaced")
+        XCTAssertEqual(merged[1].summary, "old two")
+    }
+
+    func testUpsertChapterSummariesMatchesOnTheWindowKeyAndStaysSorted() {
+        let existing = [ChapterSummary(startSec: 600, endSec: 1200, summary: "old two")]
+        // 600.3 is the SAME window (the +/-0.5s key regenerateChapterSummary uses), 1200 is a new one.
+        let fresh = [ChapterSummary(startSec: 1200, endSec: 1800, summary: "new three"),
+                     ChapterSummary(startSec: 600.3, endSec: 1200, summary: "new two")]
+        let merged = AppModel.upsertChapterSummaries(fresh, into: existing)
+        XCTAssertEqual(merged.map(\.summary), ["new two", "new three"], "upsert by window, then sort by start")
+    }
+
+    func testUpsertChapterSummariesOnAnEmptyRunChangesNothing() {
+        let existing = [ChapterSummary(startSec: 0, endSec: 600, summary: "old one")]
+        XCTAssertEqual(AppModel.upsertChapterSummaries([], into: existing).map(\.summary), ["old one"],
+                       "every chapter failing must leave the Digest intact, not erase it")
     }
 
     // MARK: History resilience — one corrupt record must NOT wipe the archive (data-loss fix)
