@@ -4418,6 +4418,31 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(evict.isEmpty)   // don't yank audio out from under the player — partial compliance is OK
     }
 
+    /// The one above is a ONE-item history, so it cannot tell correct behaviour apart from the bug: with nothing
+    /// else present there is nothing to evict either way. Give the protected over-cap item some company and the
+    /// real question appears — does an unreachable target make the loop strip everyone else?
+    ///
+    /// Live case: a Pro user imports a 1-hour video. `keepAudio` stores the full container AND a rendered .m4a,
+    /// so one note can pass the 500 MB default cap on its own; `transcribe` has already selected it, so it is the
+    /// protected one. The whole back catalogue must not lose its player audio because of that.
+    func testEnforceAudioCapDoesNotStripEveryoneElseWhenTheProtectedItemAloneExceedsTheCap() {
+        let big = makeItem(text: "big"), a = makeItem(text: "a"), b = makeItem(text: "b")
+        let sizes = [big.id: Int64(2000), a.id: Int64(100), b.id: Int64(100)]   // big alone > cap
+        let evict = AudioStore.enforceAudioCap([big, a, b], capBytes: 1000,
+                                               sizeOf: { sizes[$0.id] ?? 0 }, protected: [big.id])
+        XCTAssertTrue(evict.isEmpty,
+                      "the cap is unreachable while big is protected — evicting a and b cannot help, it only destroys their playback audio")
+    }
+
+    /// The eviction must still do its job when the cap IS reachable without touching the protected item.
+    func testEnforceAudioCapStillEvictsWhenTheCapIsReachableAroundTheProtectedItem() {
+        let n = makeItem(text: "n"), m = makeItem(text: "m"), o = makeItem(text: "o")
+        let sizes = [n.id: Int64(400), m.id: Int64(400), o.id: Int64(400)]   // 1200 > 1000, protected is only 400
+        let evict = AudioStore.enforceAudioCap([n, m, o], capBytes: 1000,
+                                               sizeOf: { sizes[$0.id] ?? 0 }, protected: [n.id])
+        XCTAssertEqual(evict, [o.id], "dropping the oldest is enough to fit — do that, and stop")
+    }
+
     // MARK: helpers
 
     private func stat(_ name: String, _ size: Int64, _ mtime: TimeInterval) -> WatchedFileStat {

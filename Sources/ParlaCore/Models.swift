@@ -591,6 +591,14 @@ public enum AudioStore {
                                 protected: Set<UUID>) -> [UUID] {
         var total = history.reduce(Int64(0)) { $0 + sizeOf($1) }
         guard total > capBytes else { return [] }
+        // If the protected entries ALONE bust the cap, no amount of eviction reaches it — and the loop below
+        // would then walk off the end and strip every other note. One 1-hour import (source copy + rendered
+        // .m4a) can pass the 500 MB default on its own, and `transcribe` has already selected it, so this is a
+        // real user path, not a corner case. Protection is transient (it follows the displayed entry), so the
+        // right move is to wait: the next pass, with that entry no longer selected, restores the cap normally.
+        // Evicting here cannot achieve compliance and would permanently destroy the whole back catalogue's audio.
+        let protectedBytes = history.filter { protected.contains($0.id) }.reduce(Int64(0)) { $0 + sizeOf($1) }
+        guard protectedBytes <= capBytes else { return [] }
         var evict: [UUID] = []
         for item in history.reversed() {                 // from the tail (old) to the head (new)
             if total <= capBytes { break }
