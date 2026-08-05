@@ -144,6 +144,13 @@ extension AppModel {
                 )
                 // SHOW THE RESULT IMMEDIATELY — don't wait for the audio copy/render for the player.
                 history.insert(item, at: 0)
+                // Clear any active search FIRST, same as the deep-link (`ContentView.handleParlaURL`) and the
+                // Related navigation already do. `selectedItem` is scoped to `filteredHistory` and falls back to
+                // its first element, so transcribing while a query is active left the fresh transcript filtered
+                // out and the pane showing an unrelated older note. Worse than invisible: the language nudge
+                // gates on `selection` rather than on what is displayed, so its «switch and re-transcribe»
+                // button rendered above the wrong note and acted on the hidden one.
+                searchQuery = ""
                 selection = item.id
                 HistoryStore.save(history)
                 // A pinned language that doesn't match the audio is the most expensive silent failure in the

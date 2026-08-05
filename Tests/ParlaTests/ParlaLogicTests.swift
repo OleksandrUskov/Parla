@@ -2467,11 +2467,18 @@ final class ParlaLogicTests: XCTestCase {
             let m = AppModel(engine: fake)
             m.postNotification = { _, _ in }; m.soundOnComplete = false; m.history = []
             m.isProUser = { false }
-            m.watchQueue = [URL(fileURLWithPath: "/tmp/parla-watched.m4a")]
-            m.watchQueueCount = 1
+            // TWO files, not one. With a single-element queue this test passed identically with the Pro guard
+            // deleted: removeFirst() and removeAll() both leave it empty and the count at 0, and transcribeCalls
+            // is read before the un-awaited Task at the end of drainQueue can run — so nothing here could tell
+            // the two branches apart. Two files make removeFirst() leave one behind, and `phase` (claimed
+            // SYNCHRONOUSLY by the Pro branch) is the second discriminator.
+            m.watchQueue = [URL(fileURLWithPath: "/tmp/parla-watched-1.m4a"),
+                            URL(fileURLWithPath: "/tmp/parla-watched-2.m4a")]
+            m.watchQueueCount = 2
             m.drainQueue()
-            XCTAssertTrue(m.watchQueue.isEmpty, "a free user's watched files are dropped, not transcribed")
+            XCTAssertTrue(m.watchQueue.isEmpty, "a free user's watched files are ALL dropped, not transcribed")
             XCTAssertEqual(m.watchQueueCount, 0)
+            XCTAssertEqual(m.phase, .idle, "the Pro branch claims the phase synchronously — a free user's never does")
             XCTAssertEqual(fake.transcribeCalls, 0)
         }
     }
@@ -3880,6 +3887,32 @@ final class ParlaLogicTests: XCTestCase {
         AppModel.pruneImportedOrphans(keeping: [], now: Date().addingTimeInterval(694_800))   // 8 days on
 
         XCTAssertFalse(fm.fileExists(atPath: deadDir.path), "past the grace period an unreferenced copy is swept")
+    }
+
+    // MARK: A fresh transcript must be visible even when a search is active
+
+    /// selectedItem is scoped to filteredHistory and falls back to its FIRST element, so transcribing while a
+    /// query is active left the new note filtered out and the pane showing an unrelated older one. The deep-link
+    /// and Related-navigation paths already clear the query first; the insert path did not. It also mattered
+    /// beyond visibility: activeLanguageSuggestion gates on `selection`, not on what is displayed, so the
+    /// nudge's «switch and re-transcribe» rendered above the wrong note and acted on the hidden one.
+    @MainActor func testTranscribingWhileASearchIsActiveStillShowsTheNewNote() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "совершенно другой текст", language: "ru",
+                                                         segments: [], duration: 1)])
+            let m = AppModel(engine: fake, ai: NoopAIService(), embedder: FakeEmbedder())
+            m.postNotification = { _, _ in }; m.soundOnComplete = false
+            m.isProUser = { true }; m.mediaDuration = { _ in 1 }
+            m.history = [self.makeItem(name: "old.m4a", text: "старая заметка про бухгалтерию", lang: "ru")]
+            m.searchQuery = "бухгалтерию"          // the old note matches; the new one will not
+
+            await m.transcribe(urls: [URL(fileURLWithPath: "/tmp/parla-new.m4a")])
+
+            XCTAssertEqual(m.history.count, 2, "precondition: the transcript was saved")
+            XCTAssertEqual(m.selectedItem?.id, m.history.first?.id,
+                           "the pane shows the note that was just transcribed, not an older search hit")
+            XCTAssertEqual(m.searchQuery, "", "the stale query is cleared, as on the deep-link path")
+        }
     }
 
     // MARK: Privacy manifest — it must match the code that actually ships in the iOS bundle
