@@ -90,13 +90,7 @@ public struct EmbeddingModelSpec: Sendable {
     /// "Downloaded" = a COMPLETE-enough snapshot (config + tokenizer files + a weight shard), so an interrupted
     /// download isn't reported ready. Cheap, synchronous — drives availability + the embed gate. Mirrors `MLXModelSpec`.
     public static func isDownloaded() -> Bool {
-        let dir = modelDirectory()
-        let fm = FileManager.default
-        func has(_ name: String) -> Bool { fm.fileExists(atPath: dir.appendingPathComponent(name).path) }
-        guard has("config.json"), has("tokenizer_config.json"),
-              has("tokenizer.json") || has("tokenizer.model") else { return false }
-        let contents = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
-        return contents.contains { $0.hasSuffix(".safetensors") }
+        MLXHubDownloader.isSnapshotComplete(at: modelDirectory())
     }
 
     /// Bytes on disk for the "disk used" line / delete recompute. 0 if absent.

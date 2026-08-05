@@ -47,17 +47,13 @@ public enum MLXModelSpec {
         downloadBase.appendingPathComponent("models/\(repoId)", isDirectory: true)
     }
 
-    /// "Downloaded" = a COMPLETE-enough snapshot: the model config, the tokenizer files `AutoTokenizer` needs, AND
-    /// a weight shard. Stricter than "config + any shard" so an INTERRUPTED download (which lands files one by one)
-    /// isn't reported `.ready` with a green check while generation would fail. Cheap, synchronous — drives availability.
+    /// "Downloaded" = a COMPLETE snapshot, so an INTERRUPTED download (which lands files one by one) is never
+    /// reported `.ready` with a green check while generation would fail. Cheap, synchronous — drives availability.
+    /// Shares its definition with the downloader's local-copy short-circuit ON PURPOSE: if the two could drift,
+    /// the app could believe a model is loadable while the downloader disagrees, or phone home for a model it
+    /// already has. See `MLXHubDownloader.isSnapshotComplete`.
     public static func isDownloaded() -> Bool {
-        let dir = modelDirectory()
-        let fm = FileManager.default
-        func has(_ name: String) -> Bool { fm.fileExists(atPath: dir.appendingPathComponent(name).path) }
-        guard has("config.json"), has("tokenizer_config.json"),
-              has("tokenizer.json") || has("tokenizer.model") else { return false }
-        let contents = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
-        return contents.contains { $0.hasSuffix(".safetensors") }
+        MLXHubDownloader.isSnapshotComplete(at: modelDirectory())
     }
 
     /// Bytes on disk for the model (for the Settings "disk used" line / delete recompute). 0 if absent.
@@ -90,9 +86,43 @@ public struct MLXHubDownloader: Downloader {
         // a ~2.3 GB re-downloadable model went straight into the user's backup (App Store 2.5 on iOS, Time Machine
         // on macOS); only the WhisperKit tree was ever excluded.
         ModelStorage.prepareExcludedFromBackup(downloadBase)
+        let local = downloadBase.appendingPathComponent("models/\(id)", isDirectory: true)
+        // Honour `useLatest` — we used to drop it, and that broke the app's central promise. `container` is nil
+        // after every launch AND after every `unload()`, which `refreshSemanticIndex` calls at the end of EVERY
+        // pass, so the next insight always reloads; `resolve` then calls this unconditionally. HubApi.snapshot
+        // is not a local no-op: online it GETs the repo's file list plus per-file metadata BEFORE returning an
+        // already-complete snapshot, and offline it SHA-256s every LFS shard (~2.3 GB) instead. So a fully
+        // downloaded model phoned home before generating a single token, while the app's own strings say
+        // "Downloaded once, runs fully offline". `useLatest == false` means exactly "the local copy is fine".
+        if !useLatest, Self.isSnapshotComplete(at: local) {
+            let done = Progress(totalUnitCount: 1)
+            done.completedUnitCount = 1
+            progressHandler(done)
+            return local
+        }
         let hub = HubApi(downloadBase: downloadBase)
         return try await hub.snapshot(
             from: id, revision: revision ?? "main", matching: patterns, progressHandler: progressHandler)
+    }
+
+    /// Is the snapshot at `dir` complete enough to load WITHOUT contacting the Hub?
+    /// Config + the tokenizer files `AutoTokenizer` needs + all the weights. When a shard index is present,
+    /// EVERY shard it names must exist: checking for "any .safetensors" would call an interrupted multi-shard
+    /// download complete — which also silently reported `.ready` in the UI before this.
+    public static func isSnapshotComplete(at dir: URL) -> Bool {
+        let fm = FileManager.default
+        func has(_ name: String) -> Bool { fm.fileExists(atPath: dir.appendingPathComponent(name).path) }
+        guard has("config.json"), has("tokenizer_config.json"),
+              has("tokenizer.json") || has("tokenizer.model") else { return false }
+        let indexURL = dir.appendingPathComponent("model.safetensors.index.json")
+        if let data = try? Data(contentsOf: indexURL),
+           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let weightMap = root["weight_map"] as? [String: String] {
+            let shards = Set(weightMap.values)
+            return !shards.isEmpty && shards.allSatisfy { has($0) }
+        }
+        let contents = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
+        return contents.contains { $0.hasSuffix(".safetensors") }
     }
 }
 

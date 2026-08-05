@@ -3882,6 +3882,51 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: deadDir.path), "past the grace period an unreferenced copy is swept")
     }
 
+    // MARK: MLX snapshot completeness — drives BOTH availability and the no-network short-circuit
+
+    private func writeSnapshot(_ dir: URL, files: [String: String]) throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for (name, body) in files { try Data(body.utf8).write(to: dir.appendingPathComponent(name)) }
+    }
+
+    /// A complete snapshot must be recognised WITHOUT the Hub: this is what stops a fully downloaded model
+    /// phoning huggingface.co before every insight, contradicting the app's own "runs fully offline" copy.
+    func testSnapshotIsCompleteWithConfigTokenizerAndWeights() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writeSnapshot(dir, files: ["config.json": "{}", "tokenizer_config.json": "{}",
+                                       "tokenizer.json": "{}", "model.safetensors": "w"])
+        XCTAssertTrue(MLXHubDownloader.isSnapshotComplete(at: dir))
+    }
+
+    /// THE strictness guard: an interrupted MULTI-SHARD download has an index naming shards that never arrived.
+    /// "any .safetensors" called that complete — reporting .ready in the UI, and (once the downloader trusts this)
+    /// skipping the fetch of the missing shards entirely.
+    func testSnapshotWithAMissingShardIsIncomplete() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let index = #"{"weight_map":{"a":"model-00001-of-00002.safetensors","b":"model-00002-of-00002.safetensors"}}"#
+        try writeSnapshot(dir, files: ["config.json": "{}", "tokenizer_config.json": "{}", "tokenizer.json": "{}",
+                                       "model.safetensors.index.json": index,
+                                       "model-00001-of-00002.safetensors": "w"])   // shard 2 never arrived
+        XCTAssertFalse(MLXHubDownloader.isSnapshotComplete(at: dir), "one of two shards is not a usable model")
+
+        try Data("w".utf8).write(to: dir.appendingPathComponent("model-00002-of-00002.safetensors"))
+        XCTAssertTrue(MLXHubDownloader.isSnapshotComplete(at: dir), "…and it is complete once every shard lands")
+    }
+
+    func testSnapshotMissingTokenizerOrWeightsIsIncomplete() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let noTok = base.appendingPathComponent("a")
+        try writeSnapshot(noTok, files: ["config.json": "{}", "model.safetensors": "w"])
+        XCTAssertFalse(MLXHubDownloader.isSnapshotComplete(at: noTok))
+        let noWeights = base.appendingPathComponent("b")
+        try writeSnapshot(noWeights, files: ["config.json": "{}", "tokenizer_config.json": "{}", "tokenizer.json": "{}"])
+        XCTAssertFalse(MLXHubDownloader.isSnapshotComplete(at: noWeights))
+        XCTAssertFalse(MLXHubDownloader.isSnapshotComplete(at: base.appendingPathComponent("missing")))
+    }
+
     // MARK: backfillInsights TOCTOU — an edit landing mid-embed must not be overwritten
 
     /// backfillInsights re-found the note by id after its multi-second per-sentence embed, but never checked
