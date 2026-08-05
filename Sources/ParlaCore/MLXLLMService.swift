@@ -197,7 +197,14 @@ public actor MLXEngine {
     /// and TOCTOU-safe: if `unload()` (a delete) lands during the load, the result is discarded — never cached stale.
     public func loadContainer(progressHandler: @Sendable @escaping (Progress) -> Void = { _ in }) async throws -> ModelContainer {
         if let container { return container }
-        if let loadTask { return try await loadTask.value }   // join the in-flight load
+        if let loadTask {
+            // Joiners must re-check the generation too: a `deleteMLXModel` landing during the join would
+            // otherwise hand back a container for weights that are being removed from disk.
+            let gen = generation
+            let c = try await loadTask.value
+            guard gen == generation else { throw AIError.unavailable }
+            return c
+        }
         capGPUCacheOnce()
         let gen = generation
         let task = Task {
@@ -208,7 +215,9 @@ public actor MLXEngine {
                 progressHandler: progressHandler)
         }
         loadTask = task
-        defer { loadTask = nil }
+        // Clear only what we still OWN: an unconditional clear let a finishing load blow away a newer load's
+        // slot, so the next caller started a SECOND ~2.3 GB load instead of joining.
+        defer { if loadTask == task { loadTask = nil } }
         let c = try await task.value
         guard gen == generation else { throw AIError.unavailable }   // unloaded/deleted mid-load → don't cache
         container = c
@@ -234,9 +243,19 @@ public actor MLXEngine {
                 matching: MLXModelSpec.downloadPatterns, useLatest: false, progressHandler: progressHandler)
     }
 
-    /// Drop the in-memory model (after a delete, or to free RAM after an enrich batch) + invalidate any in-flight
-    /// load so it won't cache a now-stale container. A later `loadContainer` re-reads from disk.
-    public func unload() {
+    /// Drop the in-memory model + invalidate any in-flight load so it won't cache a now-stale container.
+    /// A later `loadContainer` re-reads from disk.
+    ///
+    /// `force` marks the DELETE case, where the weights are going away and an in-flight load genuinely must be
+    /// invalidated. The default (false) is the tail-of-batch memory release, and it deliberately leaves a load in
+    /// flight alone: that load belongs to a foreground action the user just triggered, and cancelling it made a
+    /// *successful* generative pass throw `AIError.unavailable`, which `enrichFailedIDs` then remembers — the
+    /// note lost its generative insights for the rest of the session. This fires from unrelated flows, because
+    /// the tail `unload()` runs unconditionally, including on the FoundationModels/English and extractive paths
+    /// that never loaded MLX at all. Skipping is safe: `loadContainer` returns early when `container` is set, so
+    /// a load in flight means `container` is already nil and there is nothing here to free.
+    public func unload(force: Bool = false) {
+        if !force, loadTask != nil { return }
         container = nil
         loadTask?.cancel()
         loadTask = nil

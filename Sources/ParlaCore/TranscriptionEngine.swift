@@ -127,16 +127,27 @@ public actor TranscriptionEngine {
     public func ensureLoaded(model: String, progress: @Sendable @escaping (ModelLoad) -> Void) async throws {
         if loadedModel == model, whisperKit != nil { return }
         // Coalesce concurrent loads of the SAME model (e.g. the streaming pre-warm racing the final
-        // finishDictation decode): join the in-flight load instead of nil-ing `whisperKit` and starting a
-        // second download/load. The actor serializes everything up to the first await, so the check + set
-        // is atomic.
-        if let inFlight = loadInFlight, inFlight.model == model {
-            try await inFlight.task.value
-            return
+        // finishDictation decode) — and NEVER let two loads overlap, even for different models. Each is 626 MB–1.5 GB of CoreML weights;
+        // two at once is the sum, which on iOS is a jetsam kill mid-dictation. It is reachable: the launch
+        // pre-warm (`prewarmDictationModel`) is fire-and-forget and holds no lane, so `isBusy` stays false for
+        // its whole duration, while the model-manager row has no `isBusy` gate at all — the user can switch tier
+        // and drop a file straight into that window. Worse than memory: `performLoad` nils `whisperKit` and
+        // writes `loadedModel` around its own await, so whichever loser resumed last decided which model
+        // `transcribe` actually used, while the saved record was stamped with the model the caller ASKED for.
+        while let inFlight = loadInFlight {
+            if inFlight.model == model {
+                try await inFlight.task.value   // same model → join it, don't start a second download/load
+                return
+            }
+            _ = try? await inFlight.task.value  // different model → wait it out (its failure is not ours to throw)
+            if loadedModel == model, whisperKit != nil { return }   // it may have become what we wanted meanwhile
         }
         let task = Task { try await self.performLoad(model: model, progress: progress) }
         loadInFlight = (model, task)
-        defer { loadInFlight = nil }
+        // Clear only what we still OWN. Unconditional clearing let a finishing load blow away a newer load's
+        // slot, which re-opened the overlap above and also defeated `unload()`'s `guard loadInFlight == nil`,
+        // so a memory-pressure release could tear down weights under an in-flight load.
+        defer { if loadInFlight?.task == task { loadInFlight = nil } }
         try await task.value
     }
 
@@ -199,9 +210,19 @@ public actor TranscriptionEngine {
     public func unload() async {
         guard loadInFlight == nil else { return }
         guard let wk = whisperKit else { return }
-        await wk.unloadModels()
+        // STOP ADVERTISING IT FIRST. `wk.unloadModels()` is a nonisolated async method on a plain class, so
+        // awaiting it RELEASES this actor and tears the models down on the cooperative pool. Clearing our state
+        // afterwards meant that for the whole teardown `ensureLoaded` (`loadedModel == model, whisperKit != nil`)
+        // and `transcribe` both still reported the model as loaded — and handed the very instance being
+        // destroyed to `kit.transcribe`, which reloads it internally when `modelState != .loaded`. WhisperKit's
+        // `loadModels()` and `unloadModels()` then ran in parallel over the same unguarded `MLModel?` fields;
+        // our actor had been the only serialization and the await gave it up. Outcomes ranged from an invisible
+        // full reload stuck on "Preparing…", through `modelsUnavailable` on a file the user had just dropped, to
+        // an over-release. The caller is `releaseIdleMemory()` on a memory-pressure event, i.e. exactly when a
+        // second resident copy of the weights is least affordable.
         whisperKit = nil
         loadedModel = nil
+        await wk.unloadModels()
     }
 
     public func transcribe(wavPath: String, language: String?, model: String, translate: Bool = false) async throws -> EngineResult {

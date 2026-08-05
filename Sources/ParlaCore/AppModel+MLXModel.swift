@@ -49,7 +49,9 @@ extension AppModel {
     public func deleteMLXModel() async {
         guard !isBusy, downloadingModel == nil, !mlxDownloading else { return }
         try? FileManager.default.removeItem(at: MLXModelSpec.modelDirectory())
-        await MLXEngine.shared.unload()
+        // force: the weights are GONE, so an in-flight load must be invalidated even though that will make its
+        // caller throw — unlike the tail-of-batch release, which must not sabotage a foreground load.
+        await MLXEngine.shared.unload(force: true)
         refreshMLXModelState()
     }
 }
