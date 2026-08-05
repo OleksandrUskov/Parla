@@ -3882,6 +3882,47 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: deadDir.path), "past the grace period an unreferenced copy is swept")
     }
 
+    // MARK: Privacy manifest — it must match the code that actually ships in the iOS bundle
+
+    /// The manifest is a CLAIM about the binary, and Apple rejects the upload (ITMS-91053) when the claim is
+    /// short. It said "no FileTimestamp" while ShareInbox already read .contentModificationDateKey, and the
+    /// comment asserting the absence was wrong when it was written. Prose cannot be trusted to stay true, so
+    /// this derives the answer from the sources the iOS target actually compiles.
+    ///
+    /// Scope note: the iOS app target is apps/ios/Sources + apps/ios/Shared + ParlaCore. Sources/Parla is the
+    /// macOS app and is NOT in this bundle, so its own timestamp use does not belong here.
+    func testPrivacyManifestDeclaresEveryRequiredReasonAPIThatShipsInTheIOSBundle() throws {
+        let manifest = try String(contentsOf: repoRoot.appendingPathComponent("apps/ios/PrivacyInfo.xcprivacy"),
+                                  encoding: .utf8)
+        let fm = FileManager.default
+        var code = ""
+        for dir in ["apps/ios/Sources", "apps/ios/Shared", "Sources/ParlaCore"] {
+            let root = repoRoot.appendingPathComponent(dir)
+            guard let e = fm.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
+            for case let url as URL in e where url.pathExtension == "swift" {
+                code += (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            }
+        }
+        XCTAssertFalse(code.isEmpty, "precondition: the iOS bundle's sources were found")
+
+        // (marker in code, Apple's manifest category)
+        let required: [(String, String)] = [
+            ("contentModificationDateKey", "NSPrivacyAccessedAPICategoryFileTimestamp"),
+            ("creationDateKey", "NSPrivacyAccessedAPICategoryFileTimestamp"),
+            ("volumeAvailableCapacity", "NSPrivacyAccessedAPICategoryDiskSpace"),
+            ("systemUptime", "NSPrivacyAccessedAPICategorySystemBootTime"),
+            ("activeInputModes", "NSPrivacyAccessedAPICategoryActiveKeyboards"),
+        ]
+        for (marker, category) in required where code.contains(marker) {
+            XCTAssertTrue(manifest.contains(category),
+                          "\(marker) ships in the iOS bundle but the manifest does not declare \(category)")
+        }
+        // UserDefaults is used unconditionally and must always be declared.
+        XCTAssertTrue(manifest.contains("NSPrivacyAccessedAPICategoryUserDefaults"))
+        // And the promises the product is built on.
+        XCTAssertTrue(manifest.contains("<key>NSPrivacyTracking</key>\n    <false/>"), "no tracking, ever")
+    }
+
     // MARK: Free-tier batch gate — the queue-depth half
 
     /// batchIsGated only ever inspected the size of ONE drop, and nothing inspected queue depth. A free user

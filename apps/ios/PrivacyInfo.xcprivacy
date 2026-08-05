@@ -8,17 +8,29 @@
     • NSPrivacyTracking            = false   (no tracking, no ATT)
     • NSPrivacyTrackingDomains     = []      (no domains contacted for tracking)
     • NSPrivacyCollectedDataTypes  = []      (we collect NOTHING — no analytics, no accounts)
-    • NSPrivacyAccessedAPITypes    = UserDefaults only
+    • NSPrivacyAccessedAPITypes    = UserDefaults + FileTimestamp
 
   UserDefaults (CA92.1): the app stores its OWN preferences (selected model, UI language, toggles,
   dictation options) in UserDefaults.standard — app-private, never read from other apps or the system,
   never an App Group suite. That is exactly reason CA92.1.
 
-  Required-reason APIs deliberately NOT declared (audited against the code that ships in this bundle —
-  ParlaCore + apps/ios): no FileTimestamp (only .fileSizeKey / directory enumeration for model+cache
-  size — never a modification/creation date), no DiskSpace, no SystemBootTime, no ActiveKeyboards.
-  The bundled xcframeworks (opus, ogg) and WhisperKit's deps (swift-transformers, swift-crypto) carry
-  their OWN PrivacyInfo.xcprivacy inside their frameworks.
+  FileTimestamp (C617.1 — timestamps of files inside the app's own container / its App Group
+  container). Two call sites ship in this bundle, both on Parla's own files and never on user-chosen
+  documents:
+    • apps/ios/Sources/ShareInbox.swift — sweepStaleParts reads .contentModificationDateKey on
+      `.part` files in the App Group inbox to clear leftovers from a share the system killed
+      mid-copy, without touching one that could still be in flight.
+    • ParlaCore/AppModel+History.swift — pruneImportedOrphans reads it on imports/<uuid>/ inside
+      Application Support to give a copy that has not been transcribed yet a grace period, so a
+      paywalled or retryable import is not deleted out from under the user on the next launch.
+  This was previously declared as ABSENT, and the comment asserting that was wrong at the time it was
+  written (ShareInbox already read the key). Expect ITMS-91053 on upload until this ships.
+
+  Still deliberately NOT declared, audited against the code in this bundle (ParlaCore + apps/ios/
+  Sources + apps/ios/Shared; the macOS-only Sources/Parla is not part of this target): no DiskSpace,
+  no SystemBootTime, no ActiveKeyboards. The bundled xcframeworks (opus, ogg) and WhisperKit's deps
+  (swift-transformers, swift-crypto) carry their OWN PrivacyInfo.xcprivacy inside their frameworks;
+  the two app extensions carry theirs under Extensions/{Share,Widgets}.
 -->
 <plist version="1.0">
 <dict>
@@ -36,6 +48,14 @@
             <key>NSPrivacyAccessedAPITypeReasons</key>
             <array>
                 <string>CA92.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>C617.1</string>
             </array>
         </dict>
     </array>
