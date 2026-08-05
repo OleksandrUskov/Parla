@@ -15,7 +15,13 @@ struct TranscriptDetailView: View {
     let player: PlaybackController
     @State private var showDigest = false
     @State private var shareItem: ShareItem?
-    @State private var editing = false          // edit-in-place sheet
+    /// The edit-in-place sheet, bound to the note the edit STARTED on — not to whatever is selected when
+    /// Done is tapped. In the iPad split shell this view keeps its identity across a selection change
+    /// (`HistorySplitView` renders it inside one `else if let item = model.selectedItem` branch), so a widget
+    /// tap / `parla://note?id=…` / Handoff arriving mid-edit used to leave the sheet up holding note A's draft
+    /// while `item` had already become note B — and Done then overwrote B's transcript with A's text.
+    /// Carrying the id in the sheet's identity makes writing into the wrong record unrepresentable.
+    @State private var editTarget: EditTarget?
     @State private var ttsPlayer = PlaybackController()   // read-aloud — separate from the source player
     @State private var synthesizingTTS = false            // brief spinner while the voice synthesizes the transcript
     @State private var ttsTask: Task<Void, Never>?        // in-flight synth job — cancel on nav-away so it can't reactivate the session
@@ -55,8 +61,10 @@ struct TranscriptDetailView: View {
             ToolbarItem(placement: .topBarTrailing) { readAloudButton }
         }
         .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
-        .sheet(isPresented: $editing) {
-            EditTranscriptSheet(initialTitle: item.title ?? "", initialText: item.text, onSave: applyEdit)
+        .sheet(item: $editTarget) { target in
+            EditTranscriptSheet(initialTitle: target.title, initialText: target.text) { title, text in
+                applyEdit(title: title, text: text, to: target.id)
+            }
         }
         .task(id: item.id) {
             model.selection = item.id   // mark this the open note (audio-cache protection + Related bind to it)
@@ -131,7 +139,9 @@ struct TranscriptDetailView: View {
                 Label(L("common.copy"), systemImage: "doc.on.doc")
             }
             if !model.isBusy {
-                Button { editing = true } label: {
+                Button {
+                    editTarget = EditTarget(id: item.id, title: item.title ?? "", text: item.text)
+                } label: {
                     Label(L("transcript.edit.help"), systemImage: "pencil")
                 }
             }
@@ -183,10 +193,12 @@ struct TranscriptDetailView: View {
     /// Apply an edit-sheet result. Both `setTitle` and `saveEdit` invalidate the doc-vector/lemmas SYNCHRONOUSLY;
     /// the async best-effort re-embed is kicked HERE in the UI layer (never from a store mutation — a Task spawned
     /// inside the store could outlive a test; Core invariant, see the macOS `commitEdit`/`commitTitle`).
-    private func applyEdit(title: String, text: String) {
+    /// `id` is the note the edit was OPENED on, carried by `EditTarget` — deliberately not `item.id`, which
+    /// can have moved to another note while the modal was up (widget tap, `parla://note?id=…`, Handoff).
+    private func applyEdit(title: String, text: String, to id: UUID) {
         var changed = false
-        if model.setTitle(title, for: item.id) { changed = true }
-        if model.saveEdit(text, for: item.id) { changed = true }
+        if model.setTitle(title, for: id) { changed = true }
+        if model.saveEdit(text, for: id) { changed = true }
         if changed { Task { await model.refreshSemanticIndex() } }
     }
 
@@ -271,6 +283,15 @@ struct TranscriptDetailView: View {
         guard (try? data.write(to: url)) != nil else { return }   // bad filename / write failure → no-op, never crash
         shareItem = ShareItem(url: url)
     }
+}
+
+/// Which note an open edit sheet belongs to, plus the text it was seeded with. Presenting the sheet via
+/// `.sheet(item:)` on this — rather than a bare `isPresented` flag — is what makes the save target explicit:
+/// the id travels WITH the sheet, so a selection change underneath cannot redirect the write.
+struct EditTarget: Identifiable {
+    let id: UUID
+    let title: String
+    let text: String
 }
 
 /// Edit-in-place sheet. A modal `Form` — the iOS idiom the macOS inline editor maps to — editing the
