@@ -32,7 +32,10 @@ import FoundationModels
 /// Which on-device backend produced an insight. Drives provenance tagging when a language can be served by more
 /// than one backend — EN is FoundationModels normally, but falls back to MLX/Qwen when Apple Intelligence is off
 /// (e.g. the Mac's system language is Russian). nil = unknown → the caller uses the language-based default tag.
-public enum AIBackend: Sendable { case foundation, mlx }
+/// Which generative backend produced an insight. `CaseIterable` is load-bearing, not decoration: the provenance
+/// helpers in `AppModel+Semantic` enumerate this, so a new backend is recognised everywhere the day it is added
+/// instead of being silently mis-tagged as someone else's output.
+public enum AIBackend: Sendable, CaseIterable { case foundation, mlx }
 
 /// The derived insights for one transcript. Transient transport (not persisted directly — the fields
 /// are folded onto `TranscriptItem`); `Equatable` for cheap diffing in tests/UI.

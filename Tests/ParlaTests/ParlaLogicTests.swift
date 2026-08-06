@@ -3999,6 +3999,46 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(m.cancelling)
     }
 
+    // MARK: Provenance — a new backend must never be mis-tagged as another's output
+
+    /// The trap this closes: `tag(for:)` was a ternary, so a THIRD AIBackend case compiled perfectly and stamped
+    /// its output `foundation-v2`. That is not cosmetic — `backfillInsights` treats an unrecognised tag as
+    /// un-processed and OVERWRITES the note's title, summary and keywords with extractive output. Everything is
+    /// now derived from AIBackend.allCases through exhaustive switches, so the day a backend is added it is
+    /// protected; this test guards the derivation itself against being hardcoded back.
+    @MainActor func testEveryBackendGetsItsOwnRecognisedProvenanceTag() {
+        var seenPrefixes = Set<String>()
+        for backend in AIBackend.allCases {
+            let prefix = AppModel.tagPrefix(for: backend)
+            let tag = AppModel.tag(for: backend)
+            XCTAssertFalse(prefix.isEmpty, "\(backend) needs its own family prefix")
+            XCTAssertTrue(seenPrefixes.insert(prefix).inserted, "\(backend) shares a prefix with another backend")
+            XCTAssertTrue(tag.hasPrefix(prefix))
+            XCTAssertTrue(AppModel.isGenerativeTag(tag),
+                          "\(backend)'s output must be recognised as generative, or backfill overwrites it")
+            XCTAssertTrue(AppModel.isAtCurrentGenerativeVersion(tag),
+                          "\(backend)'s current tag must count as current, or enrich re-runs it forever")
+        }
+        XCTAssertEqual(seenPrefixes.count, AIBackend.allCases.count)
+    }
+
+    /// A tag from an OLDER version of a backend stays recognised as generative (so extractive never downgrades a
+    /// note that enrich is about to regenerate) while NOT counting as current (so enrich does regenerate it).
+    @MainActor func testAnOlderVersionOfABackendTagIsProtectedButStillReprocessed() {
+        for backend in AIBackend.allCases {
+            let old = AppModel.tagPrefix(for: backend) + "v0"
+            XCTAssertTrue(AppModel.isGenerativeTag(old), "extractive must not clobber \(backend) v0")
+            XCTAssertFalse(AppModel.isAtCurrentGenerativeVersion(old), "\(backend) v0 must still be re-enriched")
+        }
+    }
+
+    @MainActor func testExtractiveAndUnknownTagsAreNotGenerative() {
+        XCTAssertFalse(AppModel.isGenerativeTag(AppModel.extractiveModelTag))
+        XCTAssertFalse(AppModel.isGenerativeTag(nil))
+        XCTAssertFalse(AppModel.isGenerativeTag("something-else-v1"))
+        XCTAssertFalse(AppModel.isAtCurrentGenerativeVersion(nil))
+    }
+
     // MARK: The entitlement race — a gate must decide on fact, not on the fail-open guess
 
     /// THE abuse this closes. `grantsUnlimited` reports Pro until StoreKit's first scan lands, so a free user who
