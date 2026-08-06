@@ -1,7 +1,9 @@
 import Foundation
 @preconcurrency import WhisperKit   // WhisperKit isn't Sendable-annotated — mirrors TranscriptionEngine.swift
 
-// Headless check: ParlaSmoke <wav> [model]
+// Headless check: ParlaSmoke <wav> [model] [lang]
+// `lang` pins the decode language ("" or omitted = auto-detect, the app's default). Pinning matters for A/B
+// measurement: per-chunk auto-detection adds variance that has nothing to do with what is being compared.
 // If the model is already on disk — load it LOCALLY (modelFolder + download:false), just like the app does.
 let args = CommandLine.arguments
 guard args.count >= 2 else {
@@ -10,6 +12,7 @@ guard args.count >= 2 else {
 }
 let wavPath = args[1]
 let model = args.count >= 3 ? args[2] : "openai_whisper-tiny"
+let pinnedLang: String? = (args.count >= 4 && !args[3].isEmpty) ? args[3] : nil
 
 let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     .appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml/\(model)", isDirectory: true)
@@ -27,7 +30,7 @@ if isLocal {
 
 let results: [TranscriptionResult] = try await kit.transcribe(
     audioPath: wavPath,
-    decodeOptions: DecodingOptions(task: .transcribe, detectLanguage: true)
+    decodeOptions: DecodingOptions(task: .transcribe, language: pinnedLang, detectLanguage: pinnedLang == nil)
 )
 let text = results.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
 print("LANG=\(results.first?.language ?? "?")")
