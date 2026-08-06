@@ -4022,6 +4022,53 @@ final class ParlaLogicTests: XCTestCase {
         }
     }
 
+    /// The queue gate's launch-window half. `enqueueManual` is synchronous and cannot wait, so during the
+    /// window it lets a stacked job through on the fail-open guess. The job is now MARKED at enqueue time and
+    /// re-gated inside transcribe, which does wait — so the drop-one-at-a-time bypass closes there too.
+    @MainActor func testAStackedJobIsRegatedOnceTheRealEntitlementArrives() async {
+        await withTemporaryHistoryStoreAsync {
+            let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+            m.postNotification = { _, _ in }; m.soundOnComplete = false
+            var resolved = false
+            m.isProUser = { !resolved }                    // unresolved → fails OPEN, as at cold launch
+            m.resolveEntitlements = { resolved = true }
+            m.mediaDuration = { _ in 10 }                  // short: the LENGTH gate must not be what stops it
+
+            await m.transcribe(urls: [URL(fileURLWithPath: "/tmp/parla-b.m4a")], queuedBehindAnother: true)
+
+            XCTAssertTrue(m.history.isEmpty, "a job stacked behind another is the Pro batch feature")
+            XCTAssertEqual(m.paywallReason, .featureLocked(.batch))
+        }
+    }
+
+    /// …and a job that was NOT stacked is untouched — free is "one at a time", not "none".
+    @MainActor func testAnUnstackedJobIsNotRegated() async {
+        await withTemporaryHistoryStoreAsync {
+            let fake = FakeEngine(results: [EngineResult(text: "ок", language: "ru", segments: [], duration: 1)])
+            let m = AppModel(engine: fake, ai: NoopAIService(), embedder: FakeEmbedder())
+            m.postNotification = { _, _ in }; m.soundOnComplete = false
+            m.isProUser = { false }; m.mediaDuration = { _ in 10 }
+
+            await m.transcribe(urls: [URL(fileURLWithPath: "/tmp/parla-a.m4a")])
+
+            XCTAssertEqual(m.history.count, 1, "a free user's single file still goes through")
+            XCTAssertNil(m.paywallReason)
+        }
+    }
+
+    /// The enqueue side must RECORD the stacking even when the guess lets it past the synchronous gate.
+    @MainActor func testEnqueueMarksAJobStackedBehindRunningWork() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.isProUser = { true }              // fail-open, as during the launch window
+        m.downloadingModel = "x"            // hold the lane shut so the queue stays observable
+        m.enqueueManual([URL(fileURLWithPath: "/tmp/a.m4a")])
+        m.enqueueManual([URL(fileURLWithPath: "/tmp/b.m4a")])
+
+        XCTAssertEqual(m.transcriptionQueue.count, 2)
+        XCTAssertFalse(m.transcriptionQueue[0].queuedBehindAnother, "the first job stands alone")
+        XCTAssertTrue(m.transcriptionQueue[1].queuedBehindAnother, "the second is stacked — and must be marked")
+    }
+
     /// The other half: a real payer must still never be blocked, whatever the timing.
     @MainActor func testAResolvedPayerIsNotGated() async {
         await withTemporaryHistoryStoreAsync {

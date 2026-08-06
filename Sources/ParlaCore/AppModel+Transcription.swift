@@ -5,6 +5,11 @@ import SwiftUI
 public struct TranscriptionJob: Identifiable {
     public let id = UUID()
     public let urls: [URL]
+    /// Was this job stacked BEHIND work that was already running or waiting? Recorded at enqueue time, when it
+    /// is knowable, and re-checked in `transcribe` once the real entitlement is in hand. `queueIsGated` already
+    /// refuses this synchronously — but it reads the fail-OPEN value during the launch window, so without the
+    /// mark a second job dropped in that window slipped past the batch feature the paywall sells.
+    public var queuedBehindAnother = false
 }
 
 /// Transcription pipeline: drop → (conversion → model load → recognition) → history,
@@ -21,8 +26,11 @@ extension AppModel {
     /// see `queueIsGated`. The input is not destroyed when this fires: the iOS import copies survive the launch
     /// sweep's grace period, so buying Pro and retrying still works.
     public func enqueueManual(_ urls: [URL]) {
+        // Note it BEFORE the gate: `queueIsGated` may let this through on the launch window's fail-open guess,
+        // and `transcribe` — which waits for the real entitlement — needs to know what it is looking at.
+        let stacked = currentTranscriptionTask != nil || !transcriptionQueue.isEmpty
         if queueIsGated() { return }
-        transcriptionQueue.append(TranscriptionJob(urls: urls))
+        transcriptionQueue.append(TranscriptionJob(urls: urls, queuedBehindAnother: stacked))
         pumpQueues()
     }
 
@@ -38,7 +46,7 @@ extension AppModel {
         transcriptionLaneToken += 1
         let token = transcriptionLaneToken
         currentTranscriptionTask = Task {
-            await transcribe(urls: job.urls)
+            await transcribe(urls: job.urls, queuedBehindAnother: job.queuedBehindAnother)
             // Only clear what we still OWN: `phase` is released before this job's tail finishes, so a new job can
             // already hold the lane — clearing unconditionally used to destroy ITS handle and hide its Cancel.
             if transcriptionLaneToken == token {
@@ -101,7 +109,7 @@ extension AppModel {
         soundEnabled && (!isWatcherRun || watchQueueEmpty)
     }
 
-    public func transcribe(urls: [URL], isWatcherRun: Bool = false) async {
+    public func transcribe(urls: [URL], isWatcherRun: Bool = false, queuedBehindAnother: Bool = false) async {
         lastAttemptedURLs = urls   // remember for «Try again»
         // Gate on FACT, not on the launch-window guess. Every gate below reads `isProUser`, which the store apps
         // wire to a value that fails OPEN until StoreKit's first scan lands — right for a payer, but re-runnable
@@ -109,6 +117,15 @@ extension AppModel {
         // almost always; bounded, so an unreachable store can never hang a transcription. The phase was already
         // claimed synchronously by the caller, so this await cannot open a double-start race.
         await resolveEntitlements()
+        // Now that the entitlement is real, re-apply the queue gate to a job that was stacked behind other work.
+        // `enqueueManual` checks this synchronously and cannot wait, so during the launch window it decides on
+        // the fail-open guess; this is the authoritative pass. Nothing was destroyed by letting it queue: on iOS
+        // the import copy survives the launch sweep's grace period, so buying Pro and retrying still works.
+        if queuedBehindAnother, !isProUser() {
+            paywallReason = .featureLocked(.batch)
+            phase = .idle
+            return
+        }
         var files: [URL] = []
         for url in urls {
             if url.hasDirectoryPath { files.append(contentsOf: Self.audioFiles(in: url)) }
