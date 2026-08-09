@@ -404,11 +404,26 @@ extension AppModel {
         { [weak self] load in
             Task { @MainActor in
                 guard let self else { return }
+                // A model-load event must never DOWNGRADE the phase. WhisperKit reports `.loading` at the START
+                // of the load, but this hop is an unstructured Task with no ordering against the work that
+                // follows — so on a long file the chunk loop would already have shown "Transcribing 1/36" and
+                // this stale event would put "Loading the model into memory…" back on screen, where it stayed
+                // until the next chunk. On a 36-chunk file that is minutes of the app looking frozen while it is
+                // in fact working, on exactly the long-audio feature Pro is sold for.
+                guard self.phaseAcceptsModelLoadUpdate else { return }
                 switch load {
                 case .downloading(let p): self.phase = .downloadingModel(p)
                 case .loading: self.phase = .loadingModel
                 }
             }
+        }
+    }
+
+    /// Is the pipeline still in its model-load stage? Once real work is reported, a late load event is stale news.
+    var phaseAcceptsModelLoadUpdate: Bool {
+        switch phase {
+        case .transcribing: return false
+        case .idle, .failed, .preparing, .loadingModel, .downloadingModel: return true
         }
     }
 
