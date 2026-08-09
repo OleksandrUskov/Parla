@@ -4039,6 +4039,91 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertFalse(AppModel.isAtCurrentGenerativeVersion(nil))
     }
 
+    // MARK: Playback rendition — ask the player, do not guess from the extension
+
+    /// Live report from the owner: importing a 71-minute .mp4 re-encoded a playback copy for **39 minutes**,
+    /// concurrently with transcribing the same file, competing for CPU the whole way — while `AVAudioPlayer`
+    /// opens that exact .mp4 directly. `directlyPlayable` simply omitted mp4/mov/m4v, so every video import paid
+    /// for work it did not need, on the long-audio path Pro is sold for.
+    func testAContainerThePlayerCanOpenNeedsNoRendition() throws {
+        // Written as .m4a (what AVAudioFile emits) and then given the .mp4 extension — the SAME container, and
+        // the exact case that used to be re-encoded. Testing this with a .m4a would prove nothing: .m4a is on the
+        // fast-accept list, so the probe would never run.
+        let tmp = FileManager.default.temporaryDirectory
+        let written = tmp.appendingPathComponent("probe-\(UUID().uuidString).m4a")
+        let src = tmp.appendingPathComponent("probe-\(UUID().uuidString).mp4")
+        defer { try? FileManager.default.removeItem(at: written); try? FileManager.default.removeItem(at: src) }
+        let fmt = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+        // Scoped so the AVAudioFile DEALLOCS before we touch the bytes — it finalises the container on deinit,
+        // and this codebase has been caught by that before (the AAC rendition validated a half-written file).
+        do {
+            let file = try AVAudioFile(forWriting: written, settings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100, AVNumberOfChannelsKey: 1,
+            ])
+            let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: 44100)!
+            buf.frameLength = 44100
+            for i in 0..<Int(buf.frameLength) { buf.floatChannelData![0][i] = sin(Float(i) * 0.01) * 0.2 }
+            try file.write(from: buf)
+        }
+        try FileManager.default.moveItem(at: written, to: src)
+
+        XCTAssertFalse(AudioStore.directlyPlayable.contains("mp4"), "precondition: mp4 is NOT fast-accepted")
+        XCTAssertTrue(AudioStore.canPlayDirectly(src),
+                      "the player opens this .mp4 — rendering a playback copy would be pure waste")
+    }
+
+    /// …and something the player cannot open must still be rendered, or the note ships without a player.
+    func testAContainerThePlayerCannotOpenStillNeedsARendition() throws {
+        let junk = FileManager.default.temporaryDirectory.appendingPathComponent("junk-\(UUID().uuidString).bin")
+        defer { try? FileManager.default.removeItem(at: junk) }
+        try Data(repeating: 7, count: 4096).write(to: junk)
+        XCTAssertFalse(AudioStore.canPlayDirectly(junk))
+    }
+
+    /// The fast-accept list must stay a shortcut that only ever says YES — never a veto.
+    func testTheExtensionListIsAFastAcceptNotAGate() {
+        for ext in AudioStore.directlyPlayable {
+            XCTAssertTrue(AudioStore.canPlayDirectly(URL(fileURLWithPath: "/nonexistent/x.\(ext)")),
+                          ".\(ext) is on the fast-accept list, so it must not be probed at all")
+        }
+        // …and a container that is NOT on the list is decided by the probe, not rejected outright.
+        XCTAssertFalse(AudioStore.directlyPlayable.contains("mp4"), "precondition: mp4 was never on the list")
+    }
+
+    // MARK: A stale model-load event must not put "Loading the model…" back over live progress
+
+    /// Live report from the owner: a 1-hour video sat on "Loading the model into memory…" while it was in fact
+    /// transcribing — the chunk split had finished 20 minutes earlier (36 chunks in 31 s, from the temp-dir
+    /// timestamps). `progressHandler` writes `phase` from an unstructured `Task`, which has no ordering against
+    /// the chunk loop, so WhisperKit's start-of-load `.loading` event landed AFTER "Transcribing 1/36" and
+    /// replaced it. On a 36-chunk file that is minutes of an app that looks frozen while it is working.
+    @MainActor func testAStaleModelLoadEventDoesNotOverwriteTranscribingProgress() async {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        m.phase = .transcribing("chunk 1 of 36", batch: BatchProgress(index: 1, total: 36, done: 0))
+
+        m.progressHandler()(.loading)                      // the late event
+        m.progressHandler()(.downloading(0.5))
+
+        // DRAIN the handler's unstructured Task before asserting. Without this the test passes with the guard
+        // deleted — it would be asserting before the overwrite it exists to catch could even happen. (Caught by
+        // revert-checking this very test: it stayed green with the fix removed.)
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertFalse(m.phaseAcceptsModelLoadUpdate, "while transcribing, a model-load event is stale news")
+        guard case .transcribing = m.phase else {
+            return XCTFail("live progress was overwritten by a stale model-load event: \(m.phase)")
+        }
+    }
+
+    /// …but a load event must still be shown when the pipeline really is loading, or the user gets a blank wait.
+    @MainActor func testAModelLoadEventIsShownWhileTheModelIsActuallyLoading() {
+        let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
+        for start in [EnginePhase.idle, .preparing("f.m4a"), .loadingModel] {
+            m.phase = start
+            XCTAssertTrue(m.phaseAcceptsModelLoadUpdate, "\(start) must still accept load progress")
+        }
+    }
+
     // MARK: The entitlement race — a gate must decide on fact, not on the fail-open guess
 
     /// THE abuse this closes. `grantsUnlimited` reports Pro until StoreKit's first scan lands, so a free user who

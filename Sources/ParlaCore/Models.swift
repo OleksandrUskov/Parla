@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation   // AudioStore.canPlayDirectly probes the real player instead of guessing from the extension
 
 /// A single recognized fragment with a timecode.
 public struct Segment: Codable, Hashable, Sendable {
@@ -482,7 +483,27 @@ public enum ProcessedStore {
 /// The folder is derived from `HistoryStore.fileURL` → automatically moves to a temporary path in tests.
 public enum AudioStore {
     /// Formats AVAudioPlayer opens directly — they don't need an .m4a rendition.
+    /// Fast-accept list: containers `AVAudioPlayer` has always opened. It is a SHORTCUT, not the answer —
+    /// `canPlayDirectly` is the answer. Guessing playability from the extension is what made every video import
+    /// pay for a re-encode it did not need.
     public static let directlyPlayable: Set<String> = ["m4a", "mp3", "wav", "aac", "caf", "aiff", "aif"]
+
+    /// Can the app's own player open this file as-is? ASK IT, don't infer from the extension.
+    ///
+    /// This was an extension whitelist that omitted mp4/mov/m4v — so importing a video always rendered a
+    /// playback copy. Measured on a real 71-minute mp4: the re-encode ran **39 minutes**, concurrently with the
+    /// transcription of the same file, competing for CPU the whole way — and `AVAudioPlayer` opens that exact
+    /// file directly. The work was pure waste AND it made the app look frozen on the long-audio path that Pro
+    /// is sold for.
+    ///
+    /// Probing also self-corrects as the platform changes: the codecs CoreAudio reads today are not the ones it
+    /// read when that list was written. `duration > 0` because a constructor that succeeds on a container it
+    /// cannot actually decode would otherwise leave the user with a silent, un-seekable player.
+    public static func canPlayDirectly(_ url: URL) -> Bool {
+        if directlyPlayable.contains(url.pathExtension.lowercased()) { return true }
+        guard let probe = try? AVAudioPlayer(contentsOf: url) else { return false }
+        return probe.duration > 0
+    }
 
     public static var folder: URL {
         HistoryStore.fileURL.deletingLastPathComponent().appendingPathComponent("audio", isDirectory: true)

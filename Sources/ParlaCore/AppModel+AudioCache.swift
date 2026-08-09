@@ -8,7 +8,8 @@ extension AppModel {
     public nonisolated static func keepAudio(from url: URL, id: UUID, using decoder: any AudioDecoding) async -> (file: String?, playable: String?) {
         await Task.detached(priority: .utility) {
             let file = AudioStore.copy(from: url, id: id)
-            let needsRender = !AudioStore.directlyPlayable.contains(url.pathExtension.lowercased())
+            // Ask the player whether it can already open this, instead of guessing from the extension.
+            let needsRender = !AudioStore.canPlayDirectly(url)
             let playable = needsRender ? AudioStore.makePlayable(from: url, id: id, using: decoder) : nil
             return (file, playable)
         }.value
