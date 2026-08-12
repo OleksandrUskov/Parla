@@ -56,7 +56,7 @@ public struct EmbeddingModelSpec: Sendable {
     /// To swap (e.g. RU/UK underperforms): set `active = .bgeM3Fallback`. That's the whole change — history re-embeds.
     public static let active = EmbeddingModelSpec(
         repoId: "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
-        revision: "main",
+        revision: "6c3ae70858513f1a78e9cdca3cae330d9075cd2a",   // pinned: see MLXModelSpec.revision for why a branch is not acceptable here
         profile: .instruct(task: "Given a search query, retrieve notes relevant to the query"),
         needsXLMPositionIds: false,
         downloadPatterns: ["*.safetensors", "*.json", "*.txt"])
@@ -66,7 +66,7 @@ public struct EmbeddingModelSpec: Sendable {
     /// forward's positionIds branch must be wired + probe-validated when this becomes active; tracked in STATE.)
     public static let bgeM3Fallback = EmbeddingModelSpec(
         repoId: "mlx-community/bge-m3-mlx-fp16",
-        revision: "main",
+        revision: "a37eddded9a6a1273a87fb8b0da0d1cdbd98aeec",   // pinned, same reason
         profile: .plain,
         needsXLMPositionIds: true,
         downloadPatterns: ["*.safetensors", "*.json", "*.txt"])

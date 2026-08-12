@@ -4296,6 +4296,22 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(m.paywallReason, "an idle free user dropping one file is the free tier working as sold")
     }
 
+    // MARK: Model revisions must be PINNED — a branch is not a dependency
+
+    /// `main` meant a new user downloaded whatever the community repo had been re-pushed to that day, i.e.
+    /// silently different weights from the ones this project measured its quality on — and no bug report could
+    /// ever surface it. This guards against a well-meaning "simplify" putting a branch name back.
+    func testCommunityModelRevisionsArePinnedToCommits() {
+        let pinned = [("MLXModelSpec", MLXModelSpec.revision),
+                      ("EmbeddingModelSpec.active", EmbeddingModelSpec.active.revision),
+                      ("EmbeddingModelSpec.bgeM3Fallback", EmbeddingModelSpec.bgeM3Fallback.revision)]
+        for (name, rev) in pinned {
+            XCTAssertEqual(rev.count, 40, "\(name): a commit SHA is 40 chars — '\(rev)' looks like a branch")
+            XCTAssertTrue(rev.allSatisfy { $0.isHexDigit }, "\(name): '\(rev)' is not a hex commit SHA")
+            XCTAssertNotEqual(rev, "main", "\(name) must never track a moving branch")
+        }
+    }
+
     // MARK: MLX snapshot completeness — drives BOTH availability and the no-network short-circuit
 
     private func writeSnapshot(_ dir: URL, files: [String: String]) throws {

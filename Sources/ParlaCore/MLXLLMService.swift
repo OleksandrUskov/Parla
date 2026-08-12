@@ -24,7 +24,16 @@ import MLX           // MLX.GPU.set(cacheLimit:) — bound the Metal buffer cach
 public enum MLXModelSpec {
     /// The non-thinking Instruct-2507 4-bit build (no `<think>` preamble before the JSON). Apache-2.0, public/non-gated.
     public static let repoId = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
-    public static let revision = "main"
+    /// PINNED to a commit, not a branch. `main` meant a new user got whatever `mlx-community` had re-uploaded
+    /// that day — silently different weights from the ones this project measured its quality on, and nothing in a
+    /// bug report would ever reveal it. Re-quantising and re-pushing is normal practice for community model repos
+    /// and unacceptable as a dependency. Bump DELIBERATELY, and re-measure when you do.
+    ///
+    /// Note the asymmetry: `WhisperKit.download(variant:downloadBase:from:token:endpoint:)` takes NO revision
+    /// parameter at all, so the SPEECH model — the one the whole product depends on — cannot be pinned this way.
+    /// What it does take is `endpoint:`, which is the built-in escape hatch to a mirror if that ever becomes
+    /// necessary. Recorded in STATE under the Hugging Face dependency.
+    public static let revision = "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b"
     /// What to fetch: weights + tokenizer/config (skip the rest of the repo).
     public static let downloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.jinja", "tokenizer.model"]
 
