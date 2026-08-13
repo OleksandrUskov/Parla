@@ -3,20 +3,24 @@ import ParlaCore
 
 /// Quick transcription without an open window (feature 03): from the clipboard, replaying the last file.
 /// Remembering the «last source» is also triggered from the main `transcribe`.
+///
+/// Toasts go through the `showToast` SEAM, which `AppModel.mac()` wires to `QuickToast`. This file used to call
+/// the `QuickToast.shared` singleton directly — the only place in the codebase that bypassed the seam — which is
+/// precisely why QuickToast needed its own "am I under test?" guard to avoid spawning a panel mid-suite.
 extension AppModel {
     /// Triggered from a hotkey or the «Recognize from clipboard» button: grab the audio file from the clipboard and run.
     func quickTranscribeFromClipboard() {
         guard !isBusy, downloadingModel == nil else {
-            QuickToast.shared.show(L("toast.busy"))
+            showToast(L("toast.busy"), false)
             return
         }
         let urls = clipboardAudioURLs()
         guard let first = urls.first else {
-            QuickToast.shared.show(L("toast.clipboard.empty"))
+            showToast(L("toast.clipboard.empty"), false)
             return
         }
         quickModeRun = true
-        QuickToast.shared.show(Lf("toast.recognizing", first.lastPathComponent), sticky: true)
+        showToast(Lf("toast.recognizing", first.lastPathComponent), true)
         handleDrop(urls: urls)   // existing entry point; it already guards against the double-launch race
     }
 
@@ -24,11 +28,11 @@ extension AppModel {
     func transcribeLast() {
         guard !isBusy, downloadingModel == nil else { return }
         guard let url = resolveLastSource() else {
-            QuickToast.shared.show(L("toast.last.unavailable"))
+            showToast(L("toast.last.unavailable"), false)
             return
         }
         quickModeRun = true
-        QuickToast.shared.show(Lf("toast.repeating", url.lastPathComponent), sticky: true)
+        showToast(Lf("toast.repeating", url.lastPathComponent), true)
         handleDrop(urls: [url])
     }
 

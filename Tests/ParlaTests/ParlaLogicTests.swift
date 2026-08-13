@@ -4296,6 +4296,57 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertNil(m.paywallReason, "an idle free user dropping one file is the free tier working as sold")
     }
 
+    // MARK: No shipping code may ask whether it is running under test
+
+    /// The shipped binary carried `NSClassFromString("XCTestCase")` in five places. Two of them decided which
+    /// SERVICES production used, so the real path was chosen by a runtime guess about the process rather than by
+    /// the app; the other three were belt-and-braces over seams that already default to inert. All are gone —
+    /// production behaviour is wired by `AppModel.mac()` / `AppModel.iOS()`, and safety comes from the default.
+    /// Comments may still MENTION the old pattern (they explain why it went); code may not use it.
+    func testNoShippingCodeDetectsXCTest() throws {
+        let fm = FileManager.default
+        var offenders: [String] = []
+        for dir in ["Sources", "apps/ios/Sources", "apps/ios/Shared", "apps/ios/Extensions"] {
+            let root = repoRoot.appendingPathComponent(dir)
+            guard let e = fm.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
+            for case let url as URL in e where url.pathExtension == "swift" {
+                guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+                for (i, line) in text.components(separatedBy: .newlines).enumerated() {
+                    let code = line.trimmingCharacters(in: .whitespaces)
+                    guard !code.hasPrefix("//") else { continue }      // a comment explaining the history is fine
+                    if code.contains("XCTestCase") {
+                        offenders.append("\(url.lastPathComponent):\(i + 1)  \(code)")
+                    }
+                }
+            }
+        }
+        XCTAssertTrue(offenders.isEmpty,
+                      "shipping code must not branch on being under test — wire the behaviour in the app factory "
+                      + "and let the Core default stay inert:\n" + offenders.joined(separator: "\n"))
+    }
+
+    // MARK: The Core's defaults must be INERT — production is wired by the app, not guessed at runtime
+
+    /// This used to be enforced by production code asking `NSClassFromString("XCTestCase")` whether it was under
+    /// test — test-detection shipped inside the app binary, and the production path chosen by a runtime guess
+    /// rather than by the app. The default is now inert and the platform factories wire the real services, which
+    /// is this codebase's own stated pattern everywhere else. This test is what stops the guess coming back: if
+    /// someone makes the Core default to a real service, a forgotten injection silently loads an ML model in the
+    /// middle of the suite — which is exactly how this project once got a process-killing MLX abort.
+    @MainActor func testCoreDefaultsAreInertServices() {
+        let m = AppModel(engine: FakeEngine())
+        XCTAssertTrue(m.ai is NoopAIService,
+                      "the Core must default to an inert AI service; the app wires the real one")
+        XCTAssertTrue(m.embedder is NoopEmbedder,
+                      "the Core must default to an inert embedder; the app wires the real one")
+    }
+
+    /// …and the production services must still be reachable by name, or the factories have nothing to wire.
+    @MainActor func testProductionServicesAreAvailableToTheAppFactories() {
+        XCTAssertFalse(AppModel.productionAI() is NoopAIService)
+        XCTAssertFalse(AppModel.productionEmbedder() is NoopEmbedder)
+    }
+
     // MARK: Model revisions must be PINNED — a branch is not a dependency
 
     /// `main` meant a new user downloaded whatever the community repo had been re-pushed to that day, i.e.
@@ -4635,8 +4686,19 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(AppModel.shouldPlayCompletionSound(soundEnabled: true, isWatcherRun: true, watchQueueEmpty: true))
     }
 
-    func testCompletionSoundIsHeadlessUnderTests() {
-        XCTAssertTrue(CompletionSound.isHeadless)   // the sound can never beep during the test suite
+    /// Was `XCTAssertTrue(CompletionSound.isHeadless)` — it pinned the MECHANISM (production asking whether it was
+    /// running under test) rather than the GUARANTEE. The mechanism is gone; the guarantee is stronger and is what
+    /// this now pins: the Core's side-effecting seams are inert until an app wires them, so nothing in the suite
+    /// can beep, spawn a panel, or synthesize a keystroke — including from a call site nobody has written yet.
+    @MainActor func testSideEffectingSeamsAreInertUntilAnAppWiresThem() {
+        let m = AppModel(engine: FakeEngine())
+        m.playCompletionSound(true)      // must be a no-op, not a beep
+        m.playCompletionSound(false)
+        m.showToast("не должно появиться", false)
+        m.showToast("и это тоже", true)
+        m.hideToast()
+        XCTAssertFalse(m.attemptPaste(), "the Core must never synthesize a paste on its own")
+        XCTAssertFalse(m.pasteIsSelfFrontmost(), "…and must not claim to know what is frontmost")
     }
 
     @MainActor func testLastTranscriptText() {

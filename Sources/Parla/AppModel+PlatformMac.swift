@@ -11,7 +11,9 @@ extension AppModel {
     /// The app-facing constructor: a default `AppModel` with macOS platform behavior wired into the seams.
     /// Unit tests keep the inert Core defaults (they never touch NSPasteboard / NSSavePanel / NSApplication).
     @MainActor static func mac() -> AppModel {
-        let m = AppModel()
+        // The real AI + embedder are wired HERE, not guessed by the Core: the Core's defaults are inert
+        // so a unit test can never load a real model by forgetting to inject one.
+        let m = AppModel(ai: AppModel.productionAI(), embedder: AppModel.productionEmbedder())
 
         // Freemium gate + StoreKit only in an official store build (`./build_app.sh --store` / Mac App Store add
         // the `ParlaStoreBuild` Info.plist key). A plain `./build_app.sh` (what someone who clones the public repo

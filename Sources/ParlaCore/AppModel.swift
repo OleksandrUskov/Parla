@@ -289,18 +289,26 @@ public final class AppModel {
         public static let uiLanguage = "uiLanguage"
     }
 
-    /// Default embedder: the real on-device `NLEmbedder` in production, a `NoopEmbedder` under unit tests — so a
-    /// test that doesn't inject a fake never loads the `NLContextualEmbedding` model or downloads its assets, and
-    /// the kicked refresh stays instant (same `XCTestCase` headless gate as `PasteService`/`CompletionSound`).
-    public static func defaultEmbedder() -> any TextEmbedder {
-        NSClassFromString("XCTestCase") != nil ? NoopEmbedder() : NLEmbedder()
-    }
+    /// Default embedder: INERT. The real `NLEmbedder` is wired by the platform factories (`AppModel.mac()` /
+    /// `AppModel.iOS()`), which is this file's established pattern — their own comments already say "unit tests
+    /// keep the inert Core defaults". This used to branch on `NSClassFromString("XCTestCase")` instead, which put
+    /// test-detection logic in the shipped binary and, worse, meant the production path was chosen by a runtime
+    /// guess rather than by the app. Inverting the default is strictly better on both axes: nothing in the
+    /// shipping build asks whether it is under test, and a test still cannot accidentally load the
+    /// `NLContextualEmbedding` model or download its assets, because inert is what it gets unless it asks.
+    public static func defaultEmbedder() -> any TextEmbedder { NoopEmbedder() }
 
-    /// Default AI backend: the real `DefaultAIService` in production, a `NoopAIService` under unit tests — so a
-    /// test that doesn't inject a fake never calls the real on-device FoundationModels session (slow + non-deterministic).
-    public static func defaultAI() -> any LocalLLMService {
-        NSClassFromString("XCTestCase") != nil ? NoopAIService() : DefaultAIService()
-    }
+    /// The REAL services, named so the production choice is explicit and greppable. They live here rather than in
+    /// the app targets because the concrete types do, and their initialisers are deliberately not public — the
+    /// only sanctioned way to get a production service is to ask for one by name.
+    public static func productionAI() -> any LocalLLMService { DefaultAIService() }
+    public static func productionEmbedder() -> any TextEmbedder { NLEmbedder() }
+
+    /// Default AI backend: INERT, for the same reason as `defaultEmbedder` — the real `DefaultAIService` is wired
+    /// by the platform factories. A test that does not inject a fake therefore never reaches a real on-device
+    /// FoundationModels session (slow and non-deterministic), and it gets that guarantee from the DEFAULT rather
+    /// than from production code inspecting its own process for XCTest.
+    public static func defaultAI() -> any LocalLLMService { NoopAIService() }
 
     /// Default TTS backend: the system `AVSpeechSynthesizer` (cheap to construct + inert until called, like
     /// `TranscriptionEngine` — no XCTest gate needed; tests that exercise TTS inject a `NoopTTSService`).

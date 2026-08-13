@@ -12,7 +12,9 @@ extension AppModel {
     /// deliberately keep their inert Core defaults — the iOS UI layer provides ShareLink / `.fileExporter`
     /// equivalents where they make sense. Unit tests that want the pure Core keep using `AppModel()` directly.
     @MainActor static func iOS() -> AppModel {
-        let m = AppModel()
+        // The real AI + embedder are wired HERE, not guessed by the Core: the Core's defaults are inert
+        // so a unit test can never load a real model by forgetting to inject one.
+        let m = AppModel(ai: AppModel.productionAI(), embedder: AppModel.productionEmbedder())
 
         // iOS is distributed only via the App Store, so it's a store build (freemium gate on) — the `ParlaStoreBuild`
         // key is set in Parla-iOS-Info.plist. A dev can remove it for a full build.

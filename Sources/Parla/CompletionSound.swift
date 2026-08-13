@@ -5,12 +5,10 @@ import ParlaCore
 /// folder-watch, menu-bar) feel finished even when the window isn't in focus. Best-effort:
 /// `NSSound(named:)` returns nil if the named sound is unavailable, so `play()` is a safe no-op.
 enum CompletionSound {
-    /// True when XCTest is loaded into the process — so the sound can NEVER fire during unit tests,
-    /// regardless of any call-site forgetting to disable it. Belt-and-suspenders to the per-call
-    /// soundOnComplete gating. (NSClassFromString works under both `swift test` and Xcode, unlike the
-    /// Xcode-only XCTestConfigurationFilePath env var.)
-    static var isHeadless: Bool { NSClassFromString("XCTestCase") != nil }
-
-    static func success() { guard !isHeadless else { return }; NSSound(named: "Glass")?.play() }
-    static func failure() { guard !isHeadless else { return }; NSSound(named: "Basso")?.play() }
+    /// Reached ONLY through `AppModel.playCompletionSound`, a seam whose Core default is inert and which only
+    /// `AppModel.mac()` wires — so a unit test cannot get here at all. This used to carry its own
+    /// `NSClassFromString("XCTestCase")` guard as a second line of defence; that put test-detection in the shipped
+    /// binary to protect against a call path that does not exist.
+    static func success() { NSSound(named: "Glass")?.play() }
+    static func failure() { NSSound(named: "Basso")?.play() }
 }
