@@ -29,6 +29,9 @@ class ParlaTestCase: XCTestCase {
         ProcessedStore.fileURL = dir.appendingPathComponent("processed.json")
         // Never migrate the user's legacy dataset during a test run.
         HistoryStore.legacyBase = dir.appendingPathComponent("no-legacy")
+        // The iOS import container. This one is DELETED FROM — `pruneImportedOrphans` removes every unreferenced
+        // subdirectory — so leaving it pointed at the real container is the "a test wiped user data" shape.
+        AppModel.importsRoot = dir.appendingPathComponent("imports", isDirectory: true)
 
         #if os(macOS)
         // The two model caches. Redirecting them makes `isDownloaded()` deterministically false, which keeps

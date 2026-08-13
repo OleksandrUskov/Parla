@@ -59,6 +59,21 @@ extension AppModel {
         HistoryStore.save(history)
     }
 
+    /// Where iOS import copies live. A settable `var` — like `HistoryStore.fileURL` — because this directory is
+    /// DELETED FROM: `pruneImportedOrphans` removes every unreferenced subdirectory in it. Without a redirect the
+    /// prune tests created their fixtures in the user's REAL container and swept it with `keeping: []`, which is
+    /// safe only for as long as macOS never puts anything there. This project has already had a test clobber real
+    /// user data once; a destructive path with no injectable root is the same shape waiting to happen again.
+    /// `nonisolated(unsafe)`: a test seam, written only in `setUp`.
+    nonisolated(unsafe) public static var importsRoot: URL = defaultImportsRoot()
+
+    /// The production location — kept separate so a test can assert it while `importsRoot` itself is redirected.
+    public nonisolated static func defaultImportsRoot() -> URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return support.appendingPathComponent("Parla/imports", isDirectory: true)
+    }
+
     /// Remove an iOS import-container copy (`Application Support/Parla/imports/<uuid>/<name>`) when its note is
     /// deleted. The iOS import funnel keeps that copy as the note's `sourcePath` for re-transcribe, so without
     /// this it leaks forever (unbounded disk growth on device). A no-op for any source OUTSIDE that dir (macOS
@@ -66,9 +81,7 @@ extension AppModel {
     nonisolated static func pruneImportedSource(_ sourcePath: String?) {
         guard let sourcePath else { return }
         let fm = FileManager.default
-        guard let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                        appropriateFor: nil, create: false) else { return }
-        let importsRoot = support.appendingPathComponent("Parla/imports", isDirectory: true).path + "/"
+        let importsRoot = Self.importsRoot.path + "/"
         let dir = (sourcePath as NSString).deletingLastPathComponent   // the per-import <uuid> dir
         guard (dir + "/").hasPrefix(importsRoot) else { return }        // only Parla-managed imports
         try? fm.removeItem(atPath: dir)
@@ -91,9 +104,7 @@ extension AppModel {
                                                         olderThan age: TimeInterval = 604_800,
                                                         now: Date = Date()) {
         let fm = FileManager.default
-        guard let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                        appropriateFor: nil, create: false) else { return }
-        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        let root = importsRoot
         guard let dirs = try? fm.contentsOfDirectory(at: root,
                                                      includingPropertiesForKeys: [.contentModificationDateKey])
         else { return }

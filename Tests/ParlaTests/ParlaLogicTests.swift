@@ -39,6 +39,9 @@ final class ParlaLogicTests: XCTestCase {
         let storeDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ParlaTests-Store-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
+        // The iOS import container is DELETED FROM by pruneImportedOrphans, so it needs the same treatment as the
+        // stores — the prune tests below used to build their fixtures inside the user's REAL container.
+        AppModel.importsRoot = storeDir.appendingPathComponent("imports", isDirectory: true)
         HistoryStore.fileURL = storeDir.appendingPathComponent("history.json")
         // ProcessedStore is a SEPARATE global path (not derived from HistoryStore.fileURL) — redirect it too,
         // or folder-watch tests would write the user's real processed.json. (EmbeddingStore/AudioStore DO derive
@@ -3798,12 +3801,13 @@ final class ParlaLogicTests: XCTestCase {
 
     // Full-review D6/S4 + D8: pruneImportedSource does a RECURSIVE removeItem, guarded ONLY by a prefix check that it
     // stays within Application Support/Parla/imports/. Pin BOTH branches — a weakened guard would delete a dir OUTSIDE
-    // imports/ (a macOS original's parent, an AV-native drop). Not injectable, so this uses the real app-support
-    // imports root under a unique UUID it creates + removes — it never touches real history/imports content.
+    // imports/ (a macOS original's parent, an AV-native drop). The root IS injectable now — `AppModel.importsRoot`
+    // is redirected to a throwaway dir in setUp, so this exercises a recursive delete without ever pointing it at
+    // the user's real container. (It used to build these fixtures in the real one.)
     func testPruneImportedSourceOnlyDeletesUnderImports() throws {
         let fm = FileManager.default
-        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let importsRoot = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        let importsRoot = AppModel.importsRoot
+        try fm.createDirectory(at: importsRoot, withIntermediateDirectories: true)
 
         // (1) A Parla-managed import dir → the whole <uuid> dir is removed.
         let importDir = importsRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -3832,8 +3836,8 @@ final class ParlaLogicTests: XCTestCase {
     // KEPT (re-transcribe/replay need it), an abandoned failed/cancelled/crashed copy is swept. Recursive delete → pin.
     func testPruneImportedOrphansRemovesOnlyUnreferenced() throws {
         let fm = FileManager.default
-        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        let root = AppModel.importsRoot        // redirected in setUp — never the user's real container
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
 
         let keptDir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let orphanDir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -3861,8 +3865,8 @@ final class ParlaLogicTests: XCTestCase {
     /// the next launch, deleted; buying Pro afterwards could not bring them back.
     func testPruneImportedOrphansKeepsARecentUnreferencedCopyPendingAnUpgradeOrRetry() throws {
         let fm = FileManager.default
-        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        let root = AppModel.importsRoot        // redirected in setUp — never the user's real container
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
         let gatedDir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try fm.createDirectory(at: gatedDir, withIntermediateDirectories: true)
         try Data("x".utf8).write(to: gatedDir.appendingPathComponent("voice.ogg"))
@@ -3877,8 +3881,8 @@ final class ParlaLogicTests: XCTestCase {
     /// …but the grace period must expire, or a crash between copy and save leaks bytes forever.
     func testPruneImportedOrphansStillSweepsOnceTheGracePeriodHasPassed() throws {
         let fm = FileManager.default
-        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        let root = AppModel.importsRoot        // redirected in setUp — never the user's real container
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
         let deadDir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try fm.createDirectory(at: deadDir, withIntermediateDirectories: true)
         try Data("x".utf8).write(to: deadDir.appendingPathComponent("voice.ogg"))
@@ -4294,6 +4298,20 @@ final class ParlaLogicTests: XCTestCase {
         m.isProUser = { false }
         m.enqueueManual([URL(fileURLWithPath: "/tmp/a.m4a")])
         XCTAssertNil(m.paywallReason, "an idle free user dropping one file is the free tier working as sold")
+    }
+
+    // MARK: The destructive import root must never point at the user's container during a test run
+
+    /// `pruneImportedOrphans` recursively removes every unreferenced subdirectory of the imports root, and until
+    /// now that root was hardcoded — so these very tests built their fixtures inside
+    /// `~/Library/Application Support/Parla/imports` and swept it with `keeping: []`. It was survivable only
+    /// because macOS happens to put nothing there; the day it does, or the day these run against a populated
+    /// container, a test deletes a user's files. This project has already lost real data to exactly this shape.
+    func testTheDestructiveImportRootIsRedirectedAwayFromTheUsersContainer() {
+        XCTAssertNotEqual(AppModel.importsRoot, AppModel.defaultImportsRoot(),
+                          "setUp must redirect importsRoot — a destructive sweep may never run on the real container")
+        XCTAssertFalse(AppModel.importsRoot.path.contains("Application Support/Parla/imports"),
+                       "…and the redirect must not merely alias the production path")
     }
 
     // MARK: No shipping code may ask whether it is running under test

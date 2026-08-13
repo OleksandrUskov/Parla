@@ -1,4 +1,5 @@
 import Foundation
+import ParlaCore   // AppModel.importsRoot — one source of truth with the sweep that deletes from it
 
 /// Bridges iOS document-picker URLs into Parla's transcription pipeline.
 ///
@@ -12,9 +13,9 @@ enum ImportCoordinator {
     /// copied is skipped so one bad pick never fails the whole batch. Runs while the security scope is held.
     static func copyIntoContainer(_ picked: [URL]) -> [URL] {
         let fm = FileManager.default
-        guard let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                        appropriateFor: nil, create: true) else { return [] }
-        let root = support.appendingPathComponent("Parla/imports", isDirectory: true)
+        // One source of truth with the sweep that deletes from here (`AppModel.pruneImportedOrphans`), and a seam
+        // the iOS tests can redirect so they never write into the real container.
+        let root = AppModel.importsRoot
         var out: [URL] = []
         for src in picked {
             let scoped = src.startAccessingSecurityScopedResource()
