@@ -2353,6 +2353,34 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(ProGate.isProExportFormat(.json))
     }
 
+    /// The iOS app resolves its packages through the generated Xcode project, NOT through the root package —
+    /// proven by experiment: seeding a different version into the project's resolved file made xcodebuild check
+    /// that version out. With no file seeded, the whole iOS graph resolves fresh from open-ended ranges on every
+    /// clean machine, so the day WhisperKit tags 0.19 the iOS job silently builds against a different WhisperKit
+    /// than the macOS jobs, from the same commit. `apps/ios/Package.resolved` is that seed (Xcode never writes
+    /// one here, so it is maintained by hand from the root file), and this keeps the pair from drifting apart
+    /// silently — a stale seed is worse than none, because it looks pinned.
+    func testTheIOSDependencySeedMatchesTheRootResolve() throws {
+        func pins(_ path: String) throws -> [String: String] {
+            let data = try Data(contentsOf: repoRoot.appendingPathComponent(path))
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let list = json?["pins"] as? [[String: Any]] ?? []
+            return Dictionary(uniqueKeysWithValues: list.compactMap { pin -> (String, String)? in
+                guard let id = pin["identity"] as? String,
+                      let state = pin["state"] as? [String: Any],
+                      let revision = state["revision"] as? String else { return nil }
+                return (id, revision)
+            })
+        }
+        let root = try pins("Package.resolved")
+        let ios  = try pins("apps/ios/Package.resolved")
+        XCTAssertGreaterThan(root.count, 5, "the root resolve looks empty/unreadable")
+        XCTAssertEqual(root, ios,
+                       "apps/ios/Package.resolved has drifted from the root resolve. Bumping a requirement means "
+                       + "refreshing BOTH in the same commit: cd apps/ios && xcodegen generate && cp "
+                       + "../../Package.resolved Package.resolved, then re-resolve to confirm it still applies.")
+    }
+
     // MARK: Monetization — is the gate even switched on? (the store-build flag and its wiring)
 
     /// The `ParlaStoreBuild` decode, including the trap. A plist value of the wrong TYPE used to read as `nil`

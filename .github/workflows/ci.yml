@@ -102,6 +102,18 @@ jobs:
       - name: Generate Xcode project
         working-directory: apps/ios
         run: xcodegen generate
+      # Pin the iOS dependency graph. It is resolved through the generated project, not through the root
+      # package, so without this it resolves fresh from open-ended ranges on every run — and the day WhisperKit
+      # tags 0.19, this job silently builds against a different WhisperKit than the macOS jobs from the same
+      # commit. Xcode never writes this file for a project set up like ours (verified: only DerivedData's
+      # workspace-state.json appears), but it READS it — verified by seeding a different version and watching
+      # xcodebuild check that version out. Hence a hand-maintained seed, copied in after every generate because
+      # the .xcodeproj is a gitignored build artifact.
+      - name: Pin the iOS dependency graph
+        working-directory: apps/ios
+        run: |
+          mkdir -p Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+          cp Package.resolved Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
       # `test`, not `build`. This job used to only COMPILE, so `Parla-iOSTests` — the share-handoff data-loss
       # guards, the App-Group drain, the in-process Opus/Lane-2 decode proofs — ran in CI NOWHERE. Testing needs a
       # concrete simulator (not `generic/platform=iOS Simulator`), so resolve one from the runner image instead of
@@ -121,4 +133,5 @@ jobs:
             -scheme Parla-iOS \
             -destination "id=$DEST" \
             -skipMacroValidation \
+            -onlyUsePackageVersionsFromResolvedFile \
             CODE_SIGNING_ALLOWED=NO

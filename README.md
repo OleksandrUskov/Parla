@@ -229,6 +229,10 @@ In the app, pick a model — it **downloads once** (~600 MB CoreML weights from 
 cd apps/ios
 brew install xcodegen        # once
 xcodegen generate            # generates Parla-iOS.xcodeproj (a build artifact) from project.yml
+# Pin the dependency graph — the generated project resolves its own packages, and without this seed it
+# resolves fresh from open-ended version ranges, so you may not build what CI built.
+mkdir -p Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+cp Package.resolved Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 open Parla-iOS.xcodeproj      # build & run on a real device
 ```
 

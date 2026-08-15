@@ -12,7 +12,10 @@ See the [README](README.md#build--run) for full prerequisites. In short:
 ./build_app.sh && open Parla.app
 
 # iOS (needs Xcode signing + your own bundle IDs — see the README)
-cd apps/ios && brew install xcodegen && xcodegen generate && open Parla-iOS.xcodeproj
+cd apps/ios && brew install xcodegen && xcodegen generate
+mkdir -p Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm   # pin the deps — see the README
+cp Package.resolved Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+open Parla-iOS.xcodeproj
 ```
 
 > **Run the macOS app as the built `.app`**, not via `swift run` or an IDE Run button — a windowed

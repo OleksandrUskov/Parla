@@ -5,8 +5,22 @@
 #
 # The generated `Parla-iOS.xcodeproj` is a BUILD ARTIFACT (gitignored) — regenerate anytime with:
 #     cd apps/ios && xcodegen generate
+#     mkdir -p Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+#     cp Package.resolved Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 # `project.yml` (this file) is the checked-in source of truth for the project structure. Nothing here is
 # "throwaway": the Swift sources under `Sources/` + the linked `ParlaCore` are the real, permanent app.
+#
+# ⚠️ That second command is not optional. This project resolves its packages through the GENERATED project,
+# not through the root Swift package, so the root `Package.resolved` does not govern it — verified by seeding a
+# different version here and watching xcodebuild check that version out. Xcode never writes a resolved file for
+# a project shaped like this one, so `apps/ios/Package.resolved` is maintained BY HAND as a copy of the root
+# file, and copied in after every generate (the .xcodeproj is gitignored, so it cannot live inside it).
+# Without the copy, every clean machine and every CI run resolves the whole graph fresh from open-ended ranges:
+# `from: "0.9.0"` on WhisperKit means anything below 1.0, so the day argmax tags 0.19 the iOS build silently
+# uses a different WhisperKit than the macOS jobs, from the same commit.
+# REFRESH DISCIPLINE: bumping any requirement in the root `Package.swift` or in `packages:` below means
+# refreshing BOTH resolved files in the SAME commit. A test (`testTheIOSDependencySeedMatchesTheRootResolve`)
+# fails if they drift, because a stale seed is worse than no seed — it looks pinned.
 name: Parla-iOS
 options:
   bundleIdPrefix: com.parla
