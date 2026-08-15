@@ -26,6 +26,10 @@ extension AppModel {
     }
 
     public func refreshModels() async {
+        // Before anything asks whether a model is on disk. `isDownloaded` reads the CURRENT location, so an
+        // install whose weights are still at the old macOS path would render as "not downloaded" and offer the
+        // user a 626 MB download they already have. Relocating first makes the very first frame truthful.
+        TranscriptionEngine.prepareModelStorage()
         let support = await WhisperKit.recommendedRemoteModels()
         let models = support.supported.sorted()
         guard !models.isEmpty else { return }
@@ -41,12 +45,12 @@ extension AppModel {
         guard !isBusy, downloadingModel == nil, !isDownloaded(name) else { return }
         downloadingModel = name
         downloadProgress = 0
-        #if os(iOS)
-        TranscriptionEngine.prepareModelStorage()   // weights out of iCloud backup before download (App Store 2.5)
-        #endif
+        // Weights out of backups before the download, on BOTH platforms — and on macOS this is also where an
+        // older install's tree gets moved out of ~/Documents (see prepareModelStorage).
+        TranscriptionEngine.prepareModelStorage()
         do {
-            // downloadBase keeps the download in lockstep with modelsRoot()/isDownloaded() — matches HubApi's
-            // default on macOS (no-op), and lands the weights in Application Support on iOS (see prepareModelStorage).
+            // downloadBase keeps the download in lockstep with modelsRoot()/isDownloaded(): Application Support
+            // on both platforms, never the user's Documents (see prepareModelStorage).
             _ = try await WhisperKit.download(variant: name, downloadBase: TranscriptionEngine.downloadBase(),
                                               progressCallback: { @Sendable [weak self] p in
                 // @Sendable: the callback crosses into WhisperKit's nonisolated download. `self`

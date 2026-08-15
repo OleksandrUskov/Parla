@@ -74,33 +74,49 @@ public actor TranscriptionEngine {
 
     public init() {}
 
-    /// The `downloadBase` handed to WhisperKit/HubApi — it appends `models/argmaxinc/whisperkit-coreml`. Matches
-    /// HubApi's own default (`<base>/huggingface`), so passing it explicitly on macOS is a no-op (still ~/Documents).
-    /// On iOS the weights are large + re-downloadable and MUST stay OUT of Documents (user-visible + iCloud-backed
-    /// → App Store 2.5 rejection): use Application Support (also excluded from backup — see `prepareModelStorage`).
+    /// The `downloadBase` handed to WhisperKit/HubApi — it appends `models/argmaxinc/whisperkit-coreml`.
+    ///
+    /// Application Support on BOTH platforms now. macOS used to inherit HubApi's default, `~/Documents/huggingface`,
+    /// which put multiple gigabytes of re-downloadable weights in the user's Documents folder — visible, in the way,
+    /// swept into Time Machine, and uploaded to iCloud outright for anyone with Desktop & Documents syncing on
+    /// (measured on this machine: 2.4 GB). That was already the wrong place before the Mac App Store made it a
+    /// blocker; sandboxed or not, model weights are cache, and cache does not belong in someone's documents.
     public static func downloadBase() -> URL {
-        #if os(iOS)
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        #else
-        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        #endif
         return base.appendingPathComponent("huggingface", isDirectory: true)   // == HubApi's default component
     }
 
-    /// Where WhisperKit stores models: `<downloadBase>/models/argmaxinc/whisperkit-coreml`
-    /// (macOS: ~/Documents/huggingface/… unchanged; iOS: Application Support/huggingface/…).
+    #if os(macOS)
+    /// Where macOS kept them until this change. Kept as a real function, not a comment, because the migration
+    /// below has to look there — and because a future reader deserves to know why an odd path is being probed.
+    public static func legacyDownloadBase() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("huggingface", isDirectory: true)
+    }
+
+    /// The Hugging Face repo OWNERS this app populates: `argmaxinc` (the WhisperKit CoreML models) and `openai`
+    /// (the tokenizer repos WhisperKit pulls alongside them). Only these are relocated — see `migrateLegacyTree`.
+    static let hubRepoOwners = ["argmaxinc", "openai"]
+    #endif
+
+    /// Where WhisperKit stores models: `<downloadBase>/models/argmaxinc/whisperkit-coreml`.
     public static func modelsRoot() -> URL {
         downloadBase().appendingPathComponent("models/argmaxinc/whisperkit-coreml", isDirectory: true)
     }
 
-    #if os(iOS)
-    /// Create the model-download tree and mark it excluded-from-backup, so the large re-downloadable weights never
-    /// inflate the user's iCloud backup (App Store 2.5). Idempotent; only the `huggingface` subtree is touched —
-    /// history/audio under Application Support/Parla stay backed up. Call before any download.
+    /// Put the model tree where it belongs, and keep it out of backups. Idempotent; call before any download.
+    ///
+    /// Only the `huggingface` subtree is touched — history and audio under Application Support/Parla stay backed
+    /// up, because those are the user's own data and are not re-downloadable.
+    ///
+    /// ⚠️ PRODUCTION ONLY: on macOS this MOVES a real directory. A test must exercise
+    /// `ModelStorage.migrateLegacyTree` with temporary paths instead of calling this.
     public static func prepareModelStorage() {
-        ModelStorage.prepareExcludedFromBackup(downloadBase())   // Application Support/huggingface
+        #if os(macOS)
+        ModelStorage.migrateLegacyTree(from: legacyDownloadBase(), to: downloadBase(), owners: hubRepoOwners)
+        #endif
+        ModelStorage.prepareExcludedFromBackup(downloadBase())
     }
-    #endif
     public static func localFolder(_ model: String) -> URL {
         modelsRoot().appendingPathComponent(model, isDirectory: true)
     }
