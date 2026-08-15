@@ -163,6 +163,13 @@ targets:
       # proven NOWHERE automatically: the real fixture is gitignored, so CI silently skipped the decode test.
       - path: ../../Tests/ParlaTests/Fixtures/tone.ogg
         buildPhase: resources
+      # The StoreKit test configuration, as a TEST-BUNDLE RESOURCE rather than a scheme attachment. The money
+      # path (purchase / restore / entitlement scan) cannot be exercised from `swift test`: that runner is an
+      # unhosted xctest process with no bundle identity, and StoreKit answers `notEntitled` there — measured,
+      # not assumed. This target IS hosted inside the real app, which is what makes the flow reachable at all.
+      # As a resource it also survives `xcodegen generate`, unlike the manual scheme attach noted below.
+      - path: Parla.storekit
+        buildPhase: resources
     dependencies:
       - target: Parla-iOS
     settings:
