@@ -311,6 +311,9 @@
 "paywall.feature.chapters.detail" = "Автоматичні розділи та зведення по кожному розділу для довгих записів.";
 "paywall.feature.batch"           = "Пакет і стеження за текою";
 "paywall.feature.batch.detail"    = "Додавай у чергу багато файлів одразу або розшифровуй теку автоматично.";
+/* The same bullet where folder watching does not exist (iOS) — batch is real there, the watched folder is not. */
+"paywall.feature.queue"           = "Пакетна розшифровка";
+"paywall.feature.queue.detail"    = "Додавай у чергу кілька файлів одразу — вони розшифруються один за одним.";
 "paywall.feature.export"          = "Експорт субтитрів";
 "paywall.feature.export.detail"   = "Експорт у SRT, VTT та JSON, а не лише простий текст.";
 "paywall.feature.ai"              = "Генеративний AI на пристрої";

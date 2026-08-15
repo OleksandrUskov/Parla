@@ -40,6 +40,50 @@ public enum ProGate {
         case .srt, .vtt, .json: return true
         }
     }
+
+    // MARK: The paywall's promise
+
+    /// Folder watching is FSEvents-based (`FolderWatcher`), which exists on macOS only — iOS has no equivalent
+    /// and never will through this seam. Kept as ONE named constant instead of an `#if` inside the paywall so
+    /// the bullet list below stays a pure function that a test can evaluate for BOTH platforms from a macOS
+    /// test host. This single line is the only inch of the platform split that tests cannot execute.
+    public static let platformHasFolderWatch: Bool = {
+        #if os(macOS)
+        return true
+        #else
+        return false
+        #endif
+    }()
+
+    /// One paywall bullet, addressed by its localization key stem (`x` for the title, `x.detail` for the body).
+    /// Carrying keys rather than resolved strings is what makes the promise testable: a test can assert both
+    /// WHICH claims a platform makes and that every key behind them actually resolves in all three catalogues.
+    public struct PaywallBullet: Identifiable, Sendable, Equatable {
+        public let key: String       // localization key stem == the stable identity
+        public let icon: String      // SF Symbol
+        public var id: String { key }
+        public var titleKey: String { key }
+        public var detailKey: String { key + ".detail" }
+        public init(key: String, icon: String) { self.key = key; self.icon = icon }
+    }
+
+    /// What Pro promises, in paywall order. `folderWatch` decides the batch bullet ONLY: with folder watching the
+    /// bullet sells "batch + watched folder", without it just the queue — both of which the platform in question
+    /// genuinely delivers (multi-file import and the queue gate are cross-platform; the watcher is not).
+    ///
+    /// This exists because an App Store paywall that sells a feature the app on THAT platform cannot perform is
+    /// an accurate-metadata problem at review, and a broken promise to whoever pays anyway. The iOS purchase
+    /// unlocks iOS: the bundle IDs differ, so there is no Universal Purchase carrying a Mac feature across.
+    public static func paywallBullets(folderWatch: Bool) -> [PaywallBullet] {
+        [
+            .init(key: "paywall.feature.length",                            icon: "infinity"),
+            .init(key: "paywall.feature.chapters",                          icon: "list.bullet.rectangle"),
+            .init(key: folderWatch ? "paywall.feature.batch"
+                                   : "paywall.feature.queue",               icon: "square.stack.3d.up"),
+            .init(key: "paywall.feature.export",                            icon: "captions.bubble"),
+            .init(key: "paywall.feature.ai",                                icon: "sparkles"),
+        ]
+    }
 }
 
 /// A Pro-only capability — carried by `PaywallReason.featureLocked` so the paywall can name what the user tapped.

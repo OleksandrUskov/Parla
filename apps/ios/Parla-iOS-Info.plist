@@ -10,8 +10,15 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<!-- Both names are LITERAL, not $(PRODUCT_NAME). PRODUCT_NAME here is the target name, "Parla-iOS", which
+	     is a build-system detail that was reaching the user: CFBundleDisplayName was absent, so the Home Screen
+	     fell back to CFBundleName and the app installed as "Parla-iOS". Both extensions already hardcode their
+	     CFBundleDisplayName; the app was the one that was missed. PRODUCT_NAME itself must NOT be repurposed for
+	     this — it also derives PRODUCT_MODULE_NAME, and the iOS test target does `@testable import Parla_iOS`. -->
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Parla</string>
+	<key>CFBundleDisplayName</key>
+	<string>Parla</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>

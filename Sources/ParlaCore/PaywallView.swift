@@ -19,15 +19,10 @@ public struct PaywallView: View {
     let reason: PaywallReason?
     public init(reason: PaywallReason? = nil) { self.reason = reason }
 
-    private struct Feature: Identifiable { let id = UUID(); let icon: String; let title: String; let detail: String }
-    private var features: [Feature] {
-        [
-            .init(icon: "infinity",              title: L("paywall.feature.length"),   detail: L("paywall.feature.length.detail")),
-            .init(icon: "list.bullet.rectangle", title: L("paywall.feature.chapters"), detail: L("paywall.feature.chapters.detail")),
-            .init(icon: "square.stack.3d.up",    title: L("paywall.feature.batch"),    detail: L("paywall.feature.batch.detail")),
-            .init(icon: "captions.bubble",       title: L("paywall.feature.export"),   detail: L("paywall.feature.export.detail")),
-            .init(icon: "sparkles",              title: L("paywall.feature.ai"),       detail: L("paywall.feature.ai.detail")),
-        ]
+    /// The promise itself lives in `ProGate` as a pure, per-platform function — the view only renders it.
+    /// It used to be built here unconditionally, which sold macOS folder-watching on the iOS paywall.
+    private var features: [ProGate.PaywallBullet] {
+        ProGate.paywallBullets(folderWatch: ProGate.platformHasFolderWatch)
     }
 
     public var body: some View {
@@ -83,12 +78,12 @@ public struct PaywallView: View {
         }
     }
 
-    private func featureRow(_ f: Feature) -> some View {
+    private func featureRow(_ f: ProGate.PaywallBullet) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: f.icon).font(.title3).foregroundStyle(Brand.accent).frame(width: 30)
             VStack(alignment: .leading, spacing: 2) {
-                Text(f.title).font(.headline)
-                Text(f.detail).font(.subheadline).foregroundStyle(.secondary)
+                Text(L(f.titleKey)).font(.headline)
+                Text(L(f.detailKey)).font(.subheadline).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)

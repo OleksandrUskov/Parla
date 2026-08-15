@@ -311,6 +311,9 @@
 "paywall.feature.chapters.detail" = "Automatic chapters and per-chapter summaries for long audio.";
 "paywall.feature.batch"           = "Batch & folder watch";
 "paywall.feature.batch.detail"    = "Queue many files at once or auto-transcribe a watched folder.";
+/* The same bullet where folder watching does not exist (iOS) — batch is real there, the watched folder is not. */
+"paywall.feature.queue"           = "Batch transcription";
+"paywall.feature.queue.detail"    = "Queue several files at once and let them run one after another.";
 "paywall.feature.export"          = "Subtitle export";
 "paywall.feature.export.detail"   = "Export to SRT, VTT and JSON, not just plain text.";
 "paywall.feature.ai"              = "On-device generative AI";

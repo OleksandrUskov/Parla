@@ -2353,6 +2353,63 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(ProGate.isProExportFormat(.json))
     }
 
+    /// The paywall must not sell a capability the platform it is running on cannot perform. Folder watching is
+    /// FSEvents-based (macOS only), yet the bullet list was built unconditionally, so the iOS paywall promised
+    /// "…or auto-transcribe a watched folder" — in the title too ("Batch & folder watch"). That is an
+    /// accurate-metadata problem at App Review and a broken promise to anyone who paid on iPhone; the iOS
+    /// purchase unlocks iOS only, since the differing bundle IDs rule out a Universal Purchase today.
+    func testPaywallNeverSellsFolderWatchWhereItDoesNotExist() {
+        let withWatch = ProGate.paywallBullets(folderWatch: true)
+        let without   = ProGate.paywallBullets(folderWatch: false)
+        // Same promise SHAPE either way — the platform loses a capability, not a whole bullet.
+        XCTAssertEqual(withWatch.count, without.count)
+        XCTAssertEqual(withWatch.count, 5)
+        XCTAssertTrue(withWatch.contains { $0.key == "paywall.feature.batch" })
+        XCTAssertFalse(without.contains { $0.key == "paywall.feature.batch" },
+                       "the folder-watch bullet must not appear where there is no folder watching")
+        XCTAssertTrue(without.contains { $0.key == "paywall.feature.queue" })
+        // …and the text behind it must not mention a watched folder in ANY language.
+        for lang in ["en", "ru", "uk"] {
+            activateLocalization(lang)
+            let claims = without.flatMap { [L($0.titleKey), L($0.detailKey)] }.joined(separator: " ").lowercased()
+            for banned in ["watched folder", "папку", "папки", "теку", "теки"] {
+                XCTAssertFalse(claims.contains(banned),
+                               "\(lang): the watch-less paywall still mentions a folder — “\(banned)”")
+            }
+        }
+        activateLocalization("en")
+    }
+
+    /// Every key the paywall renders must resolve in all three catalogues. `testLocalizationKeyParity` only
+    /// compares the catalogues to EACH OTHER, so a key that exists in none of them — a typo, or a bullet added
+    /// without its strings — passes parity and ships as a raw `paywall.feature.…` on the buy screen.
+    func testPaywallBulletKeysResolveInEveryCatalogue() {
+        func keys(_ lang: String) -> Set<String> {
+            let url = repoRoot.appendingPathComponent("Localization/\(lang).lproj/Localizable.strings")
+            return Set((NSDictionary(contentsOf: url) as? [String: String] ?? [:]).keys)
+        }
+        let catalogues = ["en": keys("en"), "ru": keys("ru"), "uk": keys("uk")]
+        let everyBullet = ProGate.paywallBullets(folderWatch: true) + ProGate.paywallBullets(folderWatch: false)
+        for (lang, present) in catalogues {
+            XCTAssertGreaterThan(present.count, 100, "\(lang) catalogue looks empty/unreadable")
+            for bullet in everyBullet {
+                XCTAssertTrue(present.contains(bullet.titleKey),  "\(lang) is missing \(bullet.titleKey)")
+                XCTAssertTrue(present.contains(bullet.detailKey), "\(lang) is missing \(bullet.detailKey)")
+            }
+        }
+    }
+
+    /// The one inch of the platform split that tests cannot execute is the `#if` behind this constant — so pin
+    /// it against the host that IS running: these tests are a macOS bundle, and macOS is where folder watching
+    /// lives. If the constant is ever inverted or hardcoded, this goes red here rather than on a user's iPhone.
+    func testFolderWatchCapabilityMatchesTheHostPlatform() {
+        #if os(macOS)
+        XCTAssertTrue(ProGate.platformHasFolderWatch)
+        #else
+        XCTAssertFalse(ProGate.platformHasFolderWatch)
+        #endif
+    }
+
     /// exportIsGated: a free user is blocked (with a paywall) on the Pro formats only; a Pro user never is.
     @MainActor func testExportGateFreeVsPro() {
         let m = AppModel(engine: FakeEngine())

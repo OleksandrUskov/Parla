@@ -311,6 +311,9 @@
 "paywall.feature.chapters.detail" = "Автоматические главы и сводки по каждой главе для длинных записей.";
 "paywall.feature.batch"           = "Пакет и слежение за папкой";
 "paywall.feature.batch.detail"    = "Ставь в очередь много файлов сразу или расшифровывай папку автоматически.";
+/* The same bullet where folder watching does not exist (iOS) — batch is real there, the watched folder is not. */
+"paywall.feature.queue"           = "Пакетная расшифровка";
+"paywall.feature.queue.detail"    = "Ставь в очередь несколько файлов сразу — они расшифруются один за другим.";
 "paywall.feature.export"          = "Экспорт субтитров";
 "paywall.feature.export.detail"   = "Экспорт в SRT, VTT и JSON, а не только простой текст.";
 "paywall.feature.ai"              = "Генеративный AI на устройстве";
