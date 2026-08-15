@@ -44,6 +44,9 @@ if [[ " $* " == *" --store "* ]]; then
   echo "▶ STORE build: freemium gate ON (Pro + paywall active)"
 else
   echo "▶ FULL build: no gate (open-source / dev). Use --store for the gated App-Store variant."
+  echo "  ⚠️  NEVER submit THIS variant to an app store. Without the key there is no paywall, no length"
+  echo "     cap — and no Restore Purchases button anywhere, because the Settings Pro section keys on the"
+  echo "     same flag. Missing restore is an automatic rejection (App Review Guideline 3.1.1)."
 fi
 
 DERIVED="$PWD/.build/xcode"
@@ -168,6 +171,28 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+# STORE-FLAG GUARD — assert what the bundle ACTUALLY carries, not what this script meant to write.
+# Everything above is unquoted-heredoc shell interpolation, and the one key that decides whether the app
+# earns anything is a hand-written string appearing in exactly two places. A typo in the key, a `<string>true
+# </string>` instead of `<true/>`, an `$STORE_PLIST` that stops being interpolated — each produces a plausible
+# .app that gates nothing, and the first symptom of all three is zero revenue. `plutil -extract … xml1` is
+# read back rather than `raw` on purpose: `raw` prints "true" for a STRING too, which is precisely the
+# confusion being guarded against.
+plutil -lint "$APPDIR/Contents/Info.plist" >/dev/null \
+  || { echo "❌ the generated Info.plist is malformed"; exit 1; }
+STORE_XML="$(plutil -extract ParlaStoreBuild xml1 -o - "$APPDIR/Contents/Info.plist" 2>/dev/null || true)"
+if [ -n "$STORE_PLIST" ]; then
+  case "$STORE_XML" in
+    *"<true/>"*) echo "• Store-flag guard: ParlaStoreBuild is a real boolean true → gate + paywall ON" ;;
+    *) echo "❌ --store was requested, but the bundle does not carry ParlaStoreBuild as a boolean true."
+       echo "   Shipping this would be an App Store build with no paywall, no length cap, every Pro"
+       echo "   feature free, and no Restore button. Refusing to ship it."; exit 1 ;;
+  esac
+else
+  [ -z "$STORE_XML" ] || { echo "❌ a plain build must not carry ParlaStoreBuild, but it does"; exit 1; }
+  echo "• Store-flag guard: no ParlaStoreBuild key → the FULL ungated build, as intended"
+fi
 
 # Ad-hoc signature so the app runs locally without the "unidentified developer" gate.
 # It is enough for UNUserNotificationCenter when launching the assembled .app; notifications are NOT delivered

@@ -46,6 +46,49 @@ jobs:
       - name: Build
         run: swift build
 
+  # The PAID variant. `swift build` compiles the sources; it does not assemble a .app, so until this job existed
+  # the entire release path — the metallib embed, the resource bundles, the opus/ogg frameworks, the ad-hoc
+  # signature, the @rpath launch guard and the ParlaStoreBuild key that decides whether the app earns anything —
+  # ran only on one Mac and was verified by one person's eyes. That path has already broken twice (`1607bd3`
+  # dyld, `136d534` a swallowed codesign). The store flag is worse than either, because its failure mode is
+  # silent: a plausible .app that gates nothing, whose first symptom is zero revenue.
+  #
+  # Scope, stated honestly: this job BUILDS and INSPECTS the store bundle. It does not launch a GUI app —
+  # a headless runner has no dependable window server, and a check that cannot fail is worth nothing. What
+  # stands in for launch is the script's own @rpath guard, which is the exact invariant the `1607bd3` dyld
+  # crash violated, plus the independent bundle assertions below. Actually running it stays a local step.
+  macos-store-build:
+    name: macOS 26 · build_app.sh --store (the paid bundle)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble the store build
+        run: ./build_app.sh --store
+      # Re-checked from OUTSIDE the script: a guard that only ever grades its own homework proves less.
+      - name: Verify the assembled bundle
+        run: |
+          APP=Parla.app
+          PLIST="$APP/Contents/Info.plist"
+          plutil -lint "$PLIST"
+          # The store flag must be a real boolean. `raw` would print "true" for a <string> too, so read the type.
+          plutil -extract ParlaStoreBuild xml1 -o - "$PLIST" | grep -q '<true/>' \
+            || { echo "::error::the store build does not carry ParlaStoreBuild as a boolean true"; exit 1; }
+          # The pieces whose absence only bites at runtime.
+          test -f "$APP/Contents/MacOS/mlx.metallib"      || { echo "::error::missing mlx.metallib"; exit 1; }
+          test -d "$APP/Contents/lib/opus.framework"      || { echo "::error::missing opus.framework"; exit 1; }
+          test -d "$APP/Contents/lib/ogg.framework"       || { echo "::error::missing ogg.framework"; exit 1; }
+          codesign --verify --deep --strict "$APP"
+          echo "store bundle verified"
+      # The other half of the contract, and the cheaper mistake to make: a plain build must stay ungated.
+      # Shipping THAT to an app store is an automatic rejection — no Restore button exists in it at all.
+      - name: A plain build must carry no store flag
+        run: |
+          ./build_app.sh
+          if plutil -extract ParlaStoreBuild xml1 -o - Parla.app/Contents/Info.plist >/dev/null 2>&1; then
+            echo "::error::the open-source build is gated — the store flag leaked into a plain build"; exit 1
+          fi
+          echo "plain build is ungated, as intended"
+
   ios:
     name: iOS · xcodebuild test (app + extensions)
     # macos-26, not macos-15: the FoundationModels backend is gated on `canImport`, which is FALSE on the
