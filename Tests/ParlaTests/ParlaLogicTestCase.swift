@@ -12,7 +12,7 @@ import AppKit
 /// place rather than being re-typed per file — this project has already had a test clobber real
 /// history, and adding `ChunkProgressStore` to two hand-kept copies of the same block is how that
 /// happens again.
-class ParlaLogicTestCase: XCTestCase {
+class ParlaLogicTestCase: ParlaTestCase {
 
     // MARK: Localization (test seam)
 
@@ -29,39 +29,17 @@ class ParlaLogicTestCase: XCTestCase {
         Localized.currentCode = lang
     }
 
-    /// By default all tests run in Russian (historical expectations = Russian source text).
+    /// The store isolation itself lives in `ParlaTestCase` — this only adds the language.
+    ///
+    /// It used to be a second, hand-kept copy of that whole block, which is exactly the failure mode the base
+    /// class was written to prevent (its own doc says the redirects live there "once, and pipeline tests inherit
+    /// them rather than remembering to copy a setUp"). The copy drifted into being anyway, and the cost showed
+    /// up the day `ChunkProgressStore` — a path that is written AND DELETED — had to be added to both. Miss one
+    /// and a test run sweeps the user's real data; there is precedent in this repo for exactly that.
     override func setUp() {
         super.setUp()
+        // All tests run in Russian by default (historical expectations = Russian source text).
         activateLocalization("ru")
-        // Point legacy migration at a non-existent dir so tests never copy the real ~/…/Murmur dataset.
-        HistoryStore.legacyBase = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ParlaTests-NoLegacy-\(UUID().uuidString)")
-        // CRITICAL ISOLATION: redirect the store itself to a throwaway dir for EVERY test, process-wide. This is
-        // the bulletproof guard (not the per-test drain): even a detached refresh Task that outlives a per-test
-        // `withTemporaryHistoryStore` scope writes here, never the user's real ~/Library/.../Parla data. Embedding/
-        // audio dirs derive from this path, so they're redirected too.
-        let storeDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ParlaTests-Store-\(UUID().uuidString)")
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
-        // The iOS import container is DELETED FROM by pruneImportedOrphans, so it needs the same treatment as the
-        // stores — the prune tests below used to build their fixtures inside the user's REAL container.
-        AppModel.importsRoot = storeDir.appendingPathComponent("imports", isDirectory: true)
-        HistoryStore.fileURL = storeDir.appendingPathComponent("history.json")
-        // ProcessedStore is a SEPARATE global path (not derived from HistoryStore.fileURL) — redirect it too,
-        // or folder-watch tests would write the user's real processed.json. (EmbeddingStore/AudioStore DO derive
-        // from HistoryStore.fileURL's dir, so they're already covered.)
-        ProcessedStore.fileURL = storeDir.appendingPathComponent("processed.json")
-        // The MLX model cache is ANOTHER global path that reads the real disk — redirect it to a temp dir so
-        // `MLXModelSpec.isDownloaded()` is deterministic (false) in tests. Otherwise, once the user has actually
-        // downloaded the RU/UK model, availability tests would see `.ready` and flake. (Same class as above.)
-        MLXModelSpec.downloadBase = storeDir.appendingPathComponent("mlx")
-        // The embedding-model cache is likewise a separate global path — redirect it so `EmbeddingModelSpec.isDownloaded()`
-        // is deterministic (false) in tests; otherwise the retrieval-embedder routing would pick the real downloaded
-        // model over the injected fake (the probe already downloaded it on the dev machine).
-        EmbeddingModelSpec.downloadBase = storeDir.appendingPathComponent("embed")
-        // The long-audio resume record — written after every chunk and deleted at the end. Same class again:
-        // without a redirect a test run would clobber a real half-finished job the user left mid-transcription.
-        ChunkProgressStore.fileURL = storeDir.appendingPathComponent("chunk-progress.json")
     }
 
 
