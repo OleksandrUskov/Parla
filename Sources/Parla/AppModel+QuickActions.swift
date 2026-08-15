@@ -38,10 +38,12 @@ extension AppModel {
 
 
     private func resolveLastSource() -> URL? {
-        guard let data = UserDefaults.standard.data(forKey: Keys.lastBookmark) else { return nil }
-        var stale = false
-        guard let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale),
-              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let data = UserDefaults.standard.data(forKey: Keys.lastBookmark),
+              let (url, scoped) = Bookmarks.resolve(data) else { return nil }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            if scoped { url.stopAccessingSecurityScopedResource() }   // don't leak a grant we can't use
+            return nil
+        }
         return url
     }
 }

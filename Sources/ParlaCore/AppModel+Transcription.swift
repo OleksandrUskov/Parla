@@ -86,7 +86,7 @@ extension AppModel {
     /// Remember the last successfully transcribed source (for «replay the last file»). Pure bookmark write —
     /// lives in Core because the transcription loop calls it (the macOS quick-actions extension reads it back).
     public func rememberSource(_ url: URL) {
-        if let data = try? url.bookmarkData() {   // plain bookmark (the app is not sandboxed)
+        if let data = Bookmarks.make(for: url) {   // security-scoped where possible — see Bookmarks
             UserDefaults.standard.set(data, forKey: Keys.lastBookmark)
         }
     }

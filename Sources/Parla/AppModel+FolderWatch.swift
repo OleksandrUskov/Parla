@@ -21,9 +21,9 @@ extension AppModel {
         panel.allowsMultipleSelection = false
         panel.prompt = L("folder.choose")
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        // Plain bookmark: the app isn't sandboxed. If we sandbox later (App Store),
-        // switch to .withSecurityScope + start/stopAccessingSecurityScopedResource.
-        if let data = try? url.bookmarkData() {
+        // Security-scoped where the OS allows it, so the grant survives a relaunch under the App Sandbox —
+        // a watched folder that comes back unreadable after a restart is the whole feature, silently gone.
+        if let data = Bookmarks.make(for: url) {
             UserDefaults.standard.set(data, forKey: Keys.watchBookmark)
         }
         watchedFolderURL = url
@@ -32,8 +32,9 @@ extension AppModel {
 
     private func resolveBookmarkedFolder() -> URL? {
         guard let data = UserDefaults.standard.data(forKey: Keys.watchBookmark) else { return nil }
-        var stale = false
-        return try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale)
+        // The access started here is intentionally NOT stopped: the watcher holds this folder for the whole
+        // session, and balancing it at the end of this function would revoke the grant before FSEvents uses it.
+        return Bookmarks.resolve(data)?.url
     }
 
     func applyWatchToggle() { watchEnabled ? startWatching() : stopWatching() }

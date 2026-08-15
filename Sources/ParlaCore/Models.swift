@@ -152,17 +152,15 @@ public enum SourceResolution: Equatable {
 
 extension TranscriptItem {
     /// Tries to find the source file: first by absolute path, then by bookmark.
-    /// Non-sandboxed build: the plain path is the primary mechanism, bookmark is the fallback locator.
+    /// The plain path stays the primary mechanism; the bookmark is the fallback locator, and the one that keeps
+    /// working when a sandboxed build can no longer open a bare path it was not granted.
     public func resolveSource(fileManager fm: FileManager = .default) -> SourceResolution {
         if let p = sourcePath, fm.fileExists(atPath: p) {
             return .found(URL(fileURLWithPath: p), scoped: false)
         }
-        if let data = sourceBookmark {
-            var stale = false
-            if let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale),
-               fm.fileExists(atPath: url.path) {
-                return .found(url, scoped: false)   // plain bookmark (not security-scoped — the app isn't sandboxed)
-            }
+        if let data = sourceBookmark, let (url, scoped) = Bookmarks.resolve(data) {
+            if fm.fileExists(atPath: url.path) { return .found(url, scoped: scoped) }
+            if scoped { url.stopAccessingSecurityScopedResource() }   // resolved but useless — don't leak the grant
         }
         return .missing
     }
@@ -177,10 +175,11 @@ extension TranscriptItem {
     }
 }
 
-/// Best-effort source bookmark when a record is created. Plain (not security-scoped) — good enough
-/// as a fallback locator in a non-sandboxed build. We ignore errors: the primary mechanism is the path.
+/// Best-effort source bookmark when a record is created — security-scoped where possible, so the record can
+/// still be re-transcribed after a relaunch once the app is sandboxed. Errors are ignored: the primary
+/// mechanism is the stored path, and `Bookmarks` already falls back on its own.
 public func makeSourceBookmark(_ url: URL) -> Data? {
-    try? url.bookmarkData()
+    Bookmarks.make(for: url)
 }
 
 public func fmtTime(_ s: Double) -> String {
