@@ -238,6 +238,55 @@ public final class AppModel {
     /// nothing is crippled for someone who clones + builds the public repo.
     public var isStoreBuild = false
 
+    /// The Info.plist key that decides the above. Named here so the Swift side and `build_app.sh`'s generated
+    /// plist can be compared by a test instead of by two hand-kept copies of a string literal.
+    nonisolated public static let storeBuildInfoKey = "ParlaStoreBuild"
+
+    /// Decode that key's Info.plist value. Both app factories used to do this inline with a duplicated
+    /// `as? Bool ?? false`, i.e. the most expensive failure in the product — a store build that gates nothing
+    /// and earns nothing — sat behind an untested cast that fails CLOSED toward "give it all away".
+    ///
+    /// Deliberately lenient about the type. `<string>true</string>` does not bridge to `Bool`, so a plist typo
+    /// read as `nil` → `false` → an ungated App Store build whose only symptom is zero revenue. A truthy value of
+    /// any plist type can only have been written by someone who meant "this is the store build", so honouring it
+    /// is strictly safer than discarding it; anyone who wants the full build removes the key, which still reads
+    /// false. `build_app.sh` verifies its own emitted plist separately, so a wrong type is caught loudly there
+    /// rather than silently here.
+    nonisolated public static func storeBuildFlag(_ infoValue: Any?) -> Bool {
+        switch infoValue {
+        case let flag as Bool:       return flag                                  // <true/>
+        case let number as NSNumber: return number.boolValue                      // <integer>1</integer>, and any
+                                                                                  // numeric that only bridges this far
+        case let text as String:     return ["true", "yes", "1"].contains(text.lowercased())
+        default:                     return false                                 // absent, or something meaningless
+        }
+    }
+
+    /// Point the free/Pro decision at the live entitlement, and start StoreKit. A no-op unless this is a store
+    /// build, so a from-source build stays the FULL app.
+    ///
+    /// This lives in Core rather than in each app's launch `.task` because it is the hinge the whole business
+    /// model hangs from, and as three loose statements inside a SwiftUI closure it was unreachable from any test:
+    /// deleting them left every gate reading the fail-open `{ true }` default, the entire suite green, and the
+    /// Settings "Unlock Pro" section still rendering (it keys on `isStoreBuild`, not on the wiring) — so the app
+    /// would look correctly monetized while gating nothing.
+    ///
+    /// `start()` belongs INSIDE this call, not beside it: if it is forgotten, `entitlementsResolved` never turns
+    /// true, `grantsUnlimited` fails open forever, and the result is the same giveaway by a different route.
+    ///
+    /// - Parameter startingStore: only a test passes `false` — `PurchaseManager` is contractually inert until
+    ///   `start()`, and a unit test must not reach the network or the transaction store.
+    public func installStoreGate(_ purchases: PurchaseManager, startingStore: Bool = true) {
+        guard isStoreBuild else { return }
+        // Fail-open until the entitlement resolves — never gate a payer mid-cold-launch…
+        isProUser = { [purchases] in purchases.grantsUnlimited }
+        // …and let a gate WAIT for that resolution instead of acting on the fail-open guess, which was
+        // re-runnable on every cold launch (quit, relaunch, drop an over-cap file, repeat).
+        resolveEntitlements = { [purchases] in await purchases.awaitEntitlements() }
+        // Load the product, resolve the entitlement, and start the Transaction.updates listener.
+        if startingStore { Task { await purchases.start() } }
+    }
+
     /// Whether the user owns Pro (the monetization entitlement). Injected: in a STORE build both apps wire it to
     /// the live `PurchaseManager` entitlement; otherwise it stays `true` — the inert Core/test default, fail-OPEN,
     /// so a from-source build (or a wiring gap) is the FULL app. A test that exercises the free tier sets `{ false }`.

@@ -224,5 +224,14 @@ public final class PurchaseManager {
     #if DEBUG
     /// Test/preview hook: force the store-derived entitlement without a live store.
     public func previewSetPro(_ on: Bool) { storeEntitled = on }
+
+    /// Test/preview hook: pretend StoreKit's first entitlement scan has (or hasn't) landed.
+    ///
+    /// Needed because `grantsUnlimited` is `isPro || !entitlementsResolved`, so an untouched manager answers
+    /// `true` — exactly what the fail-open default answers. Without this hook a test cannot tell a store build
+    /// whose gate is WIRED from one whose wiring was silently lost, which is the single most expensive
+    /// distinction in the product. `entitlementsResolved` is otherwise only settable by `refreshEntitlements()`,
+    /// which is private and store-driven. DEBUG-only, like `previewSetPro`, so it cannot ship.
+    public func previewSetEntitlementsResolved(_ resolved: Bool) { entitlementsResolved = resolved }
     #endif
 }

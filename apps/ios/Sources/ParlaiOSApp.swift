@@ -60,13 +60,10 @@ private struct RootView: View {
         // Pro entitlement: wire the live isPro into the free-tier gate + start StoreKit (load product,
         // resolve the current entitlement, listen for Transaction.updates). Idempotent.
         .task {
-            if model.isStoreBuild {   // freemium gate + StoreKit only in a store build; a from-source build stays FULL
-                model.isProUser = { purchases.grantsUnlimited }   // fail-open until the entitlement resolves (never gate a payer on a cold-launch share)
-                // …and let a gate WAIT for that resolution instead of acting on the fail-open guess, which was
-                // re-runnable on every cold launch (and on iOS every share drains straight into transcribe).
-                model.resolveEntitlements = { await purchases.awaitEntitlements() }
-                await purchases.start()
-            }
+            // Freemium gate + StoreKit, only in a store build; a from-source build stays FULL. One call, in
+            // Core, because it is testable there and was not testable here. (On iOS every share drains straight
+            // into transcribe, so the wait-for-fact half of this matters on the very first cold launch.)
+            model.installStoreGate(purchases)
         }
         // Free-tier length gate → up-front paywall (presents when the gate sets paywallReason; cleared on dismiss).
         .sheet(item: Binding(get: { model.paywallReason }, set: { model.paywallReason = $0 })) { reason in

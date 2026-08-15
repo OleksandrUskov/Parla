@@ -18,7 +18,7 @@ extension AppModel {
 
         // iOS is distributed only via the App Store, so it's a store build (freemium gate on) — the `ParlaStoreBuild`
         // key is set in Parla-iOS-Info.plist. A dev can remove it for a full build.
-        m.isStoreBuild = (Bundle.main.object(forInfoDictionaryKey: "ParlaStoreBuild") as? Bool) ?? false
+        m.isStoreBuild = AppModel.storeBuildFlag(Bundle.main.object(forInfoDictionaryKey: AppModel.storeBuildInfoKey))
 
         // Audio decode / chunking → the in-process ParlaCore decoder (libopusfile + AVAssetReader). This is the
         // iOS replacement for the macOS ffmpeg subprocess and closes the drop → decode → WhisperKit pipeline.

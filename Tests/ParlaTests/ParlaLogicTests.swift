@@ -2353,6 +2353,89 @@ final class ParlaLogicTests: XCTestCase {
         XCTAssertTrue(ProGate.isProExportFormat(.json))
     }
 
+    // MARK: Monetization — is the gate even switched on? (the store-build flag and its wiring)
+
+    /// The `ParlaStoreBuild` decode, including the trap. A plist value of the wrong TYPE used to read as `nil`
+    /// and fall through to `false`, i.e. an App Store build with no paywall, no length cap and everything Pro
+    /// free — whose only symptom is zero revenue. Truthy-of-any-type now counts, because writing the key at all
+    /// can only have meant "this is the store build"; removing it is still how you ask for the full build.
+    func testStoreBuildFlagDecodesEveryPlistShapeThatCouldShipUngated() {
+        XCTAssertTrue(AppModel.storeBuildFlag(true))            // <true/>
+        XCTAssertTrue(AppModel.storeBuildFlag(NSNumber(value: true)))
+        XCTAssertTrue(AppModel.storeBuildFlag(1))               // <integer>1</integer>
+        XCTAssertTrue(AppModel.storeBuildFlag("true"))          // <string>true</string> — the silent giveaway
+        XCTAssertTrue(AppModel.storeBuildFlag("YES"))
+        XCTAssertTrue(AppModel.storeBuildFlag("1"))
+        XCTAssertFalse(AppModel.storeBuildFlag(nil))            // key absent → the from-source FULL build
+        XCTAssertFalse(AppModel.storeBuildFlag(false))
+        XCTAssertFalse(AppModel.storeBuildFlag(0))
+        XCTAssertFalse(AppModel.storeBuildFlag("false"))
+        XCTAssertFalse(AppModel.storeBuildFlag("no"))
+        XCTAssertFalse(AppModel.storeBuildFlag(["not": "a flag"]))
+        XCTAssertEqual(AppModel.storeBuildInfoKey, "ParlaStoreBuild")
+    }
+
+    /// A store build must gate on the LIVE entitlement, not on the fail-open default. This is the distinction
+    /// that pays for the app: an untouched `PurchaseManager` answers `grantsUnlimited == true`, which is exactly
+    /// what the unwired default answers — so the gate only proves itself once the first entitlement scan has
+    /// landed and the manager starts saying "no".
+    @MainActor func testStoreBuildGatesOnTheLiveEntitlementRatherThanTheFailOpenDefault() {
+        let m = AppModel(engine: FakeEngine())
+        let pm = PurchaseManager()
+        m.isStoreBuild = true
+        m.installStoreGate(pm, startingStore: false)   // `false` ONLY here: the manager stays inert in tests
+
+        // Before StoreKit's first scan the gate fails open on purpose — never block a payer mid-cold-launch.
+        XCTAssertTrue(m.isProUser(), "an unresolved entitlement must not gate anyone")
+
+        // Scan landed, this user owns nothing → the gate must now say no. An unwired model would still say yes.
+        pm.previewSetEntitlementsResolved(true)
+        XCTAssertFalse(m.isProUser(), "a resolved non-payer must be gated — the wiring is what makes this false")
+
+        // …and a payer stays unlimited.
+        pm.previewSetPro(true)
+        XCTAssertTrue(m.isProUser())
+    }
+
+    /// `installStoreGate` must also hand the gate a way to wait for FACT. Without `resolveEntitlements` the
+    /// fail-open window is re-runnable — quit, relaunch, drop an over-cap file, repeat — which is how a
+    /// trade-off becomes an unlimited workaround.
+    @MainActor func testStoreBuildInstallsTheWaitForFactSeam() async {
+        let m = AppModel(engine: FakeEngine())
+        let pm = PurchaseManager()
+        m.isStoreBuild = true
+        m.installStoreGate(pm, startingStore: false)
+        pm.previewSetEntitlementsResolved(true)
+        await m.resolveEntitlements()          // the default is a no-op; the wired one consults the manager
+        XCTAssertFalse(m.isProUser())
+    }
+
+    /// The other half of the contract: a from-source build is the FULL app and the gate must not be installed.
+    @MainActor func testNonStoreBuildIsLeftCompletelyUngated() {
+        let m = AppModel(engine: FakeEngine())
+        let pm = PurchaseManager()
+        XCTAssertFalse(m.isStoreBuild, "the Core default is the ungated build")
+        m.installStoreGate(pm, startingStore: false)
+        pm.previewSetEntitlementsResolved(true)
+        XCTAssertTrue(m.isProUser(), "a from-source build stays unlimited no matter what the store says")
+    }
+
+    /// The invariant no type can express: that the apps actually CALL the thing. The wiring used to be three
+    /// loose statements inside a SwiftUI `.task`; deleting them left every gate reading the fail-open default
+    /// with the whole suite green and the Settings "Unlock Pro" section still rendering, because that section
+    /// keys on `isStoreBuild` rather than on the wiring — a giveaway that looks exactly like a working store.
+    /// Same shape as `testNoShippingCodeDetectsXCTest`: a claim about the build that only a file scan can hold.
+    func testBothAppsInstallTheStoreGate() throws {
+        for entry in ["Sources/Parla/ParlaApp.swift", "apps/ios/Sources/ParlaiOSApp.swift"] {
+            let src = try String(contentsOf: repoRoot.appendingPathComponent(entry), encoding: .utf8)
+            XCTAssertTrue(src.contains("installStoreGate(purchases)"),
+                          "\(entry) no longer installs the store gate — the app would ship ungated")
+            XCTAssertFalse(src.contains("startingStore:"),
+                           "\(entry) must not opt out of starting StoreKit: without start() the entitlement "
+                           + "never resolves, grantsUnlimited fails open forever, and everything is free")
+        }
+    }
+
     /// The paywall must not sell a capability the platform it is running on cannot perform. Folder watching is
     /// FSEvents-based (macOS only), yet the bullet list was built unconditionally, so the iOS paywall promised
     /// "…or auto-transcribe a watched folder" — in the title too ("Batch & folder watch"). That is an
