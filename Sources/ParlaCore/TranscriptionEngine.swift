@@ -81,23 +81,40 @@ public actor TranscriptionEngine {
     /// swept into Time Machine, and uploaded to iCloud outright for anyone with Desktop & Documents syncing on
     /// (measured on this machine: 2.4 GB). That was already the wrong place before the Mac App Store made it a
     /// blocker; sandboxed or not, model weights are cache, and cache does not belong in someone's documents.
+    /// Namespaced under `Parla/`, like every other model store this app owns (`Parla/mlx`, `Parla/embed`).
+    /// An unnamespaced `Application Support/huggingface` would recreate, one directory up, the very hazard the
+    /// relocation below is written to avoid: a shared default that another swift-transformers app also writes to.
     public static func downloadBase() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("huggingface", isDirectory: true)   // == HubApi's default component
+        return base.appendingPathComponent("Parla/huggingface", isDirectory: true)   // …/models/<owner>/<repo>
+    }
+
+    /// The un-namespaced sibling this briefly used, and iOS's location before that. Only pre-release installs
+    /// can have anything here (neither app has shipped), so this exists to spare a developer a re-download —
+    /// not as a user-data guarantee.
+    static func unnamespacedBase() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("huggingface", isDirectory: true)
     }
 
     #if os(macOS)
-    /// Where macOS kept them until this change. Kept as a real function, not a comment, because the migration
-    /// below has to look there — and because a future reader deserves to know why an odd path is being probed.
+    /// Where macOS kept them until this change: HubApi's default, in the user's own Documents folder.
+    ///
+    /// ⚠️ Under the App Sandbox `.documentDirectory` resolves INSIDE the container, not to `~/Documents` — so in
+    /// a sandboxed (Mac App Store) build this probe finds nothing and the relocation is a no-op. That is not a
+    /// bug to fix here; a sandboxed app genuinely cannot reach the old path. It is a SEQUENCING requirement: the
+    /// relocation has to reach users through a direct-download update BEFORE the sandboxed build, or their
+    /// existing weights are re-downloaded and the old copy is orphaned in Documents with nothing left that
+    /// knows about it. Recorded in MACOS_MAS_MIGRATION.md.
     public static func legacyDownloadBase() -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("huggingface", isDirectory: true)
     }
+    #endif
 
     /// The Hugging Face repo OWNERS this app populates: `argmaxinc` (the WhisperKit CoreML models) and `openai`
     /// (the tokenizer repos WhisperKit pulls alongside them). Only these are relocated — see `migrateLegacyTree`.
     static let hubRepoOwners = ["argmaxinc", "openai"]
-    #endif
 
     /// Where WhisperKit stores models: `<downloadBase>/models/argmaxinc/whisperkit-coreml`.
     public static func modelsRoot() -> URL {
@@ -112,6 +129,7 @@ public actor TranscriptionEngine {
     /// ⚠️ PRODUCTION ONLY: on macOS this MOVES a real directory. A test must exercise
     /// `ModelStorage.migrateLegacyTree` with temporary paths instead of calling this.
     public static func prepareModelStorage() {
+        ModelStorage.migrateLegacyTree(from: unnamespacedBase(), to: downloadBase(), owners: hubRepoOwners)
         #if os(macOS)
         ModelStorage.migrateLegacyTree(from: legacyDownloadBase(), to: downloadBase(), owners: hubRepoOwners)
         #endif

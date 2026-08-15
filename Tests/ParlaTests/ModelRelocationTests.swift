@@ -100,7 +100,13 @@ final class ModelRelocationTests: ParlaTestCase {
         let base = TranscriptionEngine.downloadBase()
         XCTAssertTrue(base.path.contains("Application Support"), "weights belong in Application Support")
         XCTAssertFalse(base.path.contains("/Documents/"), "weights must never live in the user's Documents")
+        XCTAssertTrue(base.path.contains("/Parla/"),
+                      "the weights tree must be namespaced like every other model store this app owns — an "
+                      + "unnamespaced Application Support/huggingface is shared ground with any other "
+                      + "swift-transformers app, which is the exact hazard the relocation avoids")
         XCTAssertTrue(TranscriptionEngine.modelsRoot().path.hasPrefix(base.path))
+        XCTAssertFalse(TranscriptionEngine.unnamespacedBase().path.contains("/Parla/"),
+                       "the un-namespaced probe must point at the OLD location, or nothing gets migrated")
         #if os(macOS)
         XCTAssertTrue(TranscriptionEngine.legacyDownloadBase().path.contains("/Documents/"),
                       "the legacy probe must still point at the old location, or nothing gets migrated")

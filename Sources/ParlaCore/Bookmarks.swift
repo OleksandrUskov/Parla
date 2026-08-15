@@ -24,11 +24,17 @@ public enum Bookmarks {
 
     /// Make the most durable bookmark this process can. Best-effort by design — a bookmark is a *locator*, and
     /// every caller also keeps the plain path, so returning nil costs a fallback, not a feature.
+    ///
+    /// macOS only for the scoped form: `.withSecurityScope` does not exist on iOS, where every app is sandboxed
+    /// already and a bookmark taken while a picked URL's scope is active carries that grant on its own. The iOS
+    /// build caught this — the macOS build and its whole suite were green with the option applied unconditionally.
     public static func make(for url: URL) -> Data? {
+        #if os(macOS)
         if let scoped = try? url.bookmarkData(options: [.withSecurityScope],
                                               includingResourceValuesForKeys: nil, relativeTo: nil) {
             return scoped
         }
+        #endif
         return try? url.bookmarkData()
     }
 
@@ -40,10 +46,12 @@ public enum Bookmarks {
     /// then nothing to stop, and reporting true would leak a balance the caller cannot satisfy.
     public static func resolve(_ data: Data) -> (url: URL, scoped: Bool)? {
         var stale = false
+        #if os(macOS)
         if let url = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope],
                               relativeTo: nil, bookmarkDataIsStale: &stale) {
             return (url, url.startAccessingSecurityScopedResource())
         }
+        #endif
         // Older installs stored plain bookmarks. They still locate the file; under a sandbox they simply will
         // not grant access, which is exactly the same position the app is in today.
         if let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale) {
