@@ -32,6 +32,9 @@ class ParlaTestCase: XCTestCase {
         // The iOS import container. This one is DELETED FROM — `pruneImportedOrphans` removes every unreferenced
         // subdirectory — so leaving it pointed at the real container is the "a test wiped user data" shape.
         AppModel.importsRoot = dir.appendingPathComponent("imports", isDirectory: true)
+        // The long-audio resume record. Another global path that is WRITTEN AND DELETED, so without a redirect a
+        // test run would clobber a real half-finished job the user left mid-transcription.
+        ChunkProgressStore.fileURL = dir.appendingPathComponent("chunk-progress.json")
 
         #if os(macOS)
         // The two model caches. Redirecting them makes `isDownloaded()` deterministically false, which keeps

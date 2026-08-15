@@ -359,44 +359,71 @@ extension AppModel {
         }
 
         let total = chunks.count
-        var perChunkSegments: [[Segment]] = []
-        var texts: [String] = []
-        var langs: [String] = []
+
+        // Pick up where an interrupted run stopped. Everything above this point (the split) has to happen
+        // again regardless — the chunk WAVs live in a temp directory the OS may purge — but the expensive half
+        // is inference, and that is what gets skipped. A record that does not describe THIS job (different
+        // source, model, language, translate flag, chunk length or count) is discarded rather than trusted:
+        // its chunks would be answers to a different question. See `ChunkedJobProgress`.
+        var progress = ChunkProgressStore.load().flatMap {
+            $0.canResume(sourcePath: source.path, model: model, requestedLanguage: lang,
+                         translate: translateToEnglish, chunkLengthSec: AudioChunker.chunkLengthSec,
+                         totalChunks: total) ? $0 : nil
+        } ?? ChunkedJobProgress(sourcePath: source.path, model: model, requestedLanguage: lang,
+                                translate: translateToEnglish, chunkLengthSec: AudioChunker.chunkLengthSec,
+                                totalChunks: total, audioDuration: audioDuration)
+
         // What the model HEARD, asked ONCE — on the first chunk. Before this, the wrong-language nudge was dead
         // for every chunked file (the hand-built EngineResult below simply omitted `heard`), which meant it never
         // fired on precisely the long recordings where a wrong pin is most expensive — while every chunk still
-        // paid for a detection pass whose result was thrown away.
-        var heard: HeardLanguage? = nil
+        // paid for a detection pass whose result was thrown away. On a resumed run chunk 0 is not re-run, so it
+        // is restored from the record instead of being silently dropped.
+        var heard: HeardLanguage? = progress.heardLanguage.map {
+            HeardLanguage(language: $0, confidence: progress.heardConfidence ?? 0)
+        }
+        let resumeFrom = progress.done.count
         for (k, chunk) in chunks.enumerated() {
             if Task.isCancelled { break }   // cancelled → stop decoding more chunks (the partial is discarded upstream)
+            guard k >= resumeFrom else {
+                try? FileManager.default.removeItem(at: chunk)   // already transcribed on an earlier run
+                continue
+            }
             phase = .transcribing(Lf("chunk.label", k + 1, total),
                                   batch: BatchProgress(index: k + 1, total: total, done: k))
             do {
                 let r = try await engine.transcribe(wavPath: chunk.path, language: lang,
                                                     model: model, translate: translateToEnglish,
                                                     detectHeardLanguage: k == 0)
-                if k == 0 { heard = r.heard }
-                perChunkSegments.append(r.segments)
-                texts.append(r.text)
-                langs.append(r.language)
+                if k == 0 {
+                    heard = r.heard
+                    progress.heardLanguage = r.heard?.language
+                    progress.heardConfidence = r.heard?.confidence
+                }
+                progress.done.append(.init(segments: r.segments, text: r.text, language: r.language))
             } catch {
                 // resilience: one bad chunk doesn't lose the whole transcript. Put the marker in BOTH
                 // the segments AND the flat text, so the gap is visible in copy/TXT/MD (not only SRT/VTT).
                 let mark = Lf("chunk.failed", k + 1)
-                perChunkSegments.append([AudioChunker.failedChunkSegment(label: mark)])
-                texts.append(mark)
-                langs.append("")
+                progress.done.append(.init(segments: [AudioChunker.failedChunkSegment(label: mark)],
+                                           text: mark, language: ""))
             }
+            // Persist BEFORE freeing the chunk: after this line the work survives a kill, a call, or a jetsam.
+            ChunkProgressStore.save(progress)
             try? FileManager.default.removeItem(at: chunk)   // free each chunk WAV as we go
         }
-        let stitched = AudioChunker.stitch(chunkSegments: perChunkSegments,
+        // The record has served its purpose the moment the result is in hand — including on cancel, where the
+        // partial is discarded upstream and keeping a half-record would silently resume a job the user stopped.
+        ChunkProgressStore.clear()
+
+        let stitched = AudioChunker.stitch(chunkSegments: progress.done.map(\.segments),
                                            chunkLength: AudioChunker.chunkLengthSec)
-        let fullText = texts.filter { !$0.isEmpty }.joined(separator: " ")
+        let fullText = progress.done.map(\.text).filter { !$0.isEmpty }.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         // Mirror the single-pass path: keep the engine-reported language (detected in Auto mode),
         // not the bare requested value — otherwise long Auto-mode files persist an empty language.
         return EngineResult(text: fullText,
-                            language: AudioChunker.resolveLanguage(chunkLanguages: langs, requested: lang),
+                            language: AudioChunker.resolveLanguage(chunkLanguages: progress.done.map(\.language),
+                                                                   requested: lang),
                             segments: stitched, duration: audioDuration, heard: heard)
     }
 

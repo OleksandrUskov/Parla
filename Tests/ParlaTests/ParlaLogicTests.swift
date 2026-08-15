@@ -55,6 +55,9 @@ final class ParlaLogicTests: XCTestCase {
         // is deterministic (false) in tests; otherwise the retrieval-embedder routing would pick the real downloaded
         // model over the injected fake (the probe already downloaded it on the dev machine).
         EmbeddingModelSpec.downloadBase = storeDir.appendingPathComponent("embed")
+        // The long-audio resume record — written after every chunk and deleted at the end. Same class again:
+        // without a redirect a test run would clobber a real half-finished job the user left mid-transcription.
+        ChunkProgressStore.fileURL = storeDir.appendingPathComponent("chunk-progress.json")
     }
 
     // MARK: Model names
