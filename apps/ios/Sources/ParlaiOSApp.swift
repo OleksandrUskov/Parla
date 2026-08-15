@@ -55,6 +55,9 @@ private struct RootView: View {
             }
         }
         .keepAwake(while: model.isBusy)
+        // …and if the user leaves anyway (a call, another app), ask for a grace window so the chunk in flight
+        // reaches disk instead of being cut off. Pairs with the resume record — see BackgroundGrace.
+        .backgroundGrace(while: model.isBusy)
         .parlaToast()   // dictation + batch feedback surface (macOS QuickToast counterpart)
 
         // Pro entitlement: wire the live isPro into the free-tier gate + start StoreKit (load product,
