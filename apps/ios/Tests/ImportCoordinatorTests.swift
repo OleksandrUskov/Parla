@@ -1,4 +1,5 @@
 import XCTest
+import ParlaCore
 @testable import Parla_iOS
 
 /// the security-scoped import copy. The full import→transcribe→text flow is device-only
@@ -20,7 +21,10 @@ final class ImportCoordinatorTests: XCTestCase {
         XCTAssertEqual(out.count, 1)
         let dest = try XCTUnwrap(out.first)
         XCTAssertEqual(dest.lastPathComponent, src.lastPathComponent, "original filename + extension preserved")
-        XCTAssertTrue(dest.path.contains("/Parla/imports/"), "copied into the app container")
+        // Against the imports ROOT, not a hardcoded folder name: that directory is now named after the bundle
+        // identifier, so the app's data can be found by the sandbox container migration.
+        XCTAssertTrue(dest.path.hasPrefix(AppModel.importsRoot.standardizedFileURL.path + "/"),
+                      "copied into the app container's imports root, got \(dest.path)")
         XCTAssertEqual(try Data(contentsOf: dest), bytes, "content copied verbatim")
     }
 

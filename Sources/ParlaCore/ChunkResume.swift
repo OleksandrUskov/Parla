@@ -92,9 +92,7 @@ public enum ChunkProgressStore {
     nonisolated(unsafe) public static var fileURL: URL = defaultFileURL()
 
     public static func defaultFileURL() -> URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Parla", isDirectory: true)
+        let base = StorageRoot.defaultURL()
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("chunk-progress.json")
     }

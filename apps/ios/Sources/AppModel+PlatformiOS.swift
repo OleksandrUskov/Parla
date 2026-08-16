@@ -12,6 +12,11 @@ extension AppModel {
     /// deliberately keep their inert Core defaults — the iOS UI layer provides ShareLink / `.fileExporter`
     /// equivalents where they make sense. Unit tests that want the pure Core keep using `AppModel()` directly.
     @MainActor static func iOS() -> AppModel {
+        // FIRST, before any store is read: an earlier install's library lives under a different folder
+        // name, and `AppModel.init` loads history as a stored-property initializer. Migrating after that
+        // would show the user an empty app and then quietly move their data in behind it.
+        StorageRoot.migrateIfNeeded()
+
         // The real AI + embedder are wired HERE, not guessed by the Core: the Core's defaults are inert
         // so a unit test can never load a real model by forgetting to inject one.
         let m = AppModel(ai: AppModel.productionAI(), embedder: AppModel.productionEmbedder())

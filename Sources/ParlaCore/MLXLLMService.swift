@@ -48,7 +48,7 @@ public enum MLXModelSpec {
     static func defaultDownloadBase() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return support.appendingPathComponent("Parla/mlx", isDirectory: true)
+        return StorageRoot.defaultURL().appendingPathComponent("mlx", isDirectory: true)
     }
 
     /// Where `HubApi.snapshot` materializes the model.

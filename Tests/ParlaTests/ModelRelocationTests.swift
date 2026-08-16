@@ -97,14 +97,16 @@ final class ModelRelocationTests: ParlaTestCase {
     /// The production paths themselves: Application Support on both platforms, never Documents. This is the
     /// assertion that would have caught the original mistake.
     func testTheProductionModelPathIsNotTheUsersDocuments() {
-        let base = TranscriptionEngine.downloadBase()
+        // The PRODUCTION root — `downloadBase()` follows the live one, which test setup redirects.
+        let base = StorageRoot.defaultURL().appendingPathComponent("huggingface", isDirectory: true)
         XCTAssertTrue(base.path.contains("Application Support"), "weights belong in Application Support")
         XCTAssertFalse(base.path.contains("/Documents/"), "weights must never live in the user's Documents")
-        XCTAssertTrue(base.path.contains("/Parla/"),
-                      "the weights tree must be namespaced like every other model store this app owns — an "
-                      + "unnamespaced Application Support/huggingface is shared ground with any other "
-                      + "swift-transformers app, which is the exact hazard the relocation avoids")
-        XCTAssertTrue(TranscriptionEngine.modelsRoot().path.hasPrefix(base.path))
+        // Inside the app's OWN root, not beside it: a bare Application Support/huggingface is shared ground
+        // with any other swift-transformers app — the exact hazard the relocation avoids — and it would also
+        // sit outside the directory the sandbox container migration moves.
+        XCTAssertEqual(base.deletingLastPathComponent(), StorageRoot.defaultURL())
+        XCTAssertNotEqual(base, TranscriptionEngine.unnamespacedBase())
+        XCTAssertTrue(TranscriptionEngine.modelsRoot().path.hasPrefix(TranscriptionEngine.downloadBase().path))
         XCTAssertFalse(TranscriptionEngine.unnamespacedBase().path.contains("/Parla/"),
                        "the un-namespaced probe must point at the OLD location, or nothing gets migrated")
         #if os(macOS)

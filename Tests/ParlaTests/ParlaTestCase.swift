@@ -23,6 +23,9 @@ class ParlaTestCase: XCTestCase {
             .appendingPathComponent("ParlaTests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
+        // The ROOT everything derives from. Redirected FIRST, so any store initialised lazily from it lands in
+        // the temp tree too — not only the ones named individually below.
+        StorageRoot.url = dir
         // The user's history — and the embedding/audio stores, which derive their directory from it.
         HistoryStore.fileURL = dir.appendingPathComponent("history.json")
         // A separate global path, so it needs its own redirect or folder-watch tests write the real file.

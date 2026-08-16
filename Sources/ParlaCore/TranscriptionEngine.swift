@@ -81,12 +81,11 @@ public actor TranscriptionEngine {
     /// swept into Time Machine, and uploaded to iCloud outright for anyone with Desktop & Documents syncing on
     /// (measured on this machine: 2.4 GB). That was already the wrong place before the Mac App Store made it a
     /// blocker; sandboxed or not, model weights are cache, and cache does not belong in someone's documents.
-    /// Namespaced under `Parla/`, like every other model store this app owns (`Parla/mlx`, `Parla/embed`).
+    /// Inside `StorageRoot`, like every other store this app owns (`mlx`, `embed`, `imports`, the history).
     /// An unnamespaced `Application Support/huggingface` would recreate, one directory up, the very hazard the
     /// relocation below is written to avoid: a shared default that another swift-transformers app also writes to.
     public static func downloadBase() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Parla/huggingface", isDirectory: true)   // …/models/<owner>/<repo>
+        StorageRoot.url.appendingPathComponent("huggingface", isDirectory: true)   // …/models/<owner>/<repo>
     }
 
     /// The un-namespaced sibling this briefly used, and iOS's location before that. Only pre-release installs
@@ -123,7 +122,7 @@ public actor TranscriptionEngine {
 
     /// Put the model tree where it belongs, and keep it out of backups. Idempotent; call before any download.
     ///
-    /// Only the `huggingface` subtree is touched — history and audio under Application Support/Parla stay backed
+    /// Only the `huggingface` subtree is touched — history and audio in the same root stay backed
     /// up, because those are the user's own data and are not re-downloadable.
     ///
     /// ⚠️ PRODUCTION ONLY: on macOS this MOVES a real directory. A test must exercise

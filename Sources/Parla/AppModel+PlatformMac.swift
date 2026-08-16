@@ -11,6 +11,11 @@ extension AppModel {
     /// The app-facing constructor: a default `AppModel` with macOS platform behavior wired into the seams.
     /// Unit tests keep the inert Core defaults (they never touch NSPasteboard / NSSavePanel / NSApplication).
     @MainActor static func mac() -> AppModel {
+        // FIRST, before any store is read: an earlier install's library lives under a different folder
+        // name, and `AppModel.init` loads history as a stored-property initializer. Migrating after that
+        // would show the user an empty app and then quietly move their data in behind it.
+        StorageRoot.migrateIfNeeded()
+
         // The real AI + embedder are wired HERE, not guessed by the Core: the Core's defaults are inert
         // so a unit test can never load a real model by forgetting to inject one.
         let m = AppModel(ai: AppModel.productionAI(), embedder: AppModel.productionEmbedder())

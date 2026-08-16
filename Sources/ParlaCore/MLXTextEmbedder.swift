@@ -79,7 +79,7 @@ public struct EmbeddingModelSpec: Sendable {
     static func defaultDownloadBase() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return support.appendingPathComponent("Parla/embed", isDirectory: true)
+        return StorageRoot.defaultURL().appendingPathComponent("embed", isDirectory: true)
     }
 
     /// Where `HubApi.snapshot` materializes the active model.

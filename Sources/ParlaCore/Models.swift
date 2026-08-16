@@ -311,9 +311,7 @@ public enum HistoryStore {
     /// `nonisolated(unsafe)`: a deliberate global-mutable opt-out — written only on the main actor
     /// (prod: never after launch; tests: serialized via `withTemporaryHistoryStore`), read widely.
     nonisolated(unsafe) static var fileURL: URL = {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Parla", isDirectory: true)
+        let base = StorageRoot.url
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("history.json")
     }()
@@ -458,9 +456,7 @@ public enum FolderScan {
 public enum ProcessedStore {
     /// `nonisolated(unsafe)`: same benign main-actor-only-write test seam as `HistoryStore.fileURL`.
     nonisolated(unsafe) static var fileURL: URL = {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Parla", isDirectory: true)
+        let base = StorageRoot.url
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("processed.json")
     }()

@@ -71,7 +71,7 @@ extension AppModel {
     public nonisolated static func defaultImportsRoot() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return support.appendingPathComponent("Parla/imports", isDirectory: true)
+        return StorageRoot.defaultURL().appendingPathComponent("imports", isDirectory: true)
     }
 
     /// Remove an iOS import-container copy (`Application Support/Parla/imports/<uuid>/<name>`) when its note is
