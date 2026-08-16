@@ -27,8 +27,10 @@ struct TranscribeFileIntent: AppIntent {
         if let f = file.fileURL {
             url = f
         } else {
-            let name = file.filename.isEmpty ? "parla-intent-\(UUID().uuidString)" : file.filename
-            let dest = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+            // The Shortcut's filename is INPUT: unsanitised, "../Library/Application Support/<id>/history.json"
+            // resolves inside the container and overwrites the user's archive. See ParlaCore.IntentFileName.
+            let dest = FileManager.default.temporaryDirectory
+                .appendingPathComponent(IntentFileName.safe(file.filename))
             try file.data.write(to: dest)
             url = dest
         }

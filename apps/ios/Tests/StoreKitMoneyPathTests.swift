@@ -74,7 +74,7 @@ final class StoreKitMoneyPathTests: XCTestCase {
         let model = AppModel.iOS()
         let pm = PurchaseManager()
         model.isStoreBuild = true
-        model.installStoreGate(pm, startingStore: false)
+        model.installStoreGate(pm)
 
         await pm.start()                                    // resolve entitlements + load products, for real
         XCTAssertTrue(pm.entitlementsResolved, "start() must complete the first entitlement scan")

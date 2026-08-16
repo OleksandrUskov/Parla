@@ -73,27 +73,3 @@ struct ParlaShortcuts: AppShortcutsProvider {
                     shortTitle: "Get Last Transcript", systemImageName: "doc.text")
     }
 }
-
-/// A Shortcut hands us a filename, and we write a file with it. That name is INPUT, not a label.
-///
-/// `appendingPathComponent` does not resolve `..`, so a Shortcut supplying `../../../foo` wrote outside the
-/// temporary directory — anywhere the app could reach, which today is everywhere the user can. Sandboxing would
-/// mask this rather than fix it (the write would simply be denied), and the app is not sandboxed today, so it is
-/// a live defect and not a Mac App Store one. Found while auditing the sandbox surface, which is exactly the
-/// kind of thing an audit is for: nobody was looking here.
-enum IntentFileName {
-    /// Reduce whatever arrives to a single, harmless path component.
-    static func safe(_ raw: String) -> String {
-        // lastPathComponent collapses any directory structure, including `..` segments and absolute paths.
-        var name = (raw as NSString).lastPathComponent
-        // …but NOT always: for "/" and "//" it returns "/" itself. Caught by the test, not by reading the code —
-        // which is the whole reason a sanitiser gets a test that asserts the property rather than the examples.
-        name = name.replacingOccurrences(of: "/", with: "")
-        // "..", "." and "" are all valid lastPathComponents and none of them is a filename.
-        if name.isEmpty || name == "." || name == ".." { name = "" }
-        // A leading dot would create a hidden file; a colon or a null byte can still confuse the filesystem layer.
-        name = name.replacingOccurrences(of: ":", with: "-").replacingOccurrences(of: "\0", with: "")
-        if name.hasPrefix(".") { name.removeFirst() }
-        return name.isEmpty ? "parla-intent-\(UUID().uuidString)" : name
-    }
-}

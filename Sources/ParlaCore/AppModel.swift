@@ -274,9 +274,17 @@ public final class AppModel {
     /// `start()` belongs INSIDE this call, not beside it: if it is forgotten, `entitlementsResolved` never turns
     /// true, `grantsUnlimited` fails open forever, and the result is the same giveaway by a different route.
     ///
-    /// - Parameter startingStore: only a test passes `false` — `PurchaseManager` is contractually inert until
-    ///   `start()`, and a unit test must not reach the network or the transaction store.
-    public func installStoreGate(_ purchases: PurchaseManager, startingStore: Bool = true) {
+    /// How the store is started. A seam rather than a `Bool` parameter with a default, because a default is a
+    /// thing that can be flipped: with `startingStore: Bool = true`, changing that one word to `false` left the
+    /// macOS suite, the iOS suite, `build_app.sh --store` and the CI store lane all green while the shipped app
+    /// never called `start()` — entitlementsResolved would stay false, grantsUnlimited fail open forever, and no
+    /// gate ever fire. Zero revenue, fully green. There is now nothing to flip: every caller starts the store,
+    /// and a test that must keep `PurchaseManager` inert replaces this instead of opting out.
+    nonisolated(unsafe) public static var startStore: @MainActor (PurchaseManager) -> Void = { purchases in
+        Task { await purchases.start() }
+    }
+
+    public func installStoreGate(_ purchases: PurchaseManager) {
         guard isStoreBuild else { return }
         // Fail-open until the entitlement resolves — never gate a payer mid-cold-launch…
         isProUser = { [purchases] in purchases.grantsUnlimited }
@@ -284,7 +292,7 @@ public final class AppModel {
         // re-runnable on every cold launch (quit, relaunch, drop an over-cap file, repeat).
         resolveEntitlements = { [purchases] in await purchases.awaitEntitlements() }
         // Load the product, resolve the entitlement, and start the Transaction.updates listener.
-        if startingStore { Task { await purchases.start() } }
+        Self.startStore(purchases)
     }
 
     /// Whether the user owns Pro (the monetization entitlement). Injected: in a STORE build both apps wire it to

@@ -113,6 +113,14 @@ public actor TranscriptionEngine {
 
     /// The Hugging Face repo OWNERS this app populates: `argmaxinc` (the WhisperKit CoreML models) and `openai`
     /// (the tokenizer repos WhisperKit pulls alongside them). Only these are relocated — see `migrateLegacyTree`.
+    ///
+    /// ⚠️ `openai` is NOT optional to move, and moving it is NOT free. WhisperKit resolves the tokenizer through
+    /// `config.tokenizerFolder ?? config.downloadBase`, so a config that passes NEITHER falls back to HubApi's
+    /// default — the old `~/Documents/huggingface`. Relocating `openai` while leaving the config bare therefore
+    /// took the tokenizer off the only path WhisperKit searches: offline, a fully downloaded model would stop
+    /// transcribing; online, it would silently re-download into Documents and undo the relocation. Verified on
+    /// this machine: the only tokenizer.json files live under `openai/`, and the `argmaxinc` model folders have
+    /// none. Both `WhisperKitConfig`s below therefore pass `downloadBase` explicitly. Keep them in step.
     static let hubRepoOwners = ["argmaxinc", "openai"]
 
     /// Where WhisperKit stores models: `<downloadBase>/models/argmaxinc/whisperkit-coreml`.
@@ -194,7 +202,8 @@ public actor TranscriptionEngine {
             progress(.loading)
             do {
                 whisperKit = try await WhisperKit(
-                    WhisperKitConfig(model: model, modelFolder: Self.localFolder(model).path, download: false))
+                    WhisperKitConfig(model: model, downloadBase: Self.downloadBase(),
+                                     modelFolder: Self.localFolder(model).path, download: false))
                 loadedModel = model
                 return
             } catch {
@@ -220,7 +229,8 @@ public actor TranscriptionEngine {
         })
         progress(.loading)
         whisperKit = try await WhisperKit(
-            WhisperKitConfig(model: model, modelFolder: folder.path, download: false))
+            WhisperKitConfig(model: model, downloadBase: Self.downloadBase(),
+                             modelFolder: folder.path, download: false))
         loadedModel = model
     }
 

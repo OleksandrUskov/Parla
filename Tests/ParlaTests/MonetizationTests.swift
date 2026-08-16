@@ -63,11 +63,36 @@ final class MonetizationTests: ParlaLogicTestCase {
     /// that pays for the app: an untouched `PurchaseManager` answers `grantsUnlimited == true`, which is exactly
     /// what the unwired default answers — so the gate only proves itself once the first entitlement scan has
     /// landed and the manager starts saying "no".
+    /// Run a block with the store-start seam replaced, so `PurchaseManager` stays contractually inert, and
+    /// report whether the gate actually asked for the store. Replacing the seam is the ONLY way a test opts
+    /// out — there is deliberately no parameter on `installStoreGate` to pass.
+    @MainActor private func withInertStore(_ body: @MainActor () -> Void) -> Bool {
+        let production = AppModel.startStore
+        var asked = false
+        AppModel.startStore = { _ in asked = true }
+        defer { AppModel.startStore = production }
+        body()
+        return asked
+    }
+
+    /// Without `start()` the first entitlement scan never happens, `grantsUnlimited` fails open forever and no
+    /// gate ever fires — the same giveaway as never wiring `isProUser`, by a different route. It used to be a
+    /// defaulted Bool parameter, so one word could disable it with every suite still green.
+    @MainActor func testInstallingTheGateAlwaysStartsTheStore() {
+        let m = AppModel(engine: FakeEngine())
+        m.isStoreBuild = true
+        XCTAssertTrue(withInertStore { m.installStoreGate(PurchaseManager()) },
+                      "a store build must start StoreKit; nothing else ever resolves the entitlement")
+
+        let free = AppModel(engine: FakeEngine())        // …and a from-source build must not touch the store
+        XCTAssertFalse(withInertStore { free.installStoreGate(PurchaseManager()) })
+    }
+
     @MainActor func testStoreBuildGatesOnTheLiveEntitlementRatherThanTheFailOpenDefault() {
         let m = AppModel(engine: FakeEngine())
         let pm = PurchaseManager()
         m.isStoreBuild = true
-        m.installStoreGate(pm, startingStore: false)   // `false` ONLY here: the manager stays inert in tests
+        _ = withInertStore { m.installStoreGate(pm) }   // keep the manager inert; the seam is pinned above
 
         // Before StoreKit's first scan the gate fails open on purpose — never block a payer mid-cold-launch.
         XCTAssertTrue(m.isProUser(), "an unresolved entitlement must not gate anyone")
@@ -88,7 +113,7 @@ final class MonetizationTests: ParlaLogicTestCase {
         let m = AppModel(engine: FakeEngine())
         let pm = PurchaseManager()
         m.isStoreBuild = true
-        m.installStoreGate(pm, startingStore: false)
+        _ = withInertStore { m.installStoreGate(pm) }   // keep the manager inert; the seam is pinned above
         pm.previewSetEntitlementsResolved(true)
         await m.resolveEntitlements()          // the default is a no-op; the wired one consults the manager
         XCTAssertFalse(m.isProUser())
@@ -99,7 +124,7 @@ final class MonetizationTests: ParlaLogicTestCase {
         let m = AppModel(engine: FakeEngine())
         let pm = PurchaseManager()
         XCTAssertFalse(m.isStoreBuild, "the Core default is the ungated build")
-        m.installStoreGate(pm, startingStore: false)
+        _ = withInertStore { m.installStoreGate(pm) }   // keep the manager inert; the seam is pinned above
         pm.previewSetEntitlementsResolved(true)
         XCTAssertTrue(m.isProUser(), "a from-source build stays unlimited no matter what the store says")
     }
@@ -111,12 +136,17 @@ final class MonetizationTests: ParlaLogicTestCase {
     /// Same shape as `testNoShippingCodeDetectsXCTest`: a claim about the build that only a file scan can hold.
     func testBothAppsInstallTheStoreGate() throws {
         for entry in ["Sources/Parla/ParlaApp.swift", "apps/ios/Sources/ParlaiOSApp.swift"] {
-            let src = try String(contentsOf: repoRoot.appendingPathComponent(entry), encoding: .utf8)
-            XCTAssertTrue(src.contains("installStoreGate(purchases)"),
+            let raw = try String(contentsOf: repoRoot.appendingPathComponent(entry), encoding: .utf8)
+            // COMMENT LINES ARE STRIPPED FIRST. The first version of this scanned the raw file, so commenting
+            // the call out — or moving it into a helper nobody invokes — kept it green while the shipped app
+            // installed no gate at all: the very outcome it exists to catch. It was proven red against outright
+            // deletion, which is the weakest of the three ways to lose a line.
+            let code = raw.split(separator: "\n", omittingEmptySubsequences: false)
+                .map(String.init)
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+            XCTAssertTrue(code.contains("installStoreGate(purchases)"),
                           "\(entry) no longer installs the store gate — the app would ship ungated")
-            XCTAssertFalse(src.contains("startingStore:"),
-                           "\(entry) must not opt out of starting StoreKit: without start() the entitlement "
-                           + "never resolves, grantsUnlimited fails open forever, and everything is free")
         }
     }
 
