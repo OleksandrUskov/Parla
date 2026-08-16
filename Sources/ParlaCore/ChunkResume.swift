@@ -25,8 +25,16 @@ public struct ChunkedJobProgress: Codable, Sendable, Equatable {
         public var segments: [Segment]
         public var text: String
         public var language: String
-        public init(segments: [Segment], text: String, language: String) {
-            self.segments = segments; self.text = text; self.language = language
+        /// Whether this entry is the "(chunk N failed)" placeholder rather than a transcription.
+        ///
+        /// Optional, per the same rule every persisted field here follows: a record written by an older build
+        /// must still decode. Without this flag a resume treated a placeholder as a finished chunk and deleted
+        /// its audio unretried — so a TRANSIENT failure, memory pressure being the obvious one and also the
+        /// exact condition that precedes the jetsam this whole feature exists for, became permanent. Before
+        /// resume existed the same interruption re-ran the file and the chunk usually succeeded.
+        public var failed: Bool?
+        public init(segments: [Segment], text: String, language: String, failed: Bool? = nil) {
+            self.segments = segments; self.text = text; self.language = language; self.failed = failed
         }
     }
 
@@ -39,6 +47,15 @@ public struct ChunkedJobProgress: Codable, Sendable, Equatable {
     public var chunkLengthSec: Double
     public var totalChunks: Int
     public var audioDuration: Double
+    /// The source's size and modification time when the record was written.
+    ///
+    /// Identity, not metadata. Without them `canResume` compared only the PATH and the chunk count — and the
+    /// count is a two-minute-wide bucket, so a 38:10 recording and a 39:50 one are both twenty chunks. A
+    /// watched folder overwriting the same filename, or a Shortcut writing to `tmp/<filename>` twice, then
+    /// resumed chunks 0…k of the OLD audio into the NEW note, with plausible timecodes, no error and nothing
+    /// to notice. That is precisely the corruption this type's own doc claims to prevent.
+    public var sourceSize: Int64?
+    public var sourceModified: Double?
     /// What the model heard on chunk 0 — asked once, and would otherwise be lost on resume, taking the
     /// wrong-language nudge with it on exactly the long files where a wrong pin costs the most.
     public var heardLanguage: String?
@@ -48,6 +65,7 @@ public struct ChunkedJobProgress: Codable, Sendable, Equatable {
 
     public init(sourcePath: String, model: String, requestedLanguage: String?, translate: Bool,
                 chunkLengthSec: Double, totalChunks: Int, audioDuration: Double,
+                sourceSize: Int64? = nil, sourceModified: Double? = nil,
                 heardLanguage: String? = nil, heardConfidence: Double? = nil, done: [Chunk] = []) {
         self.sourcePath = sourcePath
         self.model = model
@@ -56,6 +74,8 @@ public struct ChunkedJobProgress: Codable, Sendable, Equatable {
         self.chunkLengthSec = chunkLengthSec
         self.totalChunks = totalChunks
         self.audioDuration = audioDuration
+        self.sourceSize = sourceSize
+        self.sourceModified = sourceModified
         self.heardLanguage = heardLanguage
         self.heardConfidence = heardConfidence
         self.done = done
@@ -68,8 +88,13 @@ public struct ChunkedJobProgress: Codable, Sendable, Equatable {
     /// is also refused: it is either complete (the note was written, this is a leftover) or corrupt, and in
     /// both cases starting over is the honest answer.
     public func canResume(sourcePath: String, model: String, requestedLanguage: String?, translate: Bool,
-                          chunkLengthSec: Double, totalChunks: Int) -> Bool {
-        self.sourcePath == sourcePath
+                          chunkLengthSec: Double, totalChunks: Int,
+                          fingerprint: SourceFingerprint?) -> Bool {
+        // A record with no fingerprint predates this check; refuse it rather than trust a path.
+        guard let fingerprint, sourceSize == fingerprint.size, sourceModified == fingerprint.modified else {
+            return false
+        }
+        return self.sourcePath == sourcePath
             && self.model == model
             && self.requestedLanguage == requestedLanguage
             && self.translate == translate
@@ -77,6 +102,22 @@ public struct ChunkedJobProgress: Codable, Sendable, Equatable {
             && self.totalChunks == totalChunks
             && !done.isEmpty
             && done.count < totalChunks
+    }
+}
+
+/// What the source file looked like when a record was written. Cheap — one stat, no read — and enough to tell
+/// "the same file" from "a different recording that happens to have the same name".
+public struct SourceFingerprint: Sendable, Equatable {
+    public let size: Int64
+    public let modified: Double
+
+    public init(size: Int64, modified: Double) { self.size = size; self.modified = modified }
+
+    public init?(of url: URL) {
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+              let size = values.fileSize, let modified = values.contentModificationDate else { return nil }
+        self.size = Int64(size)
+        self.modified = modified.timeIntervalSince1970
     }
 }
 
@@ -114,5 +155,17 @@ public enum ChunkProgressStore {
 
     public static func clear() {
         try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    /// Drop a record that is too old to be worth resuming.
+    ///
+    /// This file holds the TEXT of every completed chunk. A job killed at 30 of 40 minutes leaves half an hour
+    /// of the user's speech in cleartext beside the history, invisible in the UI, until some later long job
+    /// happens to overwrite it. Resuming is worth a few days of that; forever is not. Called at launch, and the
+    /// grace period matches the one the iOS import sweep uses for the same reason: unreferenced is not unwanted.
+    public static func pruneIfStale(olderThan age: TimeInterval = 604_800, now: Date = Date()) {
+        guard let modified = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate else { return }
+        if now.timeIntervalSince(modified) > age { clear() }
     }
 }

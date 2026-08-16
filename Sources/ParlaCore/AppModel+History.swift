@@ -51,6 +51,11 @@ extension AppModel {
         history.forEach(AudioStore.remove)
         history.forEach { Self.pruneImportedSource($0.sourcePath) }   // …and the iOS import-container copies
         EmbeddingStore.pruneOrphans(keeping: [])   // wipe all vectors along with the history
+        // …and the long-audio resume record, which holds the full TEXT of every completed chunk. It is not a
+        // note, so nothing here reached it, and "All transcripts and their audio will be permanently deleted"
+        // was therefore not true: half an hour of the user's speech could survive in cleartext beside a history
+        // file they had just emptied.
+        ChunkProgressStore.clear()
         embeddingIndex.removeAll()
         lemmaIndex.removeAll()
         history.removeAll()

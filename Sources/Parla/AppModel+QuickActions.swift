@@ -40,10 +40,13 @@ extension AppModel {
     private func resolveLastSource() -> URL? {
         guard let data = UserDefaults.standard.data(forKey: Keys.lastBookmark),
               let (url, scoped) = Bookmarks.resolve(data) else { return nil }
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            if scoped { url.stopAccessingSecurityScopedResource() }   // don't leak a grant we can't use
-            return nil
-        }
+        // Balance the grant HERE rather than handing it to the caller. `transcribeLast` routes into the async
+        // drop funnel, which touches the file minutes later and has no idea it owes a stop — so every «replay
+        // the last file» (menu item, hotkey, parla://, Shortcut) leaked one grant for the process lifetime.
+        // Releasing it now costs nothing today (the app is unsandboxed) and, once it is sandboxed, is the
+        // signal that this path needs its scope held across the job rather than snatched at resolve time.
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         return url
     }
 }

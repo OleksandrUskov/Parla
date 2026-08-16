@@ -16,6 +16,9 @@ extension AppModel {
         // name, and `AppModel.init` loads history as a stored-property initializer. Migrating after that
         // would show the user an empty app and then quietly move their data in behind it.
         StorageRoot.migrateIfNeeded()
+        // A resume record holds the TEXT of every completed chunk. Worth keeping for a few days so an
+        // interrupted job can finish; not worth keeping forever beside the history it is invisible in.
+        ChunkProgressStore.pruneIfStale()
 
         // The real AI + embedder are wired HERE, not guessed by the Core: the Core's defaults are inert
         // so a unit test can never load a real model by forgetting to inject one.

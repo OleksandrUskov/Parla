@@ -365,13 +365,15 @@ extension AppModel {
         // is inference, and that is what gets skipped. A record that does not describe THIS job (different
         // source, model, language, translate flag, chunk length or count) is discarded rather than trusted:
         // its chunks would be answers to a different question. See `ChunkedJobProgress`.
+        let fingerprint = SourceFingerprint(of: source)
         var progress = ChunkProgressStore.load().flatMap {
             $0.canResume(sourcePath: source.path, model: model, requestedLanguage: lang,
                          translate: translateToEnglish, chunkLengthSec: AudioChunker.chunkLengthSec,
-                         totalChunks: total) ? $0 : nil
+                         totalChunks: total, fingerprint: fingerprint) ? $0 : nil
         } ?? ChunkedJobProgress(sourcePath: source.path, model: model, requestedLanguage: lang,
                                 translate: translateToEnglish, chunkLengthSec: AudioChunker.chunkLengthSec,
-                                totalChunks: total, audioDuration: audioDuration)
+                                totalChunks: total, audioDuration: audioDuration,
+                                sourceSize: fingerprint?.size, sourceModified: fingerprint?.modified)
 
         // What the model HEARD, asked ONCE — on the first chunk. Before this, the wrong-language nudge was dead
         // for every chunked file (the hand-built EngineResult below simply omitted `heard`), which meant it never
@@ -381,11 +383,14 @@ extension AppModel {
         var heard: HeardLanguage? = progress.heardLanguage.map {
             HeardLanguage(language: $0, confidence: progress.heardConfidence ?? 0)
         }
-        let resumeFrom = progress.done.count
         for (k, chunk) in chunks.enumerated() {
             if Task.isCancelled { break }   // cancelled → stop decoding more chunks (the partial is discarded upstream)
-            guard k >= resumeFrom else {
-                try? FileManager.default.removeItem(at: chunk)   // already transcribed on an earlier run
+            // Skip only what actually SUCCEEDED before. A stored "(chunk N failed)" placeholder is retried:
+            // freezing it would turn a transient failure — memory pressure, the very thing that precedes the
+            // jetsam this feature exists for — into a permanent hole in the transcript, where before resume
+            // existed the same interruption re-ran the file and the chunk usually succeeded.
+            if k < progress.done.count, progress.done[k].failed != true {
+                try? FileManager.default.removeItem(at: chunk)
                 continue
             }
             phase = .transcribing(Lf("chunk.label", k + 1, total),
@@ -399,13 +404,15 @@ extension AppModel {
                     progress.heardLanguage = r.heard?.language
                     progress.heardConfidence = r.heard?.confidence
                 }
-                progress.done.append(.init(segments: r.segments, text: r.text, language: r.language))
+                let entry = ChunkedJobProgress.Chunk(segments: r.segments, text: r.text, language: r.language)
+                if k < progress.done.count { progress.done[k] = entry } else { progress.done.append(entry) }
             } catch {
                 // resilience: one bad chunk doesn't lose the whole transcript. Put the marker in BOTH
                 // the segments AND the flat text, so the gap is visible in copy/TXT/MD (not only SRT/VTT).
                 let mark = Lf("chunk.failed", k + 1)
-                progress.done.append(.init(segments: [AudioChunker.failedChunkSegment(label: mark)],
-                                           text: mark, language: ""))
+                let entry = ChunkedJobProgress.Chunk(segments: [AudioChunker.failedChunkSegment(label: mark)],
+                                                    text: mark, language: "", failed: true)
+                if k < progress.done.count { progress.done[k] = entry } else { progress.done.append(entry) }
             }
             // Persist BEFORE freeing the chunk: after this line the work survives a kill, a call, or a jetsam.
             ChunkProgressStore.save(progress)

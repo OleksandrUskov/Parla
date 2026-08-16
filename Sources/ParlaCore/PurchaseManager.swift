@@ -48,7 +48,10 @@ public final class PurchaseManager {
         guard !entitlementsResolved else { return }
         let deadline = Date().addingTimeInterval(timeout)
         while !entitlementsResolved, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(25))
+            // `try?` on a cancelled task swallows the throw and the loop re-spins with NO delay — measured at
+            // ~435,000 iterations and 96% of a core for the full three seconds. Cancelling a transcription
+            // inside the cold-launch window is exactly when this is reachable, so cancellation must exit.
+            do { try await Task.sleep(for: .milliseconds(25)) } catch { return }
         }
         // Timed out → `grantsUnlimited` still fails open, deliberately: a store we cannot reach must never turn
         // into a paywall for someone who has already paid.
