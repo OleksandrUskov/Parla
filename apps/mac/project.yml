@@ -1,0 +1,123 @@
+# XcodeGen spec for the Mac App Store build of Parla.
+#
+# ADDITIVE, exactly like the iOS one. `build_app.sh` stays the dev / open-source path: it is fast, it is what a
+# repo cloner runs, it produces the FULL ungated app, and CI exercises it. This project exists for the one thing
+# that script cannot do — Archive → Distribute to the Mac App Store, which needs a real Xcode target so that
+# entitlements, a provisioning profile, hardened runtime and Contents/Frameworks are handled by the toolchain
+# rather than by hand.
+#
+# The generated `Parla-macOS.xcodeproj` is a BUILD ARTIFACT (gitignored); regenerate with:
+#     cd apps/mac && xcodegen generate
+name: Parla-macOS
+options:
+  bundleIdPrefix: com.parla
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+packages:
+  # The whole app, as a local package: ParlaCore is the fat cross-platform library, and Sources/Parla below is
+  # the thin macOS layer on top of it.
+  ParlaCore:
+    path: ../..
+  # The global dictation hotkey. Carbon RegisterEventHotKey under the hood, which IS sandbox-safe and needs no
+  # Accessibility — unlike the paste-into-frontmost feature, which the sandbox does kill (see Sandbox.swift).
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: "2.0.0"
+  # In-process Ogg/Opus decode — the same two binary xcframeworks the iOS target links.
+  opus:
+    url: https://github.com/sbooth/opus-binary-xcframework
+    from: "0.3.0"
+  ogg:
+    url: https://github.com/sbooth/ogg-binary-xcframework
+    from: "0.1.3"
+targets:
+  Parla:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      # The macOS app layer. No resources of its own and no `Bundle.module` anywhere, which is what makes these
+      # sources compile unchanged in an app target as well as in the SwiftPM executable.
+      - path: ../../Sources/Parla
+      - path: Assets.xcassets
+      # Folder references, so `<lang>.lproj` lands at the app's resource root where `Localization.swift` finds it
+      # via `Bundle.main.path(forResource:ofType:"lproj")`. Same arrangement as iOS; build_app.sh copies them in.
+      - path: ../../Localization/en.lproj
+        type: folder
+        buildPhase: resources
+      - path: ../../Localization/ru.lproj
+        type: folder
+        buildPhase: resources
+      - path: ../../Localization/uk.lproj
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: ParlaCore
+        product: ParlaCore
+      - package: KeyboardShortcuts
+        product: KeyboardShortcuts
+      - package: opus
+        product: opus
+      - package: ogg
+        product: ogg
+    # App Sandbox — mandatory for the Mac App Store, and the reason this target exists at all. Each entitlement
+    # below is required by a specific feature; nothing is requested "just in case", because every one of them is
+    # something App Review can ask us to justify.
+    entitlements:
+      path: Parla.entitlements
+      properties:
+        # The sandbox itself.
+        com.apple.security.app-sandbox: true
+        # The one-time model download from Hugging Face. Client only — the app never listens.
+        com.apple.security.network.client: true
+        # Files the user drops, opens, or exports to. READ-WRITE rather than read-only for one specific reason:
+        # the folder-watch sidecar writes `<source>.txt` next to the user's file, and it writes ATOMICALLY —
+        # a temp sibling plus a rename — which needs write access to the enclosing directory, not just the file.
+        com.apple.security.files.user-selected.read-write: true
+        # A watched folder and a note's original file must still be reachable after a relaunch. Without this the
+        # security-scoped bookmarks in `Bookmarks.swift` resolve to URLs the app may not open, and both features
+        # come back pointing at files they cannot read — silently.
+        com.apple.security.files.bookmarks.app-scope: true
+        # Dictation.
+        com.apple.security.device.audio-input: true
+    settings:
+      base:
+        # ⚠️ INFOPLIST_FILE, not XcodeGen's `info:` key. `info:` means "GENERATE a plist at this path" and it
+        # silently overwrote the hand-written one — the build then succeeded with a plist holding eight default
+        # keys and none of ours: no URL scheme, no Services entry, no export-compliance flag. Caught by opening
+        # the built bundle rather than by trusting BUILD SUCCEEDED. The iOS target uses INFOPLIST_FILE for the
+        # same reason.
+        INFOPLIST_FILE: Parla-macOS-Info.plist
+        PRODUCT_NAME: Parla
+        PRODUCT_BUNDLE_IDENTIFIER: com.parla.app
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+    postBuildScripts:
+      # MLX ships its Metal shaders as a `default.metallib` inside a resource bundle, and MLX looks for it beside
+      # the executable at runtime — so without this the app builds and links perfectly and then traps the first
+      # time a generative summary is requested. `build_app.sh` does exactly the same copy for the same reason;
+      # this is the one part of that script an Xcode project does not do for free.
+      - name: Embed the MLX metallib beside the executable
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          LIB="$(/usr/bin/find "$BUILT_PRODUCTS_DIR" -name default.metallib -path '*Cmlx*' | /usr/bin/head -1)"
+          if [ -z "$LIB" ]; then
+            echo "error: MLX metallib not found — generative insights would trap at runtime"
+            exit 1
+          fi
+          /bin/cp -f "$LIB" "$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/mlx.metallib"
+          echo "embedded $LIB"
+schemes:
+  Parla:
+    build:
+      targets:
+        Parla: all
+    archive:
+      config: Release

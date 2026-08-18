@@ -89,6 +89,57 @@ jobs:
           fi
           echo "plain build is ungated, as intended"
 
+  # The MAC APP STORE variant, built by Xcode rather than by hand.
+  #
+  # Not redundant with the job above. `build_app.sh` assembles a bundle with a shell script; THIS builds the same
+  # app through the toolchain that Apple's submission pipeline uses — and the difference is not cosmetic. A
+  # SwiftPM build never runs `appintentsmetadataprocessor`, so an invalid App Shortcut phrase went unnoticed for
+  # months and the macOS app shipped with NO Metadata.appintents at all: Shortcuts and Siri could not see a
+  # single intent, while the README said they could. The first Xcode build of this target found it immediately.
+  # That class of defect — real, user-facing, and structurally invisible to `swift build` — is what this job is
+  # for, along with the sandbox entitlements and the MLX metallib that must sit beside the executable.
+  macos-appstore-build:
+    name: macOS 26 · Xcode target (App Store bundle)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the project
+        working-directory: apps/mac
+        run: xcodegen generate
+      - name: Build
+        working-directory: apps/mac
+        run: |
+          xcodebuild build \
+            -project Parla-macOS.xcodeproj \
+            -scheme Parla \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Inspect the bundle it produced
+        working-directory: apps/mac
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Debug/Parla.app"
+          fail() { echo "::error::$1"; exit 1; }
+          # Shortcuts and Siri see nothing at all without this, and its absence is silent.
+          [ -e "$APP/Contents/Resources/Metadata.appintents" ] || fail "no App Intents metadata — Shortcuts would be dead"
+          # MLX looks for its shaders beside the executable; without them the app traps on the first summary.
+          [ -f "$APP/Contents/MacOS/mlx.metallib" ] || fail "the MLX metallib was not embedded"
+          # Apple expects Contents/Frameworks; build_app.sh's Contents/lib layout is not submittable.
+          [ -d "$APP/Contents/Frameworks/opus.framework" ] || fail "opus.framework missing from Contents/Frameworks"
+          [ -d "$APP/Contents/Frameworks/ogg.framework" ] || fail "ogg.framework missing from Contents/Frameworks"
+          for lang in en ru uk; do
+            [ -d "$APP/Contents/Resources/$lang.lproj" ] || fail "$lang.lproj missing — every L() would return its raw key"
+          done
+          # The store build is ALWAYS gated: there is no --store switch here to forget.
+          plutil -extract ParlaStoreBuild raw "$APP/Contents/Info.plist" | grep -qx true \
+            || fail "ParlaStoreBuild is not true — the App Store build would give everything away"
+          plutil -extract ITSAppUsesNonExemptEncryption raw "$APP/Contents/Info.plist" >/dev/null \
+            || fail "no export-compliance key — every upload would stall in Missing Compliance"
+          echo "✅ App Store bundle looks submittable"
+
   ios:
     name: iOS · xcodebuild test (app + extensions)
     # macos-26, not macos-15: the FoundationModels backend is gated on `canImport`, which is FALSE on the

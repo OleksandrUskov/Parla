@@ -62,8 +62,14 @@ struct GetLastTranscriptIntent: AppIntent {
 /// Auto-populates Spotlight + the Shortcuts gallery with spoken/typed phrases.
 struct ParlaShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
+        // An App Shortcut phrase may only interpolate an AppEntity/AppEnum parameter — NOT an IntentFile — so the
+        // file is not in the phrase and Siri asks for it. iOS hit this and fixed it; macOS kept the bad phrase
+        // because a SwiftPM build never runs `appintentsmetadataprocessor` at all, and so never validated it.
+        // The consequence was larger than one phrase: the macOS app shipped with NO Metadata.appintents
+        // whatsoever, which means Shortcuts and Siri could not see a single intent. The Xcode target added for
+        // the Mac App Store runs the processor, and is what finally surfaced it.
         AppShortcut(intent: TranscribeFileIntent(),
-                    phrases: ["Transcribe \(\.$file) with \(.applicationName)"],
+                    phrases: ["Transcribe a file with \(.applicationName)"],
                     shortTitle: "Transcribe File", systemImageName: "waveform")
         AppShortcut(intent: TranscribeLastIntent(),
                     phrases: ["Transcribe last with \(.applicationName)"],

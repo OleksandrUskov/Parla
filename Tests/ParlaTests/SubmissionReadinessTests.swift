@@ -59,4 +59,64 @@ final class SubmissionReadinessTests: ParlaLogicTestCase {
         XCTAssertTrue(iconBlock.contains("icon render failed"), "a failed render must abort the build")
         XCTAssertTrue(iconBlock.contains("AppIcon.icns is empty"), "an empty icns must abort the build")
     }
+
+
+    /// There are now TWO macOS Info.plists: the heredoc `build_app.sh` writes for the direct-download build, and
+    /// the file the Xcode target uses for the App Store build. They must agree on everything a FEATURE depends
+    /// on, because a divergence is a deep link, a Handoff, or a Services menu item that works in one build and
+    /// silently not in the other — the worst kind of difference, since both builds look fine.
+    func testTheTwoMacInfoPlistsAgreeOnEverythingLoadBearing() throws {
+        let script = try code(of: "build_app.sh")
+        let store = try String(contentsOf: repoRoot.appendingPathComponent("apps/mac/Parla-macOS-Info.plist"),
+                               encoding: .utf8)
+        // Values, not just key names: a scheme that differs by one letter is a dead link, not a warning.
+        for value in ["com.parla.app.url",                  // URL type name
+                      "<string>parla</string>",             // the parla:// scheme itself
+                      "com.parla.viewTranscript",           // Handoff activity type
+                      "transcribeFiles",                    // the Services selector
+                      "<string>Parla</string>",             // NSPortName — Services breaks if this differs
+                      "public.app-category.productivity",
+                      "ITSAppUsesNonExemptEncryption",
+                      "NSMicrophoneUsageDescription"] {
+            XCTAssertTrue(script.contains(value), "build_app.sh's plist no longer carries \(value)")
+            XCTAssertTrue(store.contains(value), "the App Store plist no longer carries \(value)")
+        }
+        // …and the store plist is ALWAYS the gated build, with no --store switch to forget.
+        XCTAssertTrue(store.contains("<key>ParlaStoreBuild</key><true/>"),
+                      "the Mac App Store build must be gated unconditionally — there is no ungated variant of it")
+    }
+
+    /// Every sandbox entitlement is something App Review can ask us to justify, so the set is pinned: adding one
+    /// "just in case" should be a deliberate act with a reason, not a quiet edit.
+    func testTheSandboxAsksForExactlyWhatTheFeaturesNeed() throws {
+        let spec = try code(of: "apps/mac/project.yml")
+        let required = ["com.apple.security.app-sandbox",
+                        "com.apple.security.network.client",              // the one-time model download
+                        "com.apple.security.files.user-selected.read-write",  // the folder-watch sidecar
+                        "com.apple.security.files.bookmarks.app-scope",   // watched folder + re-transcribe
+                        "com.apple.security.device.audio-input"]          // dictation
+        for entitlement in required {
+            XCTAssertTrue(spec.contains(entitlement), "the macOS target no longer requests \(entitlement)")
+        }
+        let declared = spec.components(separatedBy: "com.apple.security.").count - 1
+        XCTAssertEqual(declared, required.count,
+                       "the entitlement set changed — each one is a question at review, so justify it here")
+        for never in ["temporary-exception", "cs.allow-unsigned-executable-memory", "cs.disable-library-validation",
+                      "network.server", "device.camera", "personal-information"] {
+            XCTAssertFalse(spec.contains(never), "\(never) invites a review question we have no answer for")
+        }
+    }
+
+    /// An App Shortcut phrase may only interpolate an AppEntity or AppEnum — never an IntentFile. macOS shipped
+    /// a phrase that did, and because a SwiftPM build never runs `appintentsmetadataprocessor`, nothing caught
+    /// it: the app went out with NO Metadata.appintents at all, so Shortcuts and Siri could not see a single
+    /// intent. iOS had already hit and fixed this. The Xcode target is what finally surfaced it on macOS.
+    func testNoAppShortcutPhraseInterpolatesAFileParameter() throws {
+        for path in ["Sources/Parla/ParlaIntents.swift", "apps/ios/Sources/ParlaIntents.swift"] {
+            let text = try code(of: path)
+            XCTAssertFalse(text.contains("$file)"),
+                           "\(path) interpolates a file into a spoken phrase — the metadata export halts, and "
+                           + "the app then ships with no App Intents metadata whatsoever")
+        }
+    }
 }
