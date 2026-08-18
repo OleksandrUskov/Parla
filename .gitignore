@@ -9,6 +9,7 @@ Resources/AppIcon.icns
 apps/ios/*.xcodeproj
 apps/ios/*.entitlements
 apps/mac/*.xcodeproj
+apps/mac/build/
 apps/mac/*.entitlements
 
 # iOS test fixtures — real Telegram voice notes; voice NEVER in git. Local-only; the decode test XCTSkips without them.

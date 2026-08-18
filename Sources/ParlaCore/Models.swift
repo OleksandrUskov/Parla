@@ -151,18 +151,35 @@ public enum SourceResolution: Equatable {
 }
 
 extension TranscriptItem {
-    /// Tries to find the source file: first by absolute path, then by bookmark.
-    /// The plain path stays the primary mechanism; the bookmark is the fallback locator, and the one that keeps
-    /// working when a sandboxed build can no longer open a bare path it was not granted.
-    public func resolveSource(fileManager fm: FileManager = .default) -> SourceResolution {
-        if let p = sourcePath, fm.fileExists(atPath: p) {
-            return .found(URL(fileURLWithPath: p), scoped: false)
-        }
-        if let data = sourceBookmark, let (url, scoped) = Bookmarks.resolve(data) {
+    /// Tries to find the source file, by bookmark or by absolute path — **and the order depends on the sandbox**.
+    ///
+    /// 🔴 The comment here used to say the bookmark was "the one that keeps working when a sandboxed build can
+    /// no longer open a bare path", while the code checked the path FIRST and returned `scoped: false` whenever
+    /// it existed — which made the bookmark branch unreachable in exactly the case it was written for. The
+    /// reason it fails silently is that the sandbox profile allows `file-read-metadata` for the whole home
+    /// directory: `fileExists` is a stat and SUCCEEDS on a file the process may not `open`. So a store build
+    /// would show «re-transcribe» enabled, take the bare path, start no scope, and fail at the decode.
+    ///
+    /// Inside a container the bookmark therefore goes first — it is the only branch that carries a grant.
+    /// Outside one the path goes first, because it is a stat instead of a bookmark resolution plus a
+    /// start/stop pair, and this runs from a SwiftUI `.help` that re-evaluates on render. Both orders find the
+    /// same file; only the grant differs. `sandboxed` is a parameter so the order itself is testable.
+    public func resolveSource(fileManager fm: FileManager = .default,
+                              sandboxed: Bool = Sandbox.isActive) -> SourceResolution {
+        func byBookmark() -> SourceResolution? {
+            guard let data = sourceBookmark, let (url, scoped) = Bookmarks.resolve(data) else { return nil }
             if fm.fileExists(atPath: url.path) { return .found(url, scoped: scoped) }
             if scoped { url.stopAccessingSecurityScopedResource() }   // resolved but useless — don't leak the grant
+            return nil
         }
-        return .missing
+        func byPath() -> SourceResolution? {
+            guard let p = sourcePath, fm.fileExists(atPath: p) else { return nil }
+            return .found(URL(fileURLWithPath: p), scoped: false)
+        }
+        if sandboxed {
+            return byBookmark() ?? byPath() ?? .missing
+        }
+        return byPath() ?? byBookmark() ?? .missing
     }
 
     /// Whether the source is available right now (for enabling/disabling the «re-transcribe» item).
