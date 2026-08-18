@@ -266,6 +266,7 @@
 "export.content.transcript"    = "Транскрипт";
 "export.content.withInsights"  = "+ сводка";
 "export.content.insightsOnly"  = "Только сводка";
+"export.format.txt"            = "Обычный текст (.txt)";
 "export.subtitles"             = "Субтитры";
 "export.title" = "# Parla — история расшифровок\n\n";
 "unit.gb.fmt"  = "%.1f ГБ";

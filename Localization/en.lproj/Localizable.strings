@@ -266,6 +266,7 @@
 "export.content.transcript"    = "Transcript";
 "export.content.withInsights"  = "+ summary";
 "export.content.insightsOnly"  = "Summary only";
+"export.format.txt"            = "Plain text (.txt)";
 "export.subtitles"             = "Subtitles";
 "export.title" = "# Parla — transcript history\n\n";
 "unit.gb.fmt"  = "%.1f GB";

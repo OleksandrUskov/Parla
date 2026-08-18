@@ -17,9 +17,15 @@ public enum ExportFormat: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The label in the export menu on both platforms.
+    ///
+    /// Only `.txt` is localized, and deliberately so: Markdown, SubRip, WebVTT and JSON are the formats' own
+    /// names and are written the same way in Russian and Ukrainian, so keys for them would be three identical
+    /// strings apiece and a parity test guarding nothing. "Plain text" is the one entry that is a phrase — and
+    /// it became visible the day a fresh install started opening in the system's language.
     public var displayName: String {
         switch self {
-        case .txt:      return "Plain text (.txt)"
+        case .txt:      return L("export.format.txt")
         case .markdown: return "Markdown (.md)"
         case .srt:      return "SubRip (.srt)"
         case .vtt:      return "WebVTT (.vtt)"

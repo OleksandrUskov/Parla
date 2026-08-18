@@ -7,6 +7,31 @@ import AppKit
 
 /// Getting text out: TXT/MD/SRT/VTT/JSON, insights in exports, read-aloud, and WhisperKit token cleanup.
 final class ExportFormatTests: ParlaLogicTestCase {
+    // MARK: Export menu labels
+
+    /// The export menu is the one place a format name reaches the user, and it became worth localizing the day
+    /// a fresh install started opening in the system's language rather than always English.
+    ///
+    /// The second half is the deliberate part, not an oversight: Markdown, SubRip, WebVTT and JSON are the
+    /// formats' own names and are written identically in Russian and Ukrainian. Keys for them would be three
+    /// identical strings each, guarded by a parity test that could never fail meaningfully.
+    func testOnlyThePlainTextLabelIsALocalizablePhrase() {
+        activateLocalization("ru")
+        XCTAssertEqual(ExportFormat.txt.displayName, "Обычный текст (.txt)")
+        activateLocalization("uk")
+        XCTAssertEqual(ExportFormat.txt.displayName, "Звичайний текст (.txt)")
+        activateLocalization("en")
+        XCTAssertEqual(ExportFormat.txt.displayName, "Plain text (.txt)")
+
+        for lang in ["en", "ru", "uk"] {
+            activateLocalization(lang)
+            XCTAssertEqual(ExportFormat.markdown.displayName, "Markdown (.md)", "format names do not translate")
+            XCTAssertEqual(ExportFormat.srt.displayName, "SubRip (.srt)")
+            XCTAssertEqual(ExportFormat.vtt.displayName, "WebVTT (.vtt)")
+            XCTAssertEqual(ExportFormat.json.displayName, "JSON (.json)")
+        }
+    }
+
     // MARK: History — export
 
     func testExportText() {
