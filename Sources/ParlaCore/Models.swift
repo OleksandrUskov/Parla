@@ -357,6 +357,13 @@ public enum HistoryStore {
     private static func migrateLegacyIfNeeded() {
         // "Murmur" (Parla's former name) was a macOS-only app → iOS never had that Application Support dir.
         // Under the iOS sandbox this migration is at best dead FS churn on every launch, so skip it there.
+        //
+        // It is inert in the MAC APP STORE build too, and deliberately so: `legacyBase` resolves through
+        // `.applicationSupportDirectory`, which inside a container is the container — where no Murmur
+        // directory has ever existed. Nothing is lost by that. Murmur data reaches a store build the same way
+        // everything else does: the direct-download build performs this migration and then `SandboxHandoff`
+        // stages the RESULT. Only someone who skipped every Parla release and installed the store build first
+        // would be left behind, and Murmur was never released publicly.
         #if os(macOS)
         let parla = fileURL.deletingLastPathComponent()
         migrate(target: fileURL, legacy: legacyBase.appendingPathComponent("history.json"))

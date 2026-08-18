@@ -25,8 +25,17 @@ extension AppModel {
         HistoryStore.save(history)
     }
 
-    /// Audio cache limit. Hidden override for archivists (no picker in the UI):
-    /// `defaults write <bundle-id> PARLA_AUDIO_CAP_MB -int N` (0 — unlimited). Defaults to 500 MB.
+    /// Audio cache limit. Hidden override for archivists (no picker in the UI). Defaults to 500 MB; 0 is unlimited.
+    ///
+    ///     defaults write <bundle-id> PARLA_AUDIO_CAP_MB -int N
+    ///
+    /// ⚠️ That form does NOT reach a SANDBOXED build (the Mac App Store one), and it fails silently — the key
+    /// simply reads as absent and the default stands. Measured: with a container in the shape our handoff
+    /// leaves it, a write to the plain domain is invisible to the contained process, while a write addressed
+    /// at the container's own plist arrives. Under the sandbox, name the file:
+    ///
+    ///     defaults write ~/Library/Containers/<bundle-id>/Data/Library/Preferences/<bundle-id>.plist \
+    ///         PARLA_AUDIO_CAP_MB -int N
     private var audioCacheCapBytes: Int64 {
         let mb = UserDefaults.standard.object(forKey: "PARLA_AUDIO_CAP_MB") as? Int ?? 500
         return Int64(max(0, mb)) * 1_048_576

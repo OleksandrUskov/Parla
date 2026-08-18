@@ -17,6 +17,14 @@ public struct TranscriptionJob: Identifiable {
 extension AppModel {
     /// A dropped batch. Instead of REJECTING a drop while busy (old behavior), we QUEUE it and pump the
     /// lane — so stacked drops run one after another. Shares the isBusy lane with folder-watch.
+    ///
+    /// No security-scope bracketing here, and that is a decision rather than an omission. These URLs come from
+    /// a drag or an open panel, so under the sandbox the grant is issued by the system when the URL is handed
+    /// over and lasts as long as the process — unlike a URL resolved from a BOOKMARK, which must be started and
+    /// stopped, and which `Bookmarks.resolve` plus its callers already balance. Bracketing a panel URL here
+    /// would pair a `stop` with a `start` that granted nothing, on a job that deliberately outlives the drop.
+    /// 🔴 Reasoned, not observed: a real drag onto a signed sandboxed build is on the owner's verify list,
+    /// because it is the one part of this that no headless test can exercise.
     public func handleDrop(urls: [URL]) {
         enqueueManual(urls)
     }
