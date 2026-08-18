@@ -304,7 +304,7 @@ extension AppModel {
         // it just no longer runs for the ordinary case, which is what removes the double decode.
         let dur = await Task.detached(priority: .userInitiated) { AudioDuration.seconds(ofFileAt: decodePath) }.value
         if let dur, AudioChunker.shouldChunk(durationSec: dur, chunkingAvailable: decoder.isChunkingAvailable) {
-            return try await transcribeChunked(source: URL(fileURLWithPath: decodePath),
+            return try await transcribeChunked(source: URL(fileURLWithPath: decodePath), identity: url,
                                                model: model, audioDuration: dur)
         }
 
@@ -321,7 +321,12 @@ extension AppModel {
     /// BatchProgress bar), then stitch the per-chunk timecodes into one global timeline. One chunk is
     /// in flight at a time → memory stays bounded regardless of total length. A failed chunk is recorded
     /// as a placeholder so the rest of the transcript survives.
-    private func transcribeChunked(source: URL, model: String, audioDuration: Double) async throws -> EngineResult {
+    /// `identity` is the file the USER supplied. It is separate from `source` because the unknown-duration
+    /// fallback chunks a decoded temp WAV whose name is regenerated every run — keying the resume record on
+    /// that meant a 40-minute job could never resume, and left a record pointing at a path that no longer
+    /// existed. Defaults to `source` for the ordinary path, where they are the same file.
+    private func transcribeChunked(source: URL, identity: URL? = nil, model: String,
+                                   audioDuration: Double) async throws -> EngineResult {
         let decoder = self.decoder
         let control = DecodeControl()
         decodeControl = control
@@ -365,15 +370,15 @@ extension AppModel {
         // is inference, and that is what gets skipped. A record that does not describe THIS job (different
         // source, model, language, translate flag, chunk length or count) is discarded rather than trusted:
         // its chunks would be answers to a different question. See `ChunkedJobProgress`.
-        let fingerprint = SourceFingerprint(of: source)
-        var progress = ChunkProgressStore.load().flatMap {
-            $0.canResume(sourcePath: source.path, model: model, requestedLanguage: lang,
+        let fingerprint = SourceFingerprint(of: identity ?? source)
+        var progress = ChunkProgressStore.load(for: fingerprint).flatMap {
+            $0.canResume(fingerprint: fingerprint, model: model, requestedLanguage: lang,
                          translate: translateToEnglish, chunkLengthSec: AudioChunker.chunkLengthSec,
-                         totalChunks: total, fingerprint: fingerprint) ? $0 : nil
-        } ?? ChunkedJobProgress(sourcePath: source.path, model: model, requestedLanguage: lang,
-                                translate: translateToEnglish, chunkLengthSec: AudioChunker.chunkLengthSec,
-                                totalChunks: total, audioDuration: audioDuration,
-                                sourceSize: fingerprint?.size, sourceModified: fingerprint?.modified)
+                         totalChunks: total) ? $0 : nil
+        } ?? ChunkedJobProgress(fingerprint: fingerprint, sourcePath: (identity ?? source).path, model: model,
+                                requestedLanguage: lang, translate: translateToEnglish,
+                                chunkLengthSec: AudioChunker.chunkLengthSec,
+                                totalChunks: total, audioDuration: audioDuration)
 
         // What the model HEARD, asked ONCE — on the first chunk. Before this, the wrong-language nudge was dead
         // for every chunked file (the hand-built EngineResult below simply omitted `heard`), which meant it never
@@ -418,9 +423,11 @@ extension AppModel {
             ChunkProgressStore.save(progress)
             try? FileManager.default.removeItem(at: chunk)   // free each chunk WAV as we go
         }
-        // The record has served its purpose the moment the result is in hand — including on cancel, where the
-        // partial is discarded upstream and keeping a half-record would silently resume a job the user stopped.
-        ChunkProgressStore.clear()
+        // Only THIS job's record, and only when the job actually finished. Cancelling now KEEPS it: `canResume`
+        // re-checks the source's identity and every setting, so the sole way it is ever reused is the user
+        // re-dropping the same file with the same settings — where resuming is a gift, not a surprise. Wiping
+        // it on cancel threw away up to 40 minutes of completed inference for someone who only pressed stop.
+        if !Task.isCancelled { ChunkProgressStore.remove(fingerprint) }
 
         let stitched = AudioChunker.stitch(chunkSegments: progress.done.map(\.segments),
                                            chunkLength: AudioChunker.chunkLengthSec)

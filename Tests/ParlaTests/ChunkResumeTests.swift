@@ -55,7 +55,9 @@ final class ChunkResumeTests: ParlaTestCase {
                         translate: Bool, detectHeardLanguage: Bool) async throws -> EngineResult {
             let label = String(URL(fileURLWithPath: wavPath).lastPathComponent.prefix(7))   // "chunk-N"
             askedFor.append(label)
-            persistedAtCallTime.append(await MainActor.run { ChunkProgressStore.load()?.done.count ?? 0 })
+            // Records are keyed by content now, and this double has no idea which file it is decoding — but
+            // only one job runs at a time here, so the most recently written record is this job's.
+            persistedAtCallTime.append(await MainActor.run { ChunkProgressStore.loadAll().last?.done.count ?? 0 })
             return EngineResult(text: "T:\(label)", language: "ru",
                                 segments: [Segment(start: 0, end: 1, text: "T:\(label)")],
                                 duration: 1,
@@ -73,7 +75,7 @@ final class ChunkResumeTests: ParlaTestCase {
 
     /// A source the pipeline must route through the decoder (a `.wav` would go straight to the engine).
     /// A stable stand-in for a real file's identity, so the pure truth table needs no filesystem.
-    static let fixedFingerprint = SourceFingerprint(size: 1234, modified: 1_700_000_000)
+    static let fixedFingerprint = SourceFingerprint(name: "a.ogg", size: 1234, modified: 1_700_000_000)
 
     private static func source() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("resume-src-\(UUID().uuidString).ogg")
@@ -121,7 +123,7 @@ final class ChunkResumeTests: ParlaTestCase {
         await run(m, source: src)
 
         XCTAssertEqual(m.history.count, 1, "the note was written")
-        XCTAssertNil(ChunkProgressStore.load(), "a finished job must not leave a resume record behind")
+        XCTAssertNil(ChunkProgressStore.load(for: SourceFingerprint(of: src)), "a finished job must not leave a resume record behind")
     }
 
     // MARK: The resume half
@@ -136,9 +138,9 @@ final class ChunkResumeTests: ParlaTestCase {
 
         // As if the app had been killed after chunk 1 of 4.
         ChunkProgressStore.save(ChunkedJobProgress(
-            sourcePath: src.path, model: m.selectedModel, requestedLanguage: "ru", translate: false,
+            fingerprint: SourceFingerprint(of: src), sourcePath: src.path,
+            model: m.selectedModel, requestedLanguage: "ru", translate: false,
             chunkLengthSec: AudioChunker.chunkLengthSec, totalChunks: 4, audioDuration: 45 * 60,
-            sourceSize: SourceFingerprint(of: src)?.size, sourceModified: SourceFingerprint(of: src)?.modified,
             heardLanguage: "ru", heardConfidence: 0.9,
             done: [.init(segments: [Segment(start: 0, end: 1, text: "OLD:0")], text: "OLD:0", language: "ru"),
                    .init(segments: [Segment(start: 0, end: 1, text: "OLD:1")], text: "OLD:1", language: "ru")]))
@@ -167,9 +169,9 @@ final class ChunkResumeTests: ParlaTestCase {
         let m = makeModel(chunks: 3, engine: engine)      // pinned "ru"
 
         ChunkProgressStore.save(ChunkedJobProgress(
-            sourcePath: src.path, model: m.selectedModel, requestedLanguage: "ru", translate: false,
+            fingerprint: SourceFingerprint(of: src), sourcePath: src.path,
+            model: m.selectedModel, requestedLanguage: "ru", translate: false,
             chunkLengthSec: AudioChunker.chunkLengthSec, totalChunks: 3, audioDuration: 45 * 60,
-            sourceSize: SourceFingerprint(of: src)?.size, sourceModified: SourceFingerprint(of: src)?.modified,
             heardLanguage: "en", heardConfidence: 0.95,   // ← chunk 0 heard ENGLISH, and is not re-run
             done: [.init(segments: [], text: "OLD:0", language: "en")]))
 
@@ -190,7 +192,10 @@ final class ChunkResumeTests: ParlaTestCase {
         let m = makeModel(chunks: 3, engine: engine)
 
         ChunkProgressStore.save(ChunkedJobProgress(
-            sourcePath: "/somewhere/else.ogg",            // ← a different file entirely
+            // A different file entirely — identified by CONTENT now, so a coincidental path match is not the
+            // question; a record whose fingerprint is someone else's must simply never be found.
+            fingerprint: SourceFingerprint(name: "else.ogg", size: 42, modified: 1),
+            sourcePath: "/somewhere/else.ogg",
             model: m.selectedModel, requestedLanguage: "ru", translate: false,
             chunkLengthSec: AudioChunker.chunkLengthSec, totalChunks: 3, audioDuration: 45 * 60,
             done: [.init(segments: [], text: "FOREIGN", language: "ru")]))
@@ -206,19 +211,19 @@ final class ChunkResumeTests: ParlaTestCase {
     /// Each field in `canResume` changes what a chunk's audio or its transcription would be, so each one alone
     /// must be enough to refuse the record.
     func testCanResumeRefusesAnythingThatWouldChangeTheChunks() {
-        let base = ChunkedJobProgress(sourcePath: "/a.ogg", model: "m", requestedLanguage: "ru", translate: false,
+        let base = ChunkedJobProgress(fingerprint: Self.fixedFingerprint, sourcePath: "/a.ogg", model: "m",
+                                      requestedLanguage: "ru", translate: false,
                                       chunkLengthSec: 120, totalChunks: 4, audioDuration: 600,
-                                      sourceSize: Self.fixedFingerprint.size,
-                                      sourceModified: Self.fixedFingerprint.modified,
                                       done: [.init(segments: [], text: "x", language: "ru")])
-        func ok(_ p: ChunkedJobProgress, source: String = "/a.ogg", model: String = "m",
-                lang: String? = "ru", translate: Bool = false, len: Double = 120, total: Int = 4,
+        func ok(_ p: ChunkedJobProgress, model: String = "m", lang: String? = "ru", translate: Bool = false,
+                len: Double = 120, total: Int = 4,
                 fingerprint: SourceFingerprint? = Self.fixedFingerprint) -> Bool {
-            p.canResume(sourcePath: source, model: model, requestedLanguage: lang,
-                        translate: translate, chunkLengthSec: len, totalChunks: total, fingerprint: fingerprint)
+            p.canResume(fingerprint: fingerprint, model: model, requestedLanguage: lang,
+                        translate: translate, chunkLengthSec: len, totalChunks: total)
         }
         XCTAssertTrue(ok(base))
-        XCTAssertFalse(ok(base, source: "/b.ogg"),  "a different file")
+        XCTAssertFalse(ok(base, fingerprint: SourceFingerprint(name: "b.ogg", size: 1234, modified: 1_700_000_000)),
+                       "a different file — the NAME is part of identity, not just the bytes' size and date")
         XCTAssertFalse(ok(base, model: "other"),    "a different model transcribes the same audio differently")
         XCTAssertFalse(ok(base, lang: "uk"),        "a different language pin")
         XCTAssertFalse(ok(base, lang: nil),         "Auto is not the same request as a pin")
@@ -234,12 +239,12 @@ final class ChunkResumeTests: ParlaTestCase {
 
         // Identity, not just the path. The chunk count is a two-minute-wide bucket, so a re-recording under the
         // same filename matched every other field and spliced the OLD audio's chunks into the NEW transcript.
-        XCTAssertFalse(ok(base, fingerprint: SourceFingerprint(size: 999, modified: Self.fixedFingerprint.modified)),
+        XCTAssertFalse(ok(base, fingerprint: SourceFingerprint(name: "a.ogg", size: 999, modified: Self.fixedFingerprint.modified)),
                        "a file of a different SIZE is a different recording")
-        XCTAssertFalse(ok(base, fingerprint: SourceFingerprint(size: Self.fixedFingerprint.size, modified: 42)),
+        XCTAssertFalse(ok(base, fingerprint: SourceFingerprint(name: "a.ogg", size: Self.fixedFingerprint.size, modified: 42)),
                        "a file modified since the record was written is a different recording")
         XCTAssertFalse(ok(base, fingerprint: nil), "an unreadable source cannot be proven to be the same one")
-        var noIdentity = base; noIdentity.sourceSize = nil; noIdentity.sourceModified = nil
+        var noIdentity = base; noIdentity.fingerprint = nil
         XCTAssertFalse(ok(noIdentity), "a record from before identity was stored must not be trusted")
     }
 
@@ -248,17 +253,21 @@ final class ChunkResumeTests: ParlaTestCase {
     /// record could splice the wrong audio into a transcript.
     func testACorruptRecordIsIgnoredRatherThanTrusted() throws {
         try Data("{ this is not json".utf8).write(to: ChunkProgressStore.fileURL)
-        XCTAssertNil(ChunkProgressStore.load())
+        XCTAssertNil(ChunkProgressStore.load(for: Self.fixedFingerprint))
 
-        let progress = ChunkedJobProgress(sourcePath: "/a.ogg", model: "m", requestedLanguage: nil,
-                                          translate: false, chunkLengthSec: 120, totalChunks: 2,
-                                          audioDuration: 300,
+        let progress = ChunkedJobProgress(fingerprint: Self.fixedFingerprint, sourcePath: "/a.ogg", model: "m",
+                                          requestedLanguage: nil, translate: false, chunkLengthSec: 120,
+                                          totalChunks: 2, audioDuration: 300,
                                           done: [.init(segments: [Segment(start: 0, end: 1, text: "hi")],
                                                        text: "hi", language: "ru")])
         ChunkProgressStore.save(progress)
-        XCTAssertEqual(ChunkProgressStore.load(), progress, "a good record round-trips exactly")
+        // The stored copy carries a write timestamp the caller did not supply, so compare the payload.
+        let back = ChunkProgressStore.load(for: Self.fixedFingerprint)
+        XCTAssertEqual(back?.done, progress.done, "a good record round-trips exactly")
+        XCTAssertEqual(back?.totalChunks, progress.totalChunks)
+        XCTAssertNotNil(back?.updatedAt, "every stored record is stamped, or the staleness sweep is blind")
         ChunkProgressStore.clear()
-        XCTAssertNil(ChunkProgressStore.load())
+        XCTAssertNil(ChunkProgressStore.load(for: Self.fixedFingerprint))
     }
 
     /// A failed chunk must be RETRIED on resume, not frozen into the transcript.
@@ -272,12 +281,10 @@ final class ChunkResumeTests: ParlaTestCase {
         defer { try? FileManager.default.removeItem(at: src) }
         let engine = RecordingEngine()
         let m = makeModel(chunks: 3, engine: engine)
-        let print = try XCTUnwrap(SourceFingerprint(of: src))
-
         ChunkProgressStore.save(ChunkedJobProgress(
-            sourcePath: src.path, model: m.selectedModel, requestedLanguage: "ru", translate: false,
+            fingerprint: SourceFingerprint(of: src), sourcePath: src.path,
+            model: m.selectedModel, requestedLanguage: "ru", translate: false,
             chunkLengthSec: AudioChunker.chunkLengthSec, totalChunks: 3, audioDuration: 45 * 60,
-            sourceSize: print.size, sourceModified: print.modified,
             done: [.init(segments: [], text: "GOOD:0", language: "ru"),
                    .init(segments: [], text: "(chunk 2 failed)", language: "", failed: true)]))
 
@@ -295,30 +302,139 @@ final class ChunkResumeTests: ParlaTestCase {
     /// transcripts are permanently deleted — has to reach it. It is not a note, so nothing did.
     @MainActor func testClearingHistoryAlsoDestroysTheResumeRecordsPlaintext() throws {
         ChunkProgressStore.save(ChunkedJobProgress(
-            sourcePath: "/a.ogg", model: "m", requestedLanguage: nil, translate: false,
+            fingerprint: Self.fixedFingerprint, sourcePath: "/a.ogg", model: "m",
+            requestedLanguage: nil, translate: false,
             chunkLengthSec: 120, totalChunks: 4, audioDuration: 600,
             done: [.init(segments: [], text: "half an hour of the user's speech", language: "ru")]))
-        XCTAssertNotNil(ChunkProgressStore.load())
+        XCTAssertNotNil(ChunkProgressStore.load(for: Self.fixedFingerprint))
 
         AppModel(engine: FakeEngine()).clearHistory()
 
-        XCTAssertNil(ChunkProgressStore.load(),
+        XCTAssertNil(ChunkProgressStore.load(for: Self.fixedFingerprint),
                      "a user who cleared their history still had minutes of transcribed speech on disk")
     }
 
     /// …and a record nobody came back for is dropped after a grace period rather than kept indefinitely.
     /// The grace matters: unreferenced is not unwanted, which is the same reason the import sweep waits.
     func testAnAbandonedRecordIsPrunedOnlyOnceItIsOld() throws {
-        let progress = ChunkedJobProgress(sourcePath: "/a.ogg", model: "m", requestedLanguage: nil,
-                                          translate: false, chunkLengthSec: 120, totalChunks: 4,
-                                          audioDuration: 600,
+        let progress = ChunkedJobProgress(fingerprint: Self.fixedFingerprint, sourcePath: "/a.ogg", model: "m",
+                                          requestedLanguage: nil, translate: false, chunkLengthSec: 120,
+                                          totalChunks: 4, audioDuration: 600,
                                           done: [.init(segments: [], text: "speech", language: "ru")])
         ChunkProgressStore.save(progress)
 
         ChunkProgressStore.pruneIfStale(olderThan: 604_800, now: Date())
-        XCTAssertNotNil(ChunkProgressStore.load(), "a fresh record is still resumable and must be kept")
+        XCTAssertNotNil(ChunkProgressStore.load(for: Self.fixedFingerprint), "a fresh record is still resumable and must be kept")
 
         ChunkProgressStore.pruneIfStale(olderThan: 604_800, now: Date().addingTimeInterval(700_000))
-        XCTAssertNil(ChunkProgressStore.load(), "…but not forever")
+        XCTAssertNil(ChunkProgressStore.load(for: Self.fixedFingerprint), "…but not forever")
+    }
+
+
+    // MARK: Identity is the CONTENT, not the path
+
+    /// THE iOS fix. Every share or picker import copies the file to `imports/<fresh UUID>/<name>`, so after a
+    /// jetsam the user's only way back — re-share the same recording — produced a path that had never been seen
+    /// before. Keyed on the path, resume never once fired on the platform the whole feature was built for.
+    ///
+    /// The copy is what makes this work, and it was measured rather than assumed: `FileManager.copyItem`
+    /// preserves size and modification date exactly, and repeatedly, so the same recording imported twice has
+    /// the same fingerprint under two different paths.
+    @MainActor func testTheSameRecordingImportedAgainUnderANewPathStillResumes() async throws {
+        let first = try Self.source()
+        defer { try? FileManager.default.removeItem(at: first) }
+        // A second import of the SAME file: a fresh container directory, the original name preserved.
+        let container = FileManager.default.temporaryDirectory
+            .appendingPathComponent("imports/\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        let second = container.appendingPathComponent(first.lastPathComponent)
+        try FileManager.default.copyItem(at: first, to: second)
+        defer { try? FileManager.default.removeItem(at: container) }
+
+        XCTAssertNotEqual(first.path, second.path, "precondition: a genuinely different path")
+        XCTAssertEqual(SourceFingerprint(of: first), SourceFingerprint(of: second),
+                       "the container copy must carry the same identity, or nothing below can work")
+
+        let engine = RecordingEngine()
+        let m = makeModel(chunks: 4, engine: engine)
+        ChunkProgressStore.save(ChunkedJobProgress(
+            fingerprint: SourceFingerprint(of: first), sourcePath: first.path,
+            model: m.selectedModel, requestedLanguage: "ru", translate: false,
+            chunkLengthSec: AudioChunker.chunkLengthSec, totalChunks: 4, audioDuration: 45 * 60,
+            done: [.init(segments: [], text: "DONE:0", language: "ru"),
+                   .init(segments: [], text: "DONE:1", language: "ru")]))
+
+        await run(m, source: second)   // …the re-import, at its brand-new path
+
+        XCTAssertEqual(engine.askedFor, ["chunk-2", "chunk-3"],
+                       "the first two chunks were already done; a re-import must not re-infer them")
+        XCTAssertTrue(try XCTUnwrap(m.history.first?.text).contains("DONE:0"))
+    }
+
+    /// …while a file that merely SHARES a name is not the same file. Two takes of the same recording differ in
+    /// size, and the chunk count cannot tell them apart: at 120 s it is a two-minute-wide bucket, so 38:10 and
+    /// 39:50 are both twenty chunks. Keyed on the path alone, the old audio's chunks were stitched into the new
+    /// note with plausible timecodes and no error.
+    @MainActor func testARerecordingUnderTheSameNameDoesNotInheritTheOldChunks() async throws {
+        let src = try Self.source()
+        defer { try? FileManager.default.removeItem(at: src) }
+        let engine = RecordingEngine()
+        let m = makeModel(chunks: 3, engine: engine)
+
+        var stale = SourceFingerprint(of: src)!
+        stale = SourceFingerprint(name: stale.name, size: stale.size + 4096, modified: stale.modified)
+        ChunkProgressStore.save(ChunkedJobProgress(
+            fingerprint: stale, sourcePath: src.path,      // same path, different bytes
+            model: m.selectedModel, requestedLanguage: "ru", translate: false,
+            chunkLengthSec: AudioChunker.chunkLengthSec, totalChunks: 3, audioDuration: 45 * 60,
+            done: [.init(segments: [], text: "OLD TAKE", language: "ru")]))
+
+        await run(m, source: src)
+
+        XCTAssertEqual(engine.askedFor, ["chunk-0", "chunk-1", "chunk-2"], "a different recording starts over")
+        XCTAssertFalse(try XCTUnwrap(m.history.first?.text).contains("OLD TAKE"),
+                       "the previous take's transcript must never appear in this one")
+    }
+
+    // MARK: One slot was not enough
+
+    /// A single record meant any other long job destroyed a live one: a 40-minute job killed at 90%, then one
+    /// unrelated long file, and the first silently restarted from chunk 0 — 36 minutes of inference re-run with
+    /// nothing said. The pipeline transcribes one file at a time, so this was never about concurrency; a resume
+    /// record is a cross-launch artifact and outlives the run that made it.
+    @MainActor func testASecondLongJobDoesNotDestroyTheFirstsProgress() async throws {
+        let a = try Self.source(), b = try Self.source()
+        defer { try? FileManager.default.removeItem(at: a); try? FileManager.default.removeItem(at: b) }
+        let m = makeModel(chunks: 3, engine: RecordingEngine())
+        let printA = try XCTUnwrap(SourceFingerprint(of: a))
+
+        ChunkProgressStore.save(ChunkedJobProgress(
+            fingerprint: printA, sourcePath: a.path, model: m.selectedModel, requestedLanguage: "ru",
+            translate: false, chunkLengthSec: AudioChunker.chunkLengthSec, totalChunks: 3,
+            audioDuration: 45 * 60, done: [.init(segments: [], text: "A:0", language: "ru")]))
+
+        await run(m, source: b)   // an entirely different long file, run to completion
+
+        let survivor = ChunkProgressStore.load(for: printA)
+        XCTAssertEqual(survivor?.done.first?.text, "A:0",
+                       "finishing another job must not cost the first one its completed chunks")
+        XCTAssertNil(ChunkProgressStore.load(for: SourceFingerprint(of: b)),
+                     "…while the job that FINISHED leaves nothing behind")
+    }
+
+    /// Bounded, or the residue grows without limit — and this file holds the text of every completed chunk.
+    /// Eviction is least-recently-written, so the record you are most likely to come back to is the last to go.
+    func testTheStoreKeepsOnlyTheMostRecentlyTouchedRecords() {
+        func record(_ i: Int) -> ChunkedJobProgress {
+            ChunkedJobProgress(fingerprint: SourceFingerprint(name: "f\(i).ogg", size: Int64(i), modified: 1),
+                               sourcePath: "/f\(i).ogg", model: "m", requestedLanguage: nil, translate: false,
+                               chunkLengthSec: 120, totalChunks: 4, audioDuration: 600,
+                               done: [.init(segments: [], text: "t\(i)", language: "ru")])
+        }
+        for i in 0..<(ChunkProgressStore.maxRecords + 2) { ChunkProgressStore.save(record(i)) }
+
+        XCTAssertEqual(ChunkProgressStore.loadAll().count, ChunkProgressStore.maxRecords)
+        XCTAssertNil(ChunkProgressStore.load(for: record(0).fingerprint), "the oldest is evicted first")
+        XCTAssertNotNil(ChunkProgressStore.load(for: record(ChunkProgressStore.maxRecords + 1).fingerprint))
     }
 }
