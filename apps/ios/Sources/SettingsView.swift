@@ -78,9 +78,11 @@ struct SettingsView: View {
                 }
 
                 Section(L("settings.section.dictation")) {
-                    Picker(L("settings.dictation.mode"), selection: $model.dictationMode) {
-                        ForEach(DictationMode.allCases) { mode in Text(mode.label).tag(mode) }
-                    }
+                    // No trigger-mode picker here, and that is the honest state rather than an omission:
+                    // `dictationMode` is read only by `dictationKeyDown/Up`, which exist to serve the macOS
+                    // global hotkey. Every iOS entry point is the mic button, which toggles. Showing a control
+                    // that changes nothing is worse than not showing it; wiring hold-to-talk to a long press is
+                    // a real feature for a later version, not a settings row.
                     Toggle(L("settings.dictation.vad"), isOn: $model.dictationVADEnabled)
                     Toggle(L("settings.dictation.streaming"), isOn: $model.dictationLiveStreaming)
                     if model.dictationLiveStreaming {
@@ -88,7 +90,7 @@ struct SettingsView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Toggle(L("settings.dictation.keepaudio"), isOn: $model.keepDictationAudio)
-                    Text(L("settings.dictation.hint"))
+                    Text(L("settings.dictation.hint.ios"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
 

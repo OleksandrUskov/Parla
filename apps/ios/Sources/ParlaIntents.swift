@@ -10,6 +10,23 @@ import ParlaCore
 /// drives (an app-bound intent's `perform()` runs in the app's own process). Set in `ParlaiOSApp`.
 enum ParlaRuntime {
     @MainActor static weak var model: AppModel?
+
+    /// Wait briefly for the UI to publish the model, because on iOS an App Intent can run WITHOUT a scene.
+    ///
+    /// 🔴 This is the fix for a silent no-op. `model` is set from the `WindowGroup`'s `.task`, and an intent
+    /// invoked from Siri, Spotlight or a Shortcut while the app is not in the foreground gets no scene, so that
+    /// `.task` never runs and `perform()` used to return an empty result with no error at all — while the
+    /// README advertised the feature. `openAppWhenRun` on the intents that mutate state makes a scene connect;
+    /// this closes the race between that launch and `perform()`, which are not ordered.
+    @MainActor
+    static func awaitModel(timeoutMs: Int = 5_000) async -> AppModel? {
+        var waited = 0
+        while model == nil, waited < timeoutMs {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            waited += 50
+        }
+        return model
+    }
 }
 
 /// Transcribe a file handed in from Shortcuts / Siri — 100% on-device.
@@ -17,11 +34,15 @@ struct TranscribeFileIntent: AppIntent {
     static let title: LocalizedStringResource = "Transcribe File with Parla"
     static let description = IntentDescription("Transcribe an audio or video file to text, 100% on-device.")
 
+    /// The app must come to the front: this intent mutates the library and shows progress, and on iOS an
+    /// intent that runs without a scene reaches no model at all.
+    static var openAppWhenRun: Bool { true }
+
     @Parameter(title: "File") var file: IntentFile
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        guard let model = ParlaRuntime.model else { return .result() }
+        guard let model = await ParlaRuntime.awaitModel() else { return .result() }
         // IntentFile may be in-memory → materialize to a temp URL, then route into the existing drop funnel.
         let url: URL
         if let f = file.fileURL {
@@ -44,9 +65,14 @@ struct GetLastTranscriptIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Last Parla Transcript"
     static let description = IntentDescription("Return the text of the most recent transcript. Does not transcribe.")
 
+    /// Deliberately does NOT open the app: a read action exists to be piped into another Shortcut step, and
+    /// yanking someone into an app to answer it would make it useless. It therefore never needs the live model
+    /// — the history file IS the truth, since every mutation saves it — and falls back to reading it directly,
+    /// which is also what makes this work when the app is not running at all.
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        .result(value: ParlaRuntime.model?.lastTranscriptText ?? "")
+        if let live = ParlaRuntime.model?.lastTranscriptText, !live.isEmpty { return .result(value: live) }
+        return .result(value: HistoryStore.load().first?.text ?? "")
     }
 }
 

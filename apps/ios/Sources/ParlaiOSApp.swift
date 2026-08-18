@@ -25,6 +25,17 @@ struct ParlaiOSApp: App {
                     // On iPhone this is not housekeeping: the process has a hard memory budget and jetsam kills
                     // without warning, so handing the transcription weights back when the OS asks is survival.
                     model.startMemoryPressureMonitor()
+                    // 🔴 The three launch steps macOS has always run and iOS never did. The visible one is the
+                    // last: `refreshSemanticIndex` is the ONLY thing that fills the lemma and embedding indexes,
+                    // both of which start empty and live in memory — so on iOS the Pro "Related" list was blank
+                    // and Russian/Ukrainian morphology search fell back to substring matching after every cold
+                    // launch, until the user happened to transcribe something.
+                    await model.pruneAudioCache()      // orphans a crash left behind; the per-job prune misses those
+                    await model.refreshModels()        // otherwise the manager only ever shows the hardcoded seed
+                    Task { await model.refreshSemanticIndex() }
+                    // NOT mirrored from macOS: `prewarmDictationModel`. Loading the weights at launch to make
+                    // the first dictation instant is a good trade on a Mac and a bad one against a phone's
+                    // memory budget, where the cost is a jetsam kill of the whole app.
                 }
         }
     }

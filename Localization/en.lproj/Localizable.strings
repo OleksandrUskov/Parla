@@ -217,6 +217,7 @@
 "settings.dictation.paste"         = "Paste into the active app after dictating";
 "settings.dictation.paste.caption" = "Needs Accessibility — Parla asks once, the first time you use it. This is the only feature that uses it. With it off, the text is simply copied to your clipboard.";
 "settings.dictation.hint"          = "Press the shortcut (default ⌃⌥⌘D) to start recording from your microphone, press it again to stop — Parla transcribes on-device and copies the text. Audio never leaves your Mac. Recording needs only the Microphone permission; the optional paste-into-the-active-app uses Accessibility.";
+"settings.dictation.hint.ios"      = "Tap the microphone button to start recording, tap it again to stop — Parla transcribes on-device and saves the note. Audio never leaves your iPhone. Recording needs only the Microphone permission.";
 "toast.dictation.paste.needsax"    = "Turn on Accessibility for Parla to auto-paste — the text is on your clipboard meanwhile";
 
 /* Errors */
