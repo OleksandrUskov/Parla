@@ -33,10 +33,7 @@ public enum Localized {
     }
 
     /// Best supported code for the current system language (falls back to English).
-    private static func systemBestCode() -> String {
-        let sys = Locale.current.language.languageCode?.identifier ?? "en"
-        return ["ru", "uk", "en"].contains(sys) ? sys : "en"
-    }
+    private static func systemBestCode() -> String { UILanguage.systemDefault.code }
 
     /// Resolve a key against the active language bundle; missing key → the key itself (visible in dev).
     public static func string(_ key: String) -> String {
@@ -79,6 +76,25 @@ public enum UILanguage: String, CaseIterable, Identifiable {
 
     /// BCP-47 code matching the `.lproj` folder.
     public var code: String { rawValue }
+
+    /// The language a FRESH install opens in: the system's, when this app ships that language; English otherwise.
+    ///
+    /// It used to be English unconditionally, marked "international release". Following the system is what an
+    /// international release actually means on this platform — and the App Store listing advertises Russian and
+    /// Ukrainian, so a Russian-system user opening an English app is the listing contradicting itself on the
+    /// first screen. Only fresh installs are affected: anyone who has ever had a language stored keeps it.
+    public static var systemDefault: UILanguage {
+        best(forSystemCode: Locale.current.language.languageCode?.identifier)
+    }
+
+    /// Pure half, so the mapping is testable without a system locale to bend.
+    ///
+    /// Region and case are stripped before matching: the platform hands back a bare lowercase `"ru"` today, but
+    /// a value like `"ru_RU"` or `"RU"` reaching here should still be Russian rather than silently English.
+    public static func best(forSystemCode code: String?) -> UILanguage {
+        let base = (code ?? "").lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init)
+        return UILanguage(rawValue: base ?? "") ?? .en
+    }
 
     /// Locale for SwiftUI `environment(\.locale)` (formatting + system controls).
     public var locale: Locale { Locale(identifier: rawValue) }

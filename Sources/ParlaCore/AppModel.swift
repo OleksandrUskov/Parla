@@ -410,7 +410,8 @@ public final class AppModel {
         else { exportContent = d.bool(forKey: Keys.exportIncludeInsights) ? .withInsights : .transcript }
         dictationVADEnabled = d.bool(forKey: Keys.dictationVAD)   // opt-in, off by default
         dictationLiveStreaming = (d.object(forKey: Keys.dictationLiveStreaming) as? Bool) ?? true   // ON by default (safe + measured; preview-only)
-        uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .en   // English by default (international release)
+        // A fresh install opens in the system's language when we ship it — see `UILanguage.systemDefault`.
+        uiLanguage = UILanguage(rawValue: d.string(forKey: Keys.uiLanguage) ?? "") ?? .systemDefault
         Localized.setLanguage(uiLanguage.code)              // apply the chosen UI language before the first string
         processedKeys = ProcessedStore.load()
         processedSet = Set(processedKeys)
