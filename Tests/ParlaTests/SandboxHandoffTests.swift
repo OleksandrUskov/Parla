@@ -43,6 +43,22 @@ final class SandboxHandoffTests: ParlaTestCase {
 
     private var staged: URL { SandboxHandoff.stagedLibrary(home: home, bundleID: bundleID) }
 
+    /// A REAL preferences plist, because the staging parses it now rather than copying the bytes.
+    private func seedPrefs(_ settings: [String: Any]) -> URL {
+        let url = home.appendingPathComponent("Library/Preferences/\(bundleID).plist")
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        let data = try! PropertyListSerialization.data(fromPropertyList: settings, format: .binary, options: 0)
+        try? data.write(to: url)
+        return url
+    }
+
+    private func stagedPrefs() -> [String: Any]? {
+        guard let data = try? Data(contentsOf: SandboxHandoff.stagedPreferences(home: home, bundleID: bundleID))
+        else { return nil }
+        return (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any]
+    }
+
     /// What the store build having taken over looks like on disk: a library in the container that the direct
     /// build did not leave there, i.e. one with no staging marker in it.
     private func storeBuildOwnsTheContainer() {
@@ -70,10 +86,9 @@ final class SandboxHandoffTests: ParlaTestCase {
         seed(staged, "history.json", "what the store build has recorded since")
         // The settings are the other half, and the half a first draft of this test forgot: an overwrite would
         // also roll back the language, the chosen model and the Pro state to whatever the direct build had.
-        let livePrefs = home.appendingPathComponent("Library/Preferences/com.parla.app.plist")
-        seed(livePrefs.deletingLastPathComponent(), "com.parla.app.plist", "the direct build's settings")
-        let stagedPrefs = SandboxHandoff.stagedPreferences(home: home, bundleID: bundleID)
-        seed(stagedPrefs.deletingLastPathComponent(), "com.parla.app.plist", "the store build's settings")
+        let livePrefs = seedPrefs(["language": "ru"])
+        let storePrefs = SandboxHandoff.stagedPreferences(home: home, bundleID: bundleID)
+        seed(storePrefs.deletingLastPathComponent(), "com.parla.app.plist", "the store build's settings")
         storeBuildOwnsTheContainer()
 
         XCTAssertEqual(SandboxHandoff.stage(home: home, bundleID: bundleID,
@@ -81,7 +96,7 @@ final class SandboxHandoffTests: ParlaTestCase {
                        .skippedContainerInUse)
         XCTAssertEqual(read(staged, "history.json"), "what the store build has recorded since",
                        "the store build's own library must survive untouched")
-        XCTAssertEqual(try? String(contentsOf: stagedPrefs, encoding: .utf8), "the store build's settings",
+        XCTAssertEqual(try? String(contentsOf: storePrefs, encoding: .utf8), "the store build's settings",
                        "…and so must its settings")
     }
 
@@ -151,8 +166,7 @@ final class SandboxHandoffTests: ParlaTestCase {
     func testTheLibraryAndTheSettingsArriveTogether() {
         seed(live, "history.json", "the user's archive")
         seed(live.appendingPathComponent("audio", isDirectory: true), "note.m4a", "audio bytes")
-        let prefs = home.appendingPathComponent("Library/Preferences/com.parla.app.plist")
-        seed(prefs.deletingLastPathComponent(), "com.parla.app.plist", "the user's settings")
+        let prefs = seedPrefs(["language": "ru", "model": "openai_whisper-large-v3-v20240930_626MB"])
 
         XCTAssertEqual(SandboxHandoff.stage(home: home, bundleID: bundleID,
                                             liveLibrary: live, livePreferences: prefs, isSandboxed: false),
@@ -160,9 +174,24 @@ final class SandboxHandoffTests: ParlaTestCase {
         XCTAssertEqual(read(staged, "history.json"), "the user's archive")
         XCTAssertEqual(read(staged.appendingPathComponent("audio", isDirectory: true), "note.m4a"), "audio bytes",
                        "the whole tree, not just the top level")
-        XCTAssertEqual(try? String(contentsOf: SandboxHandoff.stagedPreferences(home: home, bundleID: bundleID),
-                                   encoding: .utf8),
-                       "the user's settings")
+        XCTAssertEqual(stagedPrefs()?["language"] as? String, "ru")
+        XCTAssertEqual(stagedPrefs()?["model"] as? String, "openai_whisper-large-v3-v20240930_626MB")
+    }
+
+    /// 🔴 The compile cache lives in the container, so a store build inherits none of it and pays the first
+    /// Core ML compile again — measured at 431 s against 10 s for every later run. The caption that explains
+    /// that wait is shown only while `didCompileModel` is false, so carrying the flag over would replace the
+    /// explanation with seven silent minutes of "Loading model…" on the store build's very first transcription.
+    func testMachineLocalStateDoesNotTravelWithTheSettings() {
+        seed(live, "history.json", "the user's archive")
+        let prefs = seedPrefs(["language": "ru", "didCompileModel": true])
+
+        XCTAssertEqual(SandboxHandoff.stage(home: home, bundleID: bundleID,
+                                            liveLibrary: live, livePreferences: prefs, isSandboxed: false),
+                       .staged)
+        XCTAssertEqual(stagedPrefs()?["language"] as? String, "ru", "the user's choices still travel")
+        XCTAssertNil(stagedPrefs()?["didCompileModel"],
+                     "the first-compile hint must be armed again in a container with no compile cache")
     }
 
     /// It runs on every launch of the direct build, so a staging from last week must be replaced rather than
@@ -170,15 +199,14 @@ final class SandboxHandoffTests: ParlaTestCase {
     func testAStalePreviousStagingIsRefreshedRatherThanKept() {
         seed(live, "history.json", "first")
         seed(live, "deleted-since.json", "gone tomorrow")
-        let livePrefs = home.appendingPathComponent("Library/Preferences/com.parla.app.plist")
-        seed(livePrefs.deletingLastPathComponent(), "com.parla.app.plist", "settings v1")
+        var livePrefs = seedPrefs(["language": "ru"])
         XCTAssertEqual(SandboxHandoff.stage(home: home, bundleID: bundleID,
                                             liveLibrary: live, livePreferences: livePrefs, isSandboxed: false),
                        .staged)
 
         try? FileManager.default.removeItem(at: live.appendingPathComponent("deleted-since.json"))
         seed(live, "history.json", "second")
-        seed(livePrefs.deletingLastPathComponent(), "com.parla.app.plist", "settings v2")
+        livePrefs = seedPrefs(["language": "uk"])
 
         XCTAssertEqual(SandboxHandoff.stage(home: home, bundleID: bundleID,
                                             liveLibrary: live, livePreferences: livePrefs, isSandboxed: false),
@@ -186,8 +214,7 @@ final class SandboxHandoffTests: ParlaTestCase {
         XCTAssertEqual(read(staged, "history.json"), "second")
         XCTAssertFalse(FileManager.default.fileExists(atPath: staged.appendingPathComponent("deleted-since.json").path),
                        "a refresh replaces the staging; it does not merge into it")
-        XCTAssertEqual(try? String(contentsOf: SandboxHandoff.stagedPreferences(home: home, bundleID: bundleID),
-                                   encoding: .utf8), "settings v2",
+        XCTAssertEqual(stagedPrefs()?["language"] as? String, "uk",
                        "the settings go stale the same way the library does")
     }
 

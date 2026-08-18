@@ -90,6 +90,18 @@ public enum SandboxHandoff {
     /// and disappears with it.
     public static let markerName = ".staged-by-direct-build"
 
+    /// Defaults that describe the state of THIS container's machine rather than the user's choices, and so
+    /// must not travel with the library.
+    ///
+    /// 🔴 `didCompileModel` is the one that matters, and it was measured: the Core ML compile cache lives in
+    /// the container (129 MB of it appeared there during this test), so a store build inherits none of it and
+    /// pays the first compile again — 431 s for the shipping 626 MB model on this machine, against 10 s for
+    /// every run after. The app has a caption for exactly that wait, and it is gated on this flag being false.
+    /// Carrying the flag across therefore suppresses the one explanation the user gets and turns the store
+    /// build's FIRST transcription into seven silent minutes of "Loading model…" — which is also the first
+    /// thing an App Review tester would do with it.
+    public static let nonPortableDefaults = ["didCompileModel"]
+
     /// The marker as the DIRECT build addresses it — from the real home, reaching into the container.
     public static func stagingMarker(home: URL, bundleID: String) -> URL {
         stagedLibrary(home: home, bundleID: bundleID).appendingPathComponent(markerName)
@@ -167,13 +179,20 @@ public enum SandboxHandoff {
         let prefsSource = livePreferences
             ?? home.appendingPathComponent("Library/Preferences", isDirectory: true)
                 .appendingPathComponent("\(bundleID).plist")
-        if fm.fileExists(atPath: prefsSource.path) {
-            let prefsDestination = stagedPreferences(home: home, bundleID: bundleID)
-            try? fm.createDirectory(at: prefsDestination.deletingLastPathComponent(),
-                                    withIntermediateDirectories: true)
-            try? fm.removeItem(at: prefsDestination)
-            try? fm.copyItem(at: prefsSource, to: prefsDestination)
+        if let data = try? Data(contentsOf: prefsSource),
+           var settings = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any] {
+            for key in nonPortableDefaults { settings.removeValue(forKey: key) }
+            if let filtered = try? PropertyListSerialization.data(fromPropertyList: settings,
+                                                                 format: .binary, options: 0) {
+                let prefsDestination = stagedPreferences(home: home, bundleID: bundleID)
+                try? fm.createDirectory(at: prefsDestination.deletingLastPathComponent(),
+                                        withIntermediateDirectories: true)
+                try? filtered.write(to: prefsDestination, options: .atomic)
+            }
         }
+        // A plist that will not parse is not staged at all, rather than copied through: with the library
+        // present the store build skips onboarding anyway, so the cost is a language and a model choice —
+        // against handing a corrupt defaults domain to a build that cannot be repaired from inside.
 
         return .staged
     }
