@@ -70,6 +70,12 @@ struct ParlaApp: App {
                 .environment(\.locale, model.resolvedLocale)
                 .frame(width: 500)
                 .preferredColorScheme(.dark)
+                // Settings is its own SCENE, so the main window's paywall sheet cannot serve it. Without this
+                // the folder-watch toggle — whose upsell is the only one that fires from Settings — just
+                // sprang back with no explanation, and the sheet, if anything, went to a window behind.
+                .sheet(item: Binding(get: { model.paywallReason }, set: { model.paywallReason = $0 })) { reason in
+                    PaywallView(reason: reason).environment(purchases)
+                }
         }
     }
 

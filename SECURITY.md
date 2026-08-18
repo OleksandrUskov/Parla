@@ -3,8 +3,10 @@
 ## Threat surface (small by design)
 
 Parla is a **100% on-device** app. It has **no backend, no account, and no telemetry**. Your audio and
-transcripts never leave your machine. The only outbound network call is a **one-time model download** of
-the Whisper CoreML weights (from Hugging Face); everything else runs locally.
+transcripts never leave your machine — there is no upload path in the app at all. Outbound network calls
+exist only to *download*: the Whisper CoreML weights on first run, and, when the user opts in, the optional
+generative and embedding models (all from Hugging Face). Purchases go through StoreKit, i.e. to Apple.
+Everything else runs locally.
 
 That means the attack surface is essentially: the local file handling (imported audio, the history JSON,
 the audio cache) and the bundled/third-party binaries (the WhisperKit / MLX / Opus / Ogg

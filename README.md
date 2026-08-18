@@ -253,11 +253,12 @@ The iOS test target runs from Xcode (⌘U) and in CI (`xcodebuild test` on a sim
 
 ## Privacy & permissions
 
-Parla is **100% on-device** — audio is transcribed locally by WhisperKit. Nothing is uploaded; there is
-no account, telemetry, or analytics. The only network use is the **one-time model download** (CoreML
-weights from Hugging Face). The iOS app ships an Apple **Privacy Manifest** that declares exactly this:
-no tracking, no data collection, and the single required-reason API it uses (UserDefaults, for your own
-preferences).
+Parla is **100% on-device** — audio is transcribed locally by WhisperKit. **Nothing you record, import or
+write ever leaves your machine**: there is no account, no telemetry, no analytics, and no upload path at all.
+The network is used only to *download*: the transcription model on first run, and — only if you ask for them —
+the optional generative and embedding models. Purchases go through StoreKit, which talks to Apple rather than
+to us. The iOS app ships an Apple **Privacy Manifest** declaring no tracking, no data collection, and the two
+required-reason APIs it uses: UserDefaults (your preferences) and file timestamps (managing the audio cache).
 
 Everything beyond plain transcription is **opt-in** and asks for the minimum permission:
 

@@ -182,6 +182,12 @@ public struct ProSettingsSection: View {
                 Button(L("settings.pro.unlock")) { showPaywall = true }
                 Button(L("paywall.restore")) { Task { await purchases.restore() } }
                     .disabled(purchases.purchasing)
+                // A restore that fails here used to fail in silence: `lastError` was rendered only in the
+                // paywall's own footer, and this section is the other place a restore can be started — the one
+                // someone reaches for after reinstalling, when it working matters most.
+                if let err = purchases.lastError {
+                    Text(err).font(.caption).foregroundStyle(.orange)
+                }
                 Text(L("settings.pro.hint")).font(.caption).foregroundStyle(.secondary)
             }
         }
