@@ -100,6 +100,7 @@ build:
 |---|---|---|
 | Notes you can transcribe | unlimited | unlimited |
 | Length per file | up to 5 minutes | **unlimited** |
+| Dictation (record and transcribe live) | ✅ any length | ✅ any length |
 | Files per drop | one | many, plus whole folders |
 | Export | TXT · Markdown | + **SRT · VTT · JSON** |
 | Automatic insights (title, keywords, summary) | ✅ included | ✅ included |
