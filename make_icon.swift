@@ -1,45 +1,36 @@
 import AppKit
+import Foundation
 
-// Генерит 1024×1024 PNG иконки: фиолетовый градиент + белая «waveform».
-_ = NSApplication.shared
+// Rasterises the app icon from the project's own artwork.
+//
+// It used to DRAW one: a purple gradient with SF Symbols' `waveform` composited on top. That cannot ship.
+// Apple's SF Symbols licence agreement forbids using the symbols — or anything confusingly similar to them —
+// in an app icon, which makes it an App Review rejection rather than a matter of taste. The real artwork has
+// existed in this repo since July and iOS has been shipping it all along; only macOS was still drawing its own.
+//
+// The master is the 1024×1024 PNG inside the iOS asset catalogue, deliberately rather than a second copy here:
+// an asset catalogue needs the file physically in place, so making that the single source means both platforms
+// are provably shipping the SAME icon instead of two things that merely look alike.
 
+let master = "apps/ios/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
 let outPath = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.png"
-let size: CGFloat = 1024
 
-func tint(_ image: NSImage, _ color: NSColor) -> NSImage {
-    let out = NSImage(size: image.size)
-    out.lockFocus()
-    color.set()
-    let r = NSRect(origin: .zero, size: image.size)
-    image.draw(in: r)
-    r.fill(using: .sourceAtop)
-    out.unlockFocus()
-    return out
-}
-
-let img = NSImage(size: NSSize(width: size, height: size))
-img.lockFocus()
-let rect = NSRect(x: 0, y: 0, width: size, height: size)
-NSBezierPath(roundedRect: rect, xRadius: size * 0.224, yRadius: size * 0.224).addClip()
-NSGradient(colors: [
-    NSColor(srgbRed: 0.40, green: 0.46, blue: 0.98, alpha: 1),
-    NSColor(srgbRed: 0.58, green: 0.30, blue: 0.92, alpha: 1),
-])!.draw(in: rect, angle: -90)
-
-if let sym = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil),
-   let configured = sym.withSymbolConfiguration(.init(pointSize: size * 0.5, weight: .semibold)) {
-    let white = tint(configured, .white)
-    let s = size * 0.5
-    let dx = (size - s) / 2
-    white.draw(in: NSRect(x: dx, y: dx, width: s, height: s))
-}
-img.unlockFocus()
-
-guard let tiff = img.tiffRepresentation,
-      let rep = NSBitmapImageRep(data: tiff),
-      let png = rep.representation(using: .png, properties: [:]) else {
-    FileHandle.standardError.write("icon render failed\n".data(using: .utf8)!)
+func die(_ message: String) -> Never {
+    FileHandle.standardError.write(Data("❌ icon: \(message)\n".utf8))
     exit(1)
 }
-try! png.write(to: URL(fileURLWithPath: outPath))
-print("icon: \(outPath)")
+
+guard FileManager.default.fileExists(atPath: master) else {
+    // Loud, not silent. A macOS build with no icon is a rejection, and the old script swallowed every failure.
+    die("master artwork missing at \(master) — run from the repo root")
+}
+guard let image = NSImage(contentsOfFile: master), image.size.width > 0 else {
+    die("could not read \(master)")
+}
+guard let tiff = image.tiffRepresentation,
+      let rep = NSBitmapImageRep(data: tiff),
+      let png = rep.representation(using: .png, properties: [:]) else {
+    die("could not re-encode the artwork")
+}
+do { try png.write(to: URL(fileURLWithPath: outPath)) } catch { die("\(error)") }
+print("icon: \(outPath) (from \(master))")

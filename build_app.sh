@@ -10,22 +10,31 @@ BUNDLE_ID="com.parla.app"
 # Overridable so a release build can stamp a real version/build without editing the script:
 #   PARLA_VERSION=1.1.0 PARLA_BUILD=42 ./build_app.sh
 VERSION="${PARLA_VERSION:-1.0.0}"
+COPYRIGHT="${PARLA_COPYRIGHT:-Copyright © 2026 Oleksandr Uskov. All rights reserved.}"
 BUILD_NUMBER="${PARLA_BUILD:-1}"
 
 # Generate the icon if it is missing (needs swift + sips + iconutil — present on any Mac with Xcode).
+# Every step is CHECKED. This used to swallow all three failures and print "✅ Done" over a bundle with no icon,
+# which the App Store rejects — and the icon it drew used an SF Symbol, which Apple's SF Symbols licence forbids
+# in app icons outright. `make_icon.swift` now rasterises the project's real artwork and exits non-zero if it
+# cannot; treat any failure here as fatal rather than shipping an app that silently lost its face.
 if [ ! -f Resources/AppIcon.icns ] && [ -f make_icon.swift ]; then
   echo "• Generating the icon…"
   mkdir -p Resources
   TMP="$(mktemp -d)"
-  if swift make_icon.swift "$TMP/i.png" >/dev/null 2>&1; then
-    ISET="$TMP/AppIcon.iconset"; mkdir -p "$ISET"
-    for s in 16 32 128 256 512; do
-      sips -z "$s" "$s" "$TMP/i.png" --out "$ISET/icon_${s}x${s}.png" >/dev/null 2>&1
-      d=$((s * 2)); sips -z "$d" "$d" "$TMP/i.png" --out "$ISET/icon_${s}x${s}@2x.png" >/dev/null 2>&1
-    done
-    iconutil -c icns "$ISET" -o Resources/AppIcon.icns >/dev/null 2>&1 || true
-  fi
+  swift make_icon.swift "$TMP/i.png" || { echo "❌ icon render failed"; rm -rf "$TMP"; exit 1; }
+  ISET="$TMP/AppIcon.iconset"; mkdir -p "$ISET"
+  for s in 16 32 128 256 512; do
+    d=$((s * 2))
+    sips -z "$s" "$s" "$TMP/i.png" --out "$ISET/icon_${s}x${s}.png" >/dev/null \
+      || { echo "❌ icon resize ${s} failed"; rm -rf "$TMP"; exit 1; }
+    sips -z "$d" "$d" "$TMP/i.png" --out "$ISET/icon_${s}x${s}@2x.png" >/dev/null \
+      || { echo "❌ icon resize ${s}@2x failed"; rm -rf "$TMP"; exit 1; }
+  done
+  iconutil -c icns "$ISET" -o Resources/AppIcon.icns \
+    || { echo "❌ iconutil failed"; rm -rf "$TMP"; exit 1; }
   rm -rf "$TMP"
+  [ -s Resources/AppIcon.icns ] || { echo "❌ AppIcon.icns is empty"; exit 1; }
 fi
 
 echo "▶ Building $APP (release, via xcodebuild)…"
@@ -144,6 +153,13 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <!-- Export compliance. Declared here, as iOS already does, so App Store Connect stops asking on every single
+       upload and cannot hold a build in "Missing Compliance". False is the accurate answer: the only cryptography
+       in play is HTTPS for the one-time model download plus the hashing swift-transformers uses to verify it,
+       both of which are exempt. -->
+  <key>ITSAppUsesNonExemptEncryption</key><false/>
+  <!-- Shown in the About box and expected on a store listing. -->
+  <key>NSHumanReadableCopyright</key><string>$COPYRIGHT</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>ru</string><string>uk</string></array>
   <key>CFBundleURLTypes</key>

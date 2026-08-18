@@ -48,17 +48,28 @@ final class IntentFileNameTests: XCTestCase {
 final class IntentSanitiserReachTests: ParlaLogicTestCase {
 
     func testNeitherPlatformWritesAnIntentFileUnderAnUnsanitisedName() throws {
-        for path in ["Sources/Parla/ParlaIntents.swift", "apps/ios/Sources/ParlaIntents.swift"] {
+        // NO `continue`. The first version guarded on finding "file.data.write(to:" and skipped the platform
+        // when it did not match — so wrapping that call onto two lines, or binding `let data = file.data`, made
+        // the test SKIP a platform silently while it wrote a raw Shortcut filename again. A reviewer reproduced
+        // exactly that: sanitiser removed, write reformatted, suite green. Both platforms materialise intent
+        // files, so both are asserted unconditionally; if one ever stops, this fails and someone decides that
+        // on purpose rather than by accident.
+        let files = ["Sources/Parla/ParlaIntents.swift", "apps/ios/Sources/ParlaIntents.swift"]
+        var checked = 0
+        for path in files {
             let text = try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
             let code = text.split(separator: "\n", omittingEmptySubsequences: false)
                 .map(String.init)
                 .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }   // comments prove nothing
                 .joined(separator: "\n")
-            guard code.contains("file.data.write(to:") else { continue }   // this platform materialises nothing
+            checked += 1
             XCTAssertTrue(code.contains("IntentFileName.safe(file.filename)"),
                           "\(path) materialises an intent file without sanitising its name")
             XCTAssertFalse(code.contains("appendingPathComponent(name)"),
                            "\(path) still joins a raw filename onto a directory")
+            XCTAssertFalse(code.contains("appendingPathComponent(file.filename)"),
+                           "\(path) joins the Shortcut's filename directly")
         }
+        XCTAssertEqual(checked, files.count, "every platform must actually be examined, never skipped")
     }
 }
