@@ -267,7 +267,9 @@ extension AppModel {
     /// Opt-in: paste the dictation into the frontmost app. The text is already on the clipboard, so if
     /// Accessibility isn't granted we fall back to a "it's on your clipboard" note + a one-time AX prompt
     /// (never auto-prompted — only when the user has enabled paste and a dictation actually completes).
-    private func pasteDictationResult() {
+    /// `internal` rather than `private` so a test can exercise the branch that decides between asking for
+    /// a permission and admitting the feature does not exist on this build.
+    func pasteDictationResult() {
         // Don't synthesize ⌘V into our OWN window (e.g. dictation stopped via the in-window Stop button) —
         // that would paste into Parla's search / edit field. Fall back to clipboard-only (text is copied).
         if pasteIsSelfFrontmost() {
@@ -277,6 +279,14 @@ extension AppModel {
         if attemptPaste() {
             dictationToast(empty: false, failed: false)   // pasted into the active app — normal done signal
         } else {
+            guard pasteIsAvailable() else {
+                // The feature does not exist on this build, so there is nothing to grant. The preference can
+                // still be ON — macOS migrates the preferences plist into the sandbox container by bundle ID —
+                // so without this the user would be told, after every dictation, to grant a permission that a
+                // sandboxed app is never offered. The text is on the clipboard either way.
+                showToast(L("toast.dictation.paste.unavailable"), false)
+                return
+            }
             // Not Accessibility-trusted. Prompt at most ONCE (the Settings caption promises "asks once");
             // the clipboard-fallback toast still shows every time so the text is never silently lost.
             if !UserDefaults.standard.bool(forKey: Keys.dictationPasteAXPrompted) {

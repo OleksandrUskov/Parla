@@ -191,6 +191,12 @@ public final class AppModel {
     /// `PasteService.requestAccessibility`; inert default is a no-op.
     public var requestPasteAccessibility: @MainActor () -> Void = { }
 
+    /// Whether synthesizing a paste is POSSIBLE on this build at all — distinct from `attemptPaste` failing,
+    /// which means permission is missing and can be granted. A sandboxed (Mac App Store) process is never
+    /// granted Accessibility, so telling that user to go and grant it is advice they cannot act on. Defaults to
+    /// true so the Core and every existing test behave exactly as before; the macOS app narrows it.
+    public var pasteIsAvailable: @MainActor () -> Bool = { true }
+
     // MARK: Platform seams
     // AppModel is Core-bound — it must stay AppKit-free so it ports to iOS. Each platform behavior below is an
     // injectable closure with an INERT Foundation-only default; the macOS app installs the real AppKit behavior

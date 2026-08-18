@@ -362,3 +362,8 @@
 "error.decode.unsupported.ext"      = "Parla не вміє читати цей формат (.%@).";
 "error.decode.noaudio"              = "У цьому файлі немає звукової доріжки.";
 "error.decode.empty"                = "У цьому файлі не виявилося звуку.";
+
+/* parla:// could not open anything — never fail silently; under the sandbox this is the normal case. */
+"toast.url.nofiles"            = "Нема чого розшифровувати: за цим шляхом немає читабельного аудіо.";
+"toast.url.sandboxed"          = "Ця збірка не відкриває файли за шляхом. Перетягни файл у Parla.";
+"toast.dictation.paste.unavailable" = "Скопійовано в буфер — ця збірка не вставляє в інші застосунки.";

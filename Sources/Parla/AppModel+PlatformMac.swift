@@ -57,6 +57,7 @@ extension AppModel {
         m.attemptPaste = { PasteService.pasteIntoFrontmost() }
         m.pasteIsSelfFrontmost = { PasteService.isSelfFrontmost }
         m.requestPasteAccessibility = { PasteService.requestAccessibility() }
+        m.pasteIsAvailable = { PasteService.isAvailable }
 
         // Folder-watch (macOS-only feature): wire the Core seams to the +FolderWatch impls.
         m.drainWatchQueue = { [weak m] in m?.drainQueue() }

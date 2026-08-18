@@ -110,10 +110,16 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Toggle(L("settings.dictation.keepaudio"), isOn: $model.keepDictationAudio)
-                Toggle(L("settings.dictation.paste"), isOn: $model.dictationPasteIntoFrontmost)
-                if model.dictationPasteIntoFrontmost {
-                    Text(L("settings.dictation.paste.caption"))
-                        .font(.caption).foregroundStyle(.secondary)
+                // Hidden entirely under the App Sandbox rather than shown and inert: a containerised process is
+                // never granted Accessibility, so every paste would silently do nothing and the switch would be
+                // a lie the user flipped themselves. Dictation still copies to the clipboard, which is the
+                // default and the fallback the feature was always built on.
+                if PasteService.isAvailable {
+                    Toggle(L("settings.dictation.paste"), isOn: $model.dictationPasteIntoFrontmost)
+                    if model.dictationPasteIntoFrontmost {
+                        Text(L("settings.dictation.paste.caption"))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Text(L("settings.dictation.hint"))
                     .font(.caption).foregroundStyle(.secondary)

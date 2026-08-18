@@ -14,8 +14,16 @@ import CoreGraphics
 /// therefore cannot synthesize a ⌘V into the developer's frontmost app — it gets that guarantee from the seam,
 /// not from shipped code inspecting its own process for XCTest.
 enum PasteService {
-    /// Whether we're allowed to synthesize a paste (Accessibility trust granted). Cheap; safe anytime.
-    static var canPaste: Bool { AXIsProcessTrusted() }
+    /// Whether we're allowed to synthesize a paste. Cheap; safe anytime.
+    ///
+    /// A sandboxed build can never be: Accessibility trust is not available to a containerised process, so
+    /// `AXIsProcessTrusted()` stays false and every paste would be a silent no-op. Reporting it up front lets
+    /// the UI hide the toggle instead of offering a switch that does nothing when flipped.
+    static var canPaste: Bool { !Sandbox.isActive && AXIsProcessTrusted() }
+
+    /// Whether the feature exists at all on this build. Distinct from `canPaste`, which is about PERMISSION:
+    /// unavailable means "there is nothing to grant", and the difference is what the user needs told.
+    static var isAvailable: Bool { !Sandbox.isActive }
 
     /// Whether Parla itself is the frontmost app — a synthetic ⌘V would then land in OUR own window
     /// (e.g. dictation stopped via the in-window button), so the caller skips the paste.

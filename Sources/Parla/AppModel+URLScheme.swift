@@ -15,7 +15,15 @@ extension AppModel {
                 guard FileManager.default.fileExists(atPath: u.path, isDirectory: &isDir) else { return false }
                 return isDir.boolValue || Self.isTranscribable(u)   // accepts extension-less Ogg (Telegram voice)
             }
-            guard !urls.isEmpty else { return }
+            guard !urls.isEmpty else {
+                // Previously a silent return, which is the worst answer available: the user's Raycast script or
+                // Shortcut appears to fire and nothing whatsoever happens. Under the App Sandbox this becomes
+                // the NORMAL outcome rather than a typo — a URL rebuilt from a path string carries no sandbox
+                // extension, so the app may not open the file however real it is, and the Ogg sniffer's byte
+                // read is denied too, which turns an extension-less Telegram voice into "not audio".
+                showToast(Sandbox.isActive ? L("toast.url.sandboxed") : L("toast.url.nofiles"), false)
+                return
+            }
             quickModeRun = true            // toast feedback, no window assumed (like the hotkey path)
             handleDrop(urls: urls)
         case .transcribeLast: transcribeLast()                 // already sets quickModeRun
