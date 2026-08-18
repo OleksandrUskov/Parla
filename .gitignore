@@ -13,3 +13,10 @@ apps/mac/*.entitlements
 
 # iOS test fixtures — real Telegram voice notes; voice NEVER in git. Local-only; the decode test XCTSkips without them.
 apps/ios/Tests/Fixtures/
+
+# Private planning tree — product strategy, unreleased naming, business/tax notes. Never published.
+# Also listed in .git/info/exclude, but that file is per-clone: this line is what survives a fresh clone.
+docs/_dev/
+
+# Generated speech fixtures for A/B accuracy measurement — large, reproducible via the scripts inside.
+test-audio/
