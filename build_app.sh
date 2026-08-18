@@ -246,6 +246,47 @@ done <<< "$(otool -L "$EXEC" | awk '/@rpath\//{print $1}')"
 [ "$MISSING" -eq 0 ] || { echo "❌ the .app will not launch (dyld cannot find its libraries) — refusing to ship"; exit 1; }
 echo "• Launch guard: every @rpath dependency resolves inside the bundle"
 
+# App Intents metadata — the ONE thing this hand-assembled bundle was missing that Xcode does for free.
+#
+# A SwiftPM build never runs `appintentsmetadataprocessor`, so this app shipped for months with no
+# Metadata.appintents at all: Shortcuts, Spotlight and Siri could not see a single intent, while the README
+# advertised three of them. The Xcode target added for the Mac App Store is what finally surfaced it, and it
+# also surfaced an invalid App Shortcut phrase that nothing here could have validated.
+#
+# It turns out this is fixable rather than a limitation of the script: xcodebuild DOES emit the
+# `.swiftconstvalues` the processor needs, they are simply never consumed. So consume them.
+#
+# FATAL on failure, deliberately. The failure mode being closed here is precisely a feature disappearing in
+# silence, and re-introducing that to be polite about a future Xcode changing these flags would be the same
+# mistake twice. CI's Xcode lane builds the same intents, so a flag change surfaces there too.
+echo "• App Intents metadata…"
+AI_TMP="$(mktemp -d)"
+ls "$PWD/Sources/Parla"/*.swift > "$AI_TMP/sources.txt"
+find "$DERIVED/Build/Intermediates.noindex/Parla.build" -name '*.swiftconstvalues' > "$AI_TMP/consts.txt" 2>/dev/null || true
+if [ ! -s "$AI_TMP/consts.txt" ]; then
+  rm -rf "$AI_TMP"
+  echo "❌ no .swiftconstvalues from the build — App Intents metadata cannot be produced, so Shortcuts/Siri"
+  echo "   would silently see nothing. Refusing to ship a bundle whose advertised automation is absent."
+  exit 1
+fi
+xcrun appintentsmetadataprocessor \
+  --output "$APPDIR/Contents/Resources" \
+  --toolchain-dir "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain" \
+  --module-name Parla \
+  --sdk-root "$(xcrun --sdk macosx --show-sdk-path)" \
+  --xcode-version "$(xcodebuild -version | tail -1 | awk '{print $3}')" \
+  --platform-family macOS \
+  --deployment-target 14.0 \
+  --target-triple arm64-apple-macos14.0 \
+  --source-file-list "$AI_TMP/sources.txt" \
+  --swift-const-vals-list "$AI_TMP/consts.txt" >/dev/null 2>&1 \
+  || { rm -rf "$AI_TMP"; echo "❌ appintentsmetadataprocessor failed — Shortcuts/Siri would see nothing"; exit 1; }
+rm -rf "$AI_TMP"
+[ -s "$APPDIR/Contents/Resources/Metadata.appintents/extract.actionsdata" ] \
+  || { echo "❌ Metadata.appintents is empty — the three App Intents would not exist"; exit 1; }
+echo "• App Intents: Shortcuts / Spotlight / Siri metadata embedded"
+
+
 echo "✅ Done: $(pwd)/$APPDIR  (v$VERSION build $BUILD_NUMBER)"
 
 # Optional relaunch (--run). The old and new binaries share ONE bundle ID, so with an instance already

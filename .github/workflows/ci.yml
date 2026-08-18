@@ -78,6 +78,11 @@ jobs:
           test -d "$APP/Contents/lib/opus.framework"      || { echo "::error::missing opus.framework"; exit 1; }
           test -d "$APP/Contents/lib/ogg.framework"       || { echo "::error::missing ogg.framework"; exit 1; }
           codesign --verify --deep --strict "$APP"
+          # Shortcuts / Spotlight / Siri see nothing at all without this, and its absence is completely
+          # silent — which is exactly how the app shipped without it for months while the README named three
+          # intents. A SwiftPM build does not run the processor; build_app.sh now does it by hand.
+          [ -s "$APP/Contents/Resources/Metadata.appintents/extract.actionsdata" ] \
+            || { echo "::error::no App Intents metadata — the three advertised Shortcuts would not exist"; exit 1; }
           echo "store bundle verified"
       # The other half of the contract, and the cheaper mistake to make: a plain build must stay ungated.
       # Shipping THAT to an app store is an automatic rejection — no Restore button exists in it at all.

@@ -119,4 +119,22 @@ final class SubmissionReadinessTests: ParlaLogicTestCase {
                            + "the app then ships with no App Intents metadata whatsoever")
         }
     }
+
+
+    /// `build_app.sh` assembles the bundle by hand, and for months it left out the one thing Xcode does for
+    /// free: App Intents metadata. Without `Metadata.appintents` Shortcuts, Spotlight and Siri see NOTHING,
+    /// while the README advertises three intents by name. It is fixable rather than a limit of the script —
+    /// xcodebuild already emits the `.swiftconstvalues` the processor needs, they were simply never consumed.
+    func testTheHandAssembledBundleAlsoGetsItsAppIntentsMetadata() throws {
+        let script = try code(of: "build_app.sh")
+        XCTAssertTrue(script.contains("appintentsmetadataprocessor"),
+                      "the from-source build no longer produces App Intents metadata — Shortcuts/Siri would be "
+                      + "silently dead in every build that is not made by Xcode")
+        XCTAssertTrue(script.contains("swiftconstvalues"), "the processor needs the compiler's const values")
+        // And it must be FATAL. A feature vanishing in silence is the exact failure this closes.
+        XCTAssertTrue(script.contains("Metadata.appintents/extract.actionsdata"),
+                      "nothing verifies the metadata is non-empty")
+        XCTAssertTrue(script.contains("Refusing to ship a bundle whose advertised automation is absent"),
+                      "a missing metadata step must abort the build, not warn")
+    }
 }
