@@ -19,6 +19,18 @@ extension AppModel {
         // interrupted job can finish; not worth keeping forever beside the history it is invisible in.
         ChunkProgressStore.pruneIfStale()
 
+        if Sandbox.isActive {
+            // This build IS the store build: whatever library it was handed is now the user's live one, and
+            // no direct-download install may overwrite it from here on. Synchronous and first, so the claim
+            // is made before this launch can record anything that an overwrite would destroy.
+            SandboxHandoff.claimContainer()
+        } else {
+            // Leave the library where the Mac App Store build will find it, because macOS will NOT put it
+            // there (measured — see `SandboxHandoff`). Detached and best-effort: a free APFS clone that
+            // declines itself once a store build has claimed the container, and nothing here depends on it.
+            Task.detached(priority: .utility) { SandboxHandoff.stage() }
+        }
+
         // The real AI + embedder are wired HERE, not guessed by the Core: the Core's defaults are inert
         // so a unit test can never load a real model by forgetting to inject one.
         let m = AppModel(ai: AppModel.productionAI(), embedder: AppModel.productionEmbedder())

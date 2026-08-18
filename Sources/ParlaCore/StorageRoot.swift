@@ -3,19 +3,20 @@ import Foundation
 /// The one directory everything this app owns lives under, and the reason it is named after the bundle
 /// identifier rather than after the app.
 ///
-/// When a previously-unsandboxed macOS app becomes sandboxed — which the Mac App Store requires — the system
-/// migrates its existing data into the new container on first launch, and it finds that data **by bundle
-/// identifier**: `Application Support/<bundle-id>`, `Caches/<bundle-id>`, `Preferences/<bundle-id>.plist`.
-/// Our store directory was named `Parla`, which matches nothing. A sandboxed build would therefore start on an
-/// empty container while every file sat untouched on disk, invisible — and, because the preferences plist IS
-/// bundle-ID-named and does migrate, the app would arrive *configured*: remembering a watched folder it cannot
-/// watch and a last file it cannot replay. After that build ships there is no recovery from inside the app,
-/// since a sandboxed process cannot read the old location at all.
+/// ⚠️ **The reason originally written here was wrong, and the correction matters more than the rename.** This
+/// said that when a previously-unsandboxed app becomes sandboxed the system migrates its data into the new
+/// container **by bundle identifier**, so naming the directory `com.parla.app` would let the Mac App Store
+/// build inherit the user's library. That was hedged at the time as "the matching rules are Apple's, not ours".
+/// It has since been MEASURED on macOS 26, three independent ways — a never-launched app, an app run
+/// unsandboxed and then sandboxed (the real upgrade path), and a LaunchServices launch. **macOS does not
+/// migrate `Application Support/<bundle-id>` at all**; the container's `RedirectedPaths` is empty every time.
+/// Only `Preferences/<bundle-id>.plist` comes across. The rename therefore buys ZERO migration, and a store
+/// build left to the system would arrive configured and empty.
 ///
-/// Being honest about the uncertainty: the migration's exact matching rules are Apple's, not ours, and this
-/// change is worth making even if it turns out the system would not have migrated anyway. Naming a store
-/// directory after the bundle identifier is the convention regardless, it costs one rename, and it is the only
-/// arrangement in which the automatic path CAN work. The in-app import fallback stays on the plan either way.
+/// The rename stays, for the reasons that were always true independently: naming a store directory after the
+/// bundle identifier is the convention, it is what makes the container path and the loose path agree, and it
+/// gives the rebrand one place to hook. What carries the library across is `SandboxHandoff`, which stages it
+/// into the container deliberately — read that file for what the system actually does.
 ///
 /// The name is read from the running bundle rather than hardcoded, so a future rename of the app changes this
 /// with it and cannot be forgotten. What DOES have to be remembered is adding the outgoing identifier to

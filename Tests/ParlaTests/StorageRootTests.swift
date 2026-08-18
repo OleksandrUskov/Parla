@@ -4,12 +4,12 @@ import XCTest
 /// Everything this app owns lives under one directory, and that directory is named after the BUNDLE
 /// IDENTIFIER rather than after the app.
 ///
-/// The reason is the Mac App Store. When a previously-unsandboxed app becomes sandboxed, the system migrates
-/// its existing data into the new container by bundle identifier. Our store directory was named `Parla`, which
-/// matches nothing — so a sandboxed build would have started on an empty container while every file sat
-/// untouched on disk, invisible. Worse, the preferences plist IS bundle-ID-named and does migrate, so the app
-/// would have arrived configured: remembering a watched folder it cannot watch and a last file it cannot
-/// replay. After that build ships there is no recovery from inside the app.
+/// ⚠️ The reason first given here — that the system migrates a newly sandboxed app's data into its container
+/// by bundle identifier — was MEASURED FALSE on macOS 26 (see `SandboxHandoff`, and `SandboxHandoffTests` for
+/// the trade it forced). macOS brings across only `Preferences/<bundle-id>.plist`. The rename is still right:
+/// it is the convention, it makes the container path and the loose path agree, and it gives the rebrand one
+/// hook — but the library is carried by `SandboxHandoff`, not by the system. What these tests pin is the
+/// UPGRADE FROM AN EARLIER PARLA, which is a migration this code performs itself and which is entirely real.
 // `ParlaLogicTestCase` rather than `ParlaTestCase`: it carries `repoRoot`, which the source scan needs.
 final class StorageRootTests: ParlaLogicTestCase {
 
