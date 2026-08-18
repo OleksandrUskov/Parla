@@ -427,7 +427,12 @@ extension AppModel {
         // re-checks the source's identity and every setting, so the sole way it is ever reused is the user
         // re-dropping the same file with the same settings — where resuming is a gift, not a surprise. Wiping
         // it on cancel threw away up to 40 minutes of completed inference for someone who only pressed stop.
-        if !Task.isCancelled { ChunkProgressStore.remove(fingerprint) }
+        // …and a record with every chunk done is removed even on cancel. Cancelling during the LAST chunk still
+        // finishes it (WhisperKit has no early stop), so `done.count` reaches the total — a state `canResume`
+        // refuses by design, since it means "complete, the note was written". Keeping it would leave a record
+        // that can never be used, holding the whole transcript in cleartext until the staleness sweep, while the
+        // user re-drops the file and re-runs every chunk anyway.
+        if !Task.isCancelled || progress.done.count >= total { ChunkProgressStore.remove(fingerprint) }
 
         let stitched = AudioChunker.stitch(chunkSegments: progress.done.map(\.segments),
                                            chunkLength: AudioChunker.chunkLengthSec)

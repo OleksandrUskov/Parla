@@ -103,5 +103,18 @@ final class StorageRootTests: ParlaLogicTestCase {
             XCTAssertFalse(text.contains("appendingPathComponent(\"Parla"),
                            "\(file.lastPathComponent) hardcodes a storage folder instead of using StorageRoot")
         }
+
+        // …including the dev harnesses, which are NOT part of the app and were therefore missed: they kept
+        // probing ~/Documents/huggingface, so after the relocation `swift run ParlaSmoke` — the headless engine
+        // smoke — took the download branch and pulled 626 MB back into the user's Documents, recreating the
+        // iCloud-synced pile the relocation exists to remove, and measured a copy the app never loads. They
+        // cannot import ParlaCore (it would drag MLX into their build), so this is what keeps them in step.
+        for harness in ["Sources/ParlaSmoke/main.swift", "Sources/ParlaStreamEval/main.swift"] {
+            let text = try String(contentsOf: repoRoot.appendingPathComponent(harness), encoding: .utf8)
+            XCTAssertFalse(text.contains(".documentDirectory"),
+                           "\(harness) still resolves models from the user's Documents")
+            XCTAssertTrue(text.contains("downloadBase"),
+                          "\(harness) must hand WhisperKit a downloadBase, or it re-downloads into Documents")
+        }
     }
 }

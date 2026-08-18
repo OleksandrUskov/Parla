@@ -9,8 +9,10 @@ import ParlaCore
 final class ImportCoordinatorTests: XCTestCase {
 
     func testCopyIntoContainerPreservesNameAndContent() throws {
+        // A name the USER would have: no Share-Extension stamp, so nothing about it should change. (The old
+        // fixture happened to be shaped exactly like a stamped name, which is why this test caught the strip.)
         let src = FileManager.default.temporaryDirectory
-            .appendingPathComponent("voice-\(UUID().uuidString).ogg")
+            .appendingPathComponent("voice \(Int.random(in: 1000...9999)).ogg")
         let bytes = Data("OggS-\(UUID().uuidString)".utf8)
         try bytes.write(to: src)
         defer { try? FileManager.default.removeItem(at: src) }
@@ -26,6 +28,22 @@ final class ImportCoordinatorTests: XCTestCase {
         XCTAssertTrue(dest.path.hasPrefix(AppModel.importsRoot.standardizedFileURL.path + "/"),
                       "copied into the app container's imports root, got \(dest.path)")
         XCTAssertEqual(try Data(contentsOf: dest), bytes, "content copied verbatim")
+    }
+
+    /// The Share Extension stamps a UUID into every filename it writes into its flat inbox, and that name used
+    /// to reach the note: every shared note was titled `voice-<36 hex characters>.ogg`, and long-audio resume
+    /// could never match a re-share, because a job is identified partly by its source's name. The per-import
+    /// UUID DIRECTORY already gives collision-freedom, so the file keeps the name the user actually shared.
+    func testASharedFilesUniquenessStampIsStrippedFromTheCopy() throws {
+        let stamped = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Voice message-\(UUID().uuidString).ogg")
+        try Data("OggS".utf8).write(to: stamped)
+        defer { try? FileManager.default.removeItem(at: stamped) }
+
+        let out = ImportCoordinator.copyIntoContainer([stamped])
+        defer { out.forEach { try? FileManager.default.removeItem(at: $0.deletingLastPathComponent()) } }
+
+        XCTAssertEqual(try XCTUnwrap(out.first).lastPathComponent, "Voice message.ogg")
     }
 
     func testEmptyInputYieldsNothing() {

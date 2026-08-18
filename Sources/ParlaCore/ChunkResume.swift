@@ -174,6 +174,11 @@ public enum ChunkProgressStore {
     }
 
     public static func save(_ progress: ChunkedJobProgress, now: Date = Date()) {
+        // A record with no fingerprint can never be matched by `load(for:)` NOR removed by `remove(_:)` — both
+        // refuse nil — so writing one produced an orphan that held the full transcript in cleartext, occupied
+        // one of the LRU slots, and evicted a record that WAS resumable. It can happen for real: the stat runs
+        // after the split, and a watched-folder file can vanish underneath the pipeline in between.
+        guard progress.fingerprint != nil else { return }
         var stamped = progress
         stamped.updatedAt = now.timeIntervalSince1970
         var records = loadAll().filter { $0.fingerprint != stamped.fingerprint }

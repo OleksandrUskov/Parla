@@ -206,13 +206,22 @@ func simulateStream(_ floats: [Float], kit: WhisperKit) async throws -> String {
 // MARK: - run
 
 func loadModel() async throws -> WhisperKit {
-    let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("huggingface/models/argmaxinc/whisperkit-coreml", isDirectory: true)
-    let folder = root.appendingPathComponent(model, isDirectory: true)
+    // Where the APP keeps its weights. Mirrored here rather than imported: these harnesses deliberately do not
+    // link ParlaCore (it pulls MLX, which would dominate their build). Kept in step with
+    // `StorageRoot.defaultURL()` + `TranscriptionEngine.downloadBase()` — a test asserts they still agree.
+    // Before this they read ~/Documents/huggingface, which after the relocation is empty: `swift run ParlaSmoke`
+    // then took the "download" branch and pulled 626 MB back into the user's Documents, recreating the
+    // iCloud-synced pile the relocation exists to remove — and measured a copy the app never loads.
+    let downloadBase = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent((Bundle.main.bundleIdentifier ?? "com.parla.app") + "/huggingface", isDirectory: true)
+    let folder = downloadBase
+        .appendingPathComponent("models/argmaxinc/whisperkit-coreml", isDirectory: true)
+        .appendingPathComponent(model, isDirectory: true)
     if FileManager.default.fileExists(atPath: folder.path) {
-        return try await WhisperKit(WhisperKitConfig(model: model, modelFolder: folder.path, download: false))
+        return try await WhisperKit(WhisperKitConfig(model: model, downloadBase: downloadBase,
+                                                     modelFolder: folder.path, download: false))
     }
-    return try await WhisperKit(WhisperKitConfig(model: model))
+    return try await WhisperKit(WhisperKitConfig(model: model, downloadBase: downloadBase))
 }
 
 func offlineText(_ floats: [Float], kit: WhisperKit) async throws -> String {

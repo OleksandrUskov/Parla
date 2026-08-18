@@ -437,4 +437,66 @@ final class ChunkResumeTests: ParlaTestCase {
         XCTAssertNil(ChunkProgressStore.load(for: record(0).fingerprint), "the oldest is evicted first")
         XCTAssertNotNil(ChunkProgressStore.load(for: record(ChunkProgressStore.maxRecords + 1).fingerprint))
     }
+
+
+    /// THE case the first version of this fix missed. `testTheSameRecordingImportedAgainUnderANewPathStillResumes`
+    /// models the FILE PICKER, which preserves the filename — but the headline scenario is the SHARE SHEET, and
+    /// the Share Extension stamps a fresh UUID into every name it writes. Identity included the name, so a
+    /// re-share never matched and the one path resume exists for was the one it could not serve. Two reviewers
+    /// found it independently; the test had asserted the right property over an input set without the real case.
+    @MainActor func testAVoiceNoteSHAREDAgainAfterAJetsamResumesWhereItStopped() async throws {
+        let original = try Self.source()
+        defer { try? FileManager.default.removeItem(at: original) }
+
+        /// Reproduce the real funnel: the extension writes `<base>-<fresh UUID>.<ext>` into its flat inbox, and
+        /// the app copies that into `imports/<UUID>/` under the name the user actually shared.
+        func share(_ file: URL) throws -> URL {
+            let base = file.deletingPathExtension().lastPathComponent
+            let stamped = "\(base)-\(UUID().uuidString).\(file.pathExtension)"
+            let importDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("imports/\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: importDir, withIntermediateDirectories: true)
+            let dest = importDir.appendingPathComponent(ShareInboxName.original(from: stamped))
+            try FileManager.default.copyItem(at: file, to: dest)
+            return dest
+        }
+
+        let firstShare = try share(original)
+        let secondShare = try share(original)
+        defer {
+            try? FileManager.default.removeItem(at: firstShare.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: secondShare.deletingLastPathComponent())
+        }
+        XCTAssertNotEqual(firstShare.path, secondShare.path, "precondition: every share lands in a new directory")
+        XCTAssertEqual(SourceFingerprint(of: firstShare), SourceFingerprint(of: secondShare),
+                       "two shares of the same voice note must be the same job — this is what was broken")
+        XCTAssertEqual(firstShare.lastPathComponent, original.lastPathComponent,
+                       "…and the note keeps the name the user shared, not one with a UUID they never chose")
+
+        let engine = RecordingEngine()
+        let m = makeModel(chunks: 4, engine: engine)
+        ChunkProgressStore.save(ChunkedJobProgress(
+            fingerprint: SourceFingerprint(of: firstShare), sourcePath: firstShare.path,
+            model: m.selectedModel, requestedLanguage: "ru", translate: false,
+            chunkLengthSec: AudioChunker.chunkLengthSec, totalChunks: 4, audioDuration: 45 * 60,
+            done: [.init(segments: [], text: "BEFORE THE JETSAM", language: "ru")]))
+
+        await run(m, source: secondShare)
+
+        XCTAssertEqual(engine.askedFor, ["chunk-1", "chunk-2", "chunk-3"],
+                       "re-sharing after a jetsam must not re-infer what was already done")
+        XCTAssertTrue(try XCTUnwrap(m.history.first?.text).contains("BEFORE THE JETSAM"))
+    }
+
+    /// A record nothing can identify must never be written: `load(for:)` and `remove(_:)` both refuse nil, so it
+    /// could be neither used nor cleaned up — an orphan holding the full transcript in cleartext, occupying one
+    /// of the four slots and evicting a record that WAS resumable.
+    func testARecordWithNoIdentityIsNotStoredAtAll() {
+        ChunkProgressStore.save(ChunkedJobProgress(
+            fingerprint: nil, sourcePath: "/gone.ogg", model: "m", requestedLanguage: nil, translate: false,
+            chunkLengthSec: 120, totalChunks: 4, audioDuration: 600,
+            done: [.init(segments: [], text: "unreachable plaintext", language: "ru")]))
+        XCTAssertTrue(ChunkProgressStore.loadAll().isEmpty,
+                      "a record that can be neither matched nor removed is worse than no record")
+    }
 }

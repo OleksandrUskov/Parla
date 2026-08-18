@@ -22,7 +22,12 @@ enum ImportCoordinator {
             defer { if scoped { src.stopAccessingSecurityScopedResource() } }
 
             let dir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
-            let dest = dir.appendingPathComponent(src.lastPathComponent)   // preserves extension → decoder lane routing
+            // The per-import UUID DIRECTORY already gives collision-freedom, so the file itself keeps the name
+            // the user shared — with the Share Extension's uniqueness stamp stripped. That name reaches the note
+            // (and titled every shared note `voice-<36 hex characters>.ogg`), and it is part of what identifies a
+            // resumable long job, which a freshly random name could never match. Extension preserved either way:
+            // the decoder routes on it.
+            let dest = dir.appendingPathComponent(ShareInboxName.original(from: src.lastPathComponent))
             do {
                 try fm.createDirectory(at: dir, withIntermediateDirectories: true)
                 try fm.copyItem(at: src, to: dest)
