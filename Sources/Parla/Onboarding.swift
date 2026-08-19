@@ -11,12 +11,6 @@ enum Onboarding {
         !didOnboard && !hasHistory
     }
 
-    /// Show the "first compile is one-time, cached afterwards" caption only while a model is compiling
-    /// for the very first time — it quietly disappears once `.loadingModel` really is fast.
-    static func shouldShowFirstCompileHint(isLoadingModel: Bool, didCompileModel: Bool) -> Bool {
-        isLoadingModel && !didCompileModel
-    }
-
     /// The model a fresh user should start on: the tier flagged `recommended` (turbo — the best
     /// quality/speed balance), else the first available. Keeps the first download off the heaviest model.
     static func recommendedModel(from tiers: [ModelTier]) -> String? {

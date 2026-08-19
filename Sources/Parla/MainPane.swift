@@ -322,16 +322,7 @@ struct EmbedModelRow: View {
 
 struct StatusBar: View {
     @Environment(AppModel.self) private var model
-    @AppStorage("didCompileModel") private var didCompileModel = false   // one-time first-compile hint gate
-
-    var body: some View {
-        phaseView
-            // The first ANE compile (.loadingModel → .transcribing) is one-time; once it completes,
-            // retire the reassurance caption so later (fast) loads don't show it.
-            .onChange(of: model.phase) { _, new in
-                if case .transcribing = new { didCompileModel = true }
-            }
-    }
+    var body: some View { phaseView }
 
     @ViewBuilder private var phaseView: some View {
         if model.isRecordingDictation {
@@ -401,13 +392,23 @@ struct StatusBar: View {
         case .downloadingModel(let p):
             downloadChip(p)
         case .loadingModel:
-            VStack(alignment: .leading, spacing: 6) {
-                chip(L("status.loadingmodel"), busy: true)
-                if Onboarding.shouldShowFirstCompileHint(isLoadingModel: true, didCompileModel: didCompileModel) {
-                    Text(L("status.loadingmodel.firstrun"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .padding(.horizontal, 14)
-                        .fixedSize(horizontal: false, vertical: true)
+            // A COLD load is minutes, not seconds (431 s measured against 10 s warm), and a motionless label
+            // for minutes is indistinguishable from a hang. The clock is ELAPSED time and deliberately not a
+            // percentage: nothing in the load reports progress, so a bar would be a guess — see `ModelWarmup`.
+            TimelineView(.periodic(from: model.modelLoadStartedAt ?? .now, by: 1)) { ctx in
+                let elapsed = ctx.date.timeIntervalSince(model.modelLoadStartedAt ?? ctx.date)
+                VStack(alignment: .leading, spacing: 6) {
+                    chip(ModelWarmup.shouldShowElapsed(elapsed)
+                         ? "\(L("status.loadingmodel"))  \(ModelWarmup.elapsedLabel(elapsed))"
+                         : L("status.loadingmodel"), busy: true)
+                    // Only for a model that has never compiled HERE. It used to be a single global flag, so
+                    // this never reappeared for a newly chosen model that pays the whole cost again.
+                    if model.isPreparingColdModel {
+                        Text(L("status.loadingmodel.firstrun"))
+                            .font(.caption).foregroundStyle(.secondary)
+                            .padding(.horizontal, 14)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         case .transcribing(let n, let b):

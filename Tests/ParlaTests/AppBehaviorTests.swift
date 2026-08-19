@@ -473,9 +473,13 @@ final class AppBehaviorTests: ParlaLogicTestCase {
     }
 
     func testShouldShowFirstCompileHint() {
-        XCTAssertTrue(Onboarding.shouldShowFirstCompileHint(isLoadingModel: true, didCompileModel: false))
-        XCTAssertFalse(Onboarding.shouldShowFirstCompileHint(isLoadingModel: true, didCompileModel: true))   // compiled once already
-        XCTAssertFalse(Onboarding.shouldShowFirstCompileHint(isLoadingModel: false, didCompileModel: false)) // not loading a model
+        // Re-pointed when the global "did I ever compile anything" flag was replaced by per-model warmth.
+        // The old helper asked a question that could not be answered correctly — a model never compiled on
+        // this device costs minutes whether or not some OTHER model already has.
+        XCTAssertTrue(ModelWarmup.shouldExplainWait(for: "large-v3", warmed: []))
+        XCTAssertFalse(ModelWarmup.shouldExplainWait(for: "large-v3", warmed: ["large-v3"]))
+        XCTAssertTrue(ModelWarmup.shouldExplainWait(for: "large-v3", warmed: ["tiny"]),
+                      "a different model having compiled says nothing about this one")
     }
 
     func testRecommendedModelPrefersRecommendedTier() {

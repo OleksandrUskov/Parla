@@ -300,8 +300,11 @@ public enum EnginePhase: Equatable {
     case idle
     case preparing(String, batch: BatchProgress? = nil)
     case downloadingModel(Double)   // 0...1, actual download (one time)
-    case loadingModel               // loading into memory: the FIRST compile (ANE) can take minutes,
-                                    // cached after — every later launch is fast (see status.loadingmodel.firstrun)
+    /// Loading into memory — and, the first time a given model is used on a device, COMPILING it for the
+    /// Neural Engine, which is measured in minutes rather than seconds (431 s vs 10 s on the shipping model).
+    /// It carries WHICH model, because whether the wait needs explaining is a property of that model and not
+    /// of the app: switching to a model never used here pays the full cost again. See `ModelWarmup`.
+    case loadingModel(String)
     case transcribing(String, batch: BatchProgress? = nil)
     case failed(String)
 }

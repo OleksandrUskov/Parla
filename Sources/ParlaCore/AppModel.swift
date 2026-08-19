@@ -27,7 +27,22 @@ public protocol FileWatching: AnyObject {
 @MainActor
 @Observable
 public final class AppModel {
-    public var phase: EnginePhase = .idle
+    public var phase: EnginePhase = .idle {
+        // A model is warm the moment real work starts after its load — that transition IS the completion
+        // signal, and there is no other. Doing it here rather than at each `ensureLoaded` call site is
+        // deliberate: there are three of them, and a fourth added later would silently not record anything.
+        didSet { trackModelLoad(leaving: oldValue) }
+    }
+
+    /// Models whose first Core ML compile has already been paid for on this device. See `ModelWarmup`: the
+    /// first load of a model is minutes, every later one is seconds, and which is which is a property of the
+    /// MODEL, not of the install.
+    public private(set) var warmedModels: Set<String> = []
+
+    /// When the current model load began, so the UI can show how long it has been going. Nil unless a load is
+    /// in flight. It is here rather than in a view because both apps need the same answer, and because the
+    /// transition that starts it is only visible from here.
+    public private(set) var modelLoadStartedAt: Date?
     public var paywallReason: PaywallReason?          // non-nil → present the paywall (set by the free-tier length gate; the UI clears it on dismiss)
     /// non-nil → the model heard a different language than the user pinned, confidently enough to say so.
     /// Best-effort and dismissible: never blocks anything, never rewrites a transcript on its own.
@@ -337,6 +352,9 @@ public final class AppModel {
         public static let hotkey = "globalHotkeyEnabled"
         public static let dictationHotkey = "dictationHotkeyEnabled"
         public static let keepDictationAudio = "keepDictationAudio"
+        public static let warmedModels = "warmedModels"
+        /// The global boolean this replaced. Read once, to migrate; never written again.
+        public static let legacyDidCompileModel = "didCompileModel"
         public static let dictationPaste = "dictationPasteIntoFrontmost"
         public static let dictationPasteAXPrompted = "dictationPasteAXPrompted"   // one-time AX prompt guard
         public static let dictationMode = "dictationMode"
@@ -491,6 +509,30 @@ public final class AppModel {
         let lexicalIDs = Set(lexical.map(\.id))
         let semanticOnly = semanticHitIDs.compactMap { id in lexicalIDs.contains(id) ? nil : history.first { $0.id == id } }
         return lexical + semanticOnly
+    }
+
+    /// Record that a model finished loading, which is exactly the moment the phase leaves `.loadingModel` for
+    /// real work. Only that edge counts: a load that fails, or is cancelled, has not paid the compile and must
+    /// still explain itself next time.
+    func trackModelLoad(leaving old: EnginePhase) {
+        // Entering a load starts the clock; anything else stops it. `Date()` is read only on the edge, so a
+        // phase that changes often (chunk progress) costs a switch and nothing more.
+        switch (old, phase) {
+        case (.loadingModel, .loadingModel): break                 // still loading — keep the original start
+        case (_, .loadingModel):             modelLoadStartedAt = Date()
+        default:                             modelLoadStartedAt = nil
+        }
+        guard case .loadingModel(let name) = old, case .transcribing = phase, !name.isEmpty else { return }
+        guard !warmedModels.contains(name) else { return }
+        warmedModels.insert(name)
+        UserDefaults.standard.set(Array(warmedModels), forKey: Keys.warmedModels)
+    }
+
+    /// Should the wait be explained right now? True only while a model that has never been compiled on this
+    /// device is loading — see `ModelWarmup` for why that is per-model and why there is no percentage.
+    public var isPreparingColdModel: Bool {
+        guard case .loadingModel(let name) = phase else { return false }
+        return ModelWarmup.shouldExplainWait(for: name, warmed: warmedModels)
     }
 
     /// Most recent transcript's text, or "" — the read value behind GetLastTranscriptIntent (Shortcuts).

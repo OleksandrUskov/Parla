@@ -551,8 +551,8 @@ final class TranscriptionFlowTests: ParlaLogicTestCase {
         let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
         m.phase = .transcribing("chunk 1 of 36", batch: BatchProgress(index: 1, total: 36, done: 0))
 
-        m.progressHandler()(.loading)                      // the late event
-        m.progressHandler()(.downloading(0.5))
+        m.progressHandler(model: "openai_whisper-tiny")(.loading)     // the late event
+        m.progressHandler(model: "openai_whisper-tiny")(.downloading(0.5))
 
         // DRAIN the handler's unstructured Task before asserting. Without this the test passes with the guard
         // deleted — it would be asserting before the overwrite it exists to catch could even happen. (Caught by
@@ -568,7 +568,7 @@ final class TranscriptionFlowTests: ParlaLogicTestCase {
     /// …but a load event must still be shown when the pipeline really is loading, or the user gets a blank wait.
     @MainActor func testAModelLoadEventIsShownWhileTheModelIsActuallyLoading() {
         let m = AppModel(engine: FakeEngine(), ai: NoopAIService(), embedder: FakeEmbedder())
-        for start in [EnginePhase.idle, .preparing("f.m4a"), .loadingModel] {
+        for start in [EnginePhase.idle, .preparing("f.m4a"), .loadingModel("openai_whisper-tiny")] {
             m.phase = start
             XCTAssertTrue(m.phaseAcceptsModelLoadUpdate, "\(start) must still accept load progress")
         }

@@ -41,9 +41,24 @@ struct HistoryBusyView: View {
                 Text("\(L("common.download"))… \(Int((p * 100).rounded()))%")
                     .font(.callout).foregroundStyle(.secondary)
             case .loadingModel:
+                // The caption used to render UNCONDITIONALLY here, so a returning user was told their
+                // fiftieth ten-second load was a one-time first run. It is now asked per MODEL, which is the
+                // honest unit: a model never compiled on this device costs minutes, one that has costs
+                // seconds. The clock is elapsed time, not a percentage — the load reports no progress at all.
                 ProgressView().controlSize(.large)
-                Text(L("status.loadingmodel.firstrun"))
-                    .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                TimelineView(.periodic(from: model.modelLoadStartedAt ?? .now, by: 1)) { ctx in
+                    let elapsed = ctx.date.timeIntervalSince(model.modelLoadStartedAt ?? ctx.date)
+                    VStack(spacing: 6) {
+                        Text(ModelWarmup.shouldShowElapsed(elapsed)
+                             ? "\(L("status.loadingmodel"))  \(ModelWarmup.elapsedLabel(elapsed))"
+                             : L("status.loadingmodel"))
+                            .font(.callout).foregroundStyle(.secondary)
+                        if model.isPreparingColdModel {
+                            Text(L("status.loadingmodel.firstrun"))
+                                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        }
+                    }
+                }
             case .transcribing(let name, let batch), .preparing(let name, let batch):
                 if let b = batch, b.total > 1 {
                     ProgressView(value: Double(b.done), total: Double(b.total))

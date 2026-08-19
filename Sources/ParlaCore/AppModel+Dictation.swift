@@ -221,8 +221,8 @@ extension AppModel {
         }
 
         do {
-            phase = .loadingModel
-            try await engine.ensureLoaded(model: model, progress: progressHandler())
+            phase = .loadingModel(model)
+            try await engine.ensureLoaded(model: model, progress: progressHandler(model: model))
             phase = .transcribing(L("dictation.label"))
             let lang = language.isEmpty ? nil : language
             let r = try await engine.transcribe(wavPath: wav.path, language: lang,

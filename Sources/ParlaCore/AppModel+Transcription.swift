@@ -316,8 +316,8 @@ extension AppModel {
                                                model: model, audioDuration: dur)
         }
 
-        phase = .loadingModel
-        try await engine.ensureLoaded(model: model, progress: progressHandler())
+        phase = .loadingModel(model)
+        try await engine.ensureLoaded(model: model, progress: progressHandler(model: model))
 
         phase = .transcribing(url.lastPathComponent, batch: batch)
         let lang = language.isEmpty ? nil : language
@@ -360,8 +360,8 @@ extension AppModel {
         }()
         defer { if let chunkDir { try? FileManager.default.removeItem(at: chunkDir) } }
 
-        phase = .loadingModel
-        try await engine.ensureLoaded(model: model, progress: progressHandler())
+        phase = .loadingModel(model)
+        try await engine.ensureLoaded(model: model, progress: progressHandler(model: model))
         let lang = language.isEmpty ? nil : language
 
         // Split produced nothing → fall back to a single pass on the whole file.
@@ -454,7 +454,7 @@ extension AppModel {
                             segments: stitched, duration: audioDuration, heard: heard)
     }
 
-    public func progressHandler() -> @Sendable (ModelLoad) -> Void {   // internal: also reused by +Dictation
+    public func progressHandler(model: String) -> @Sendable (ModelLoad) -> Void {   // internal: also reused by +Dictation
         { [weak self] load in
             Task { @MainActor in
                 guard let self else { return }
@@ -467,7 +467,7 @@ extension AppModel {
                 guard self.phaseAcceptsModelLoadUpdate else { return }
                 switch load {
                 case .downloading(let p): self.phase = .downloadingModel(p)
-                case .loading: self.phase = .loadingModel
+                case .loading: self.phase = .loadingModel(model)
                 }
             }
         }

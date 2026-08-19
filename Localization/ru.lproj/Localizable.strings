@@ -296,7 +296,7 @@
 "onboarding.ios.step1.body" = "Поделись или импортируй голосовое, аудио или видео — и Parla напишет слова. Телеграмные .ogg/.opus тоже.";
 "onboarding.ios.privacy.body" = "Ничего не загружается в сеть. Единственный сетевой запрос — разовое скачивание модели, дальше всё офлайн.";
 "firstrun.later"            = "Позже";
-"status.loadingmodel.firstrun" = "Первый запуск дольше — компилирует модель под Apple Neural Engine (разово). Дальше компиляция пропускается, остаётся только загрузка в память.";
+"status.loadingmodel.firstrun" = "Эту модель впервые компилирует под Apple Neural Engine — из-за этого и ожидание, на крупных моделях оно доходит до минут. Дальше она загружается за секунды.";
 
 // About / Acknowledgements (in-app licenses screen)
 "settings.section.about"    = "О приложении";

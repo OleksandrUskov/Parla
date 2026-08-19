@@ -296,7 +296,7 @@
 "onboarding.ios.step1.body" = "Share or import any voice message, audio, or video and Parla writes out the words — Telegram .ogg/.opus too.";
 "onboarding.ios.privacy.body" = "Nothing is uploaded. The only network use is the one-time model download — after that, fully offline.";
 "firstrun.later"            = "Maybe later";
-"status.loadingmodel.firstrun" = "First run is slower — it compiles the model for the Apple Neural Engine (one-time). Later launches skip that and just load it into memory.";
+"status.loadingmodel.firstrun" = "The first time you use this model it is compiled for the Apple Neural Engine — that is the wait, and on the larger models it runs to minutes. Every later load skips it and takes seconds.";
 
 // About / Acknowledgements (in-app licenses screen)
 "settings.section.about"    = "About";
