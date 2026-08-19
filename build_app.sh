@@ -3,7 +3,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# The PRODUCT name: the .app, CFBundleName/DisplayName, the process, the Services port.
 APP="Parla"
+# The SPM executable target, which is what xcodebuild's -scheme and the built binary are named after. Kept
+# SEPARATE from $APP on purpose: the two were one variable, so renaming the product silently broke the build
+# by asking xcodebuild for a scheme that does not exist. Renaming the target is a much larger change (module
+# name, imports, `@testable import`) and belongs to a later phase — this split lets the product be renamed
+# without waiting for it.
+SCHEME="Parla"
 # Do not change: the notification grant (UNUserNotificationCenter) is tied to this bundle ID.
 # Changing it makes every existing user lose the permission and be asked again.
 BUNDLE_ID="com.parla.app"
@@ -60,14 +67,14 @@ fi
 
 DERIVED="$PWD/.build/xcode"
 xcodebuild build \
-  -scheme "$APP" \
+  -scheme "$SCHEME" \
   -configuration Release \
   -destination 'platform=macOS' \
   -derivedDataPath "$DERIVED" \
   -skipMacroValidation \
   CODE_SIGNING_ALLOWED=NO
 # -derivedDataPath + -configuration Release (macOS, no platform suffix) makes the product path deterministic.
-BIN="$DERIVED/Build/Products/Release/$APP"
+BIN="$DERIVED/Build/Products/Release/$SCHEME"
 [ -x "$BIN" ] || { echo "❌ no binary at $BIN"; exit 1; }
 
 APPDIR="$APP.app"

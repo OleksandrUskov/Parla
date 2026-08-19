@@ -14,6 +14,21 @@ import AppKit
 /// happens again.
 class ParlaLogicTestCase: ParlaTestCase {
 
+    // MARK: build_app.sh (the one place the macOS identity is authored)
+
+    /// Read a `KEY="value"` assignment out of `build_app.sh`.
+    ///
+    /// Lives here rather than in the two suites that need it, because a hand-kept second copy of a helper is
+    /// how this project has been bitten before. It strips a TRAILING `#` comment: adding one to the `APP=`
+    /// line was enough to make a test assert against `Parla          # the PRODUCT name: …`, which is a
+    /// confusing failure for an unrelated edit.
+    func shellValue(of key: String, in script: String) -> String? {
+        guard let line = script.split(separator: "\n").first(where: { $0.hasPrefix("\(key)=") }) else { return nil }
+        var v = String(line.dropFirst(key.count + 1))
+        if let hash = v.range(of: "#") { v = String(v[v.startIndex..<hash.lowerBound]) }
+        return v.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\"", with: "")
+    }
+
     // MARK: Localization (test seam)
 
     /// Repo root, derived from this file's path (Tests/ParlaTests/… → ../../..).

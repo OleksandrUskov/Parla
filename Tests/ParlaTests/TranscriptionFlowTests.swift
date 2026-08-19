@@ -83,13 +83,19 @@ final class TranscriptionFlowTests: ParlaLogicTestCase {
         }
     }
 
-    /// Tip-jar consumables are separate from Pro (a tip must never grant the entitlement) and stay in the
-    /// placeholder namespace pre-rebrand.
+    /// Tip-jar consumables are separate from Pro — a tip must never grant the entitlement — and they are three
+    /// DISTINCT products.
+    ///
+    /// The namespace half of this used to be a literal `com.parla.tip.` prefix, which a rename would rewrite
+    /// along with the code, quietly turning the assertion into a restatement of whatever the code now says.
+    /// Where the products live is checked once, against the app's own bundle namespace, in
+    /// `MonetizationTests.testEveryPurchaseIDSharesTheAppsNamespace`.
     func testTipProductsSeparateFromPro() {
         XCTAssertEqual(ProGate.tipProductIDs.count, 3)
+        XCTAssertEqual(Set(ProGate.tipProductIDs).count, 3, "three tiers means three distinct product IDs")
         XCTAssertFalse(ProGate.tipProductIDs.contains(ProGate.proProductID), "a tip must never be the Pro product")
         for id in ProGate.tipProductIDs {
-            XCTAssertTrue(id.hasPrefix("com.parla.tip."), "tip IDs stay in the placeholder namespace")
+            XCTAssertTrue(id.contains(".tip."), "a consumable tip must be identifiable as one")
         }
     }
 

@@ -69,15 +69,26 @@ final class SubmissionReadinessTests: ParlaLogicTestCase {
         let script = try code(of: "build_app.sh")
         let store = try String(contentsOf: repoRoot.appendingPathComponent("apps/mac/Parla-macOS-Info.plist"),
                                encoding: .utf8)
-        // Values, not just key names: a scheme that differs by one letter is a dead link, not a warning.
-        for value in ["com.parla.app.url",                  // URL type name
-                      "<string>parla</string>",             // the parla:// scheme itself
-                      "com.parla.viewTranscript",           // Handoff activity type
-                      "transcribeFiles",                    // the Services selector
-                      "<string>Parla</string>",             // NSPortName — Services breaks if this differs
-                      "public.app-category.productivity",
-                      "ITSAppUsesNonExemptEncryption",
-                      "NSMicrophoneUsageDescription"] {
+        // The identity values are DERIVED from the two things build_app.sh actually authors, not written out
+        // here. This test exists to prove the two plists AGREE — not that they say one particular name — and a
+        // hardcoded name turned it into a rename detector: it went red on the rebrand and invited someone to
+        // update the strings, which preserves the wording and loses the check.
+        guard let bundleID = shellValue(of: "BUNDLE_ID", in: script), let appName = shellValue(of: "APP", in: script) else {
+            return XCTFail("build_app.sh no longer authors APP / BUNDLE_ID — this test cannot check what it claims")
+        }
+        let namespace = bundleID.split(separator: ".").prefix(2).joined(separator: ".")
+
+        // A scheme that differs by one letter is a dead link, not a warning — so these are compared as VALUES.
+        for value in [String]([
+            "<string>\(bundleID).url</string>",             // URL type name, derived from the bundle ID
+            "<string>\(appName.lowercased())</string>",     // the URL scheme IS the lowercased app name
+            "\(namespace).viewTranscript",                  // Handoff activity type, in the app's namespace
+            "transcribeFiles",                              // the Services selector
+            "<string>\(appName)</string>",                  // NSPortName — Services breaks if this differs
+            "public.app-category.productivity",
+            "ITSAppUsesNonExemptEncryption",
+            "NSMicrophoneUsageDescription",
+        ]) {
             XCTAssertTrue(script.contains(value), "build_app.sh's plist no longer carries \(value)")
             XCTAssertTrue(store.contains(value), "the App Store plist no longer carries \(value)")
         }

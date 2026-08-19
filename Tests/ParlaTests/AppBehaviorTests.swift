@@ -324,9 +324,13 @@ final class AppBehaviorTests: ParlaLogicTestCase {
         XCTAssertEqual(BatchNotifier.summary(succeeded: 11, failed: 1).body, "11 из 12 готово · 1 не удалось")
         XCTAssertEqual(BatchNotifier.summary(succeeded: 8,  failed: 4).body, "8 из 12 готово · 4 не удалось")
     }
-    func testSummaryTitleAlwaysParla() {
-        XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).title, "Parla")
-        XCTAssertEqual(BatchNotifier.summary(succeeded: 0, failed: 2).title, "Parla")
+    /// The property is "every batch notification is branded", not "it says one particular word". Written
+    /// against a literal, this test went red on the rebrand and invited someone to just update the string —
+    /// which would have kept the literal and lost the guard.
+    func testSummaryTitleIsAlwaysTheAppName() {
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 1, failed: 0).title, Brand.name)
+        XCTAssertEqual(BatchNotifier.summary(succeeded: 0, failed: 2).title, Brand.name)
+        XCTAssertFalse(Brand.name.isEmpty, "an unbranded notification is indistinguishable from another app's")
     }
 
     func testPluralRu() {

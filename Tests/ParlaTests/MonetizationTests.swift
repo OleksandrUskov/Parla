@@ -29,11 +29,28 @@ final class MonetizationTests: ParlaLogicTestCase {
         XCTAssertFalse(ProGate.exceedsFreeLimit(durationSec: -1,    isPro: false))
     }
 
-    /// The placeholder product ID stays in the `com.parla.*` namespace until the app's final reserved namespace
-    /// is flipped in (alongside the bundle IDs). Pins that no premature production-namespace ID leaked into code.
-    func testProProductIDIsPlaceholderNamespace() {
-        XCTAssertEqual(ProGate.proProductID, "com.parla.pro.lifetime")
-        XCTAssertTrue(ProGate.proProductID.hasPrefix("com.parla."), "product ID stays in the placeholder namespace pre-rebrand")
+    /// 🔑 Every in-app-purchase ID lives in the SAME reverse-DNS namespace as the app's bundle identifier.
+    ///
+    /// This used to assert the literal `com.parla.pro.lifetime`, which pinned today's name rather than the
+    /// property — so it went red on the rebrand and invited a literal update, and a literal update cannot catch
+    /// the thing that actually hurts: a product ID and a bundle ID drifting into different namespaces. In App
+    /// Store Connect an IAP belongs to one app record, and its identifier is IMMUTABLE once created, so that
+    /// drift is discovered at the worst possible moment and cannot be undone.
+    ///
+    /// The bundle namespace is read from `build_app.sh`, which is the one place the macOS identifier is
+    /// authored, so a rename that forgets the products fails here instead of in review.
+    func testEveryPurchaseIDSharesTheAppsNamespace() throws {
+        let script = try String(contentsOf: repoRoot.appendingPathComponent("build_app.sh"), encoding: .utf8)
+        guard let bundleID = shellValue(of: "BUNDLE_ID", in: script) else {
+            return XCTFail("build_app.sh no longer authors BUNDLE_ID — this test cannot check what it claims")
+        }
+        let namespace = bundleID.split(separator: ".").prefix(2).joined(separator: ".")   // e.g. "com.parla"
+        XCTAssertEqual(namespace.split(separator: ".").count, 2, "unexpected bundle-ID shape: \(bundleID)")
+
+        for id in [ProGate.proProductID] + ProGate.tipProductIDs {
+            XCTAssertTrue(id.hasPrefix(namespace + "."),
+                          "\(id) is outside the app's namespace \(namespace) — that IAP would belong to no app record")
+        }
     }
 
 

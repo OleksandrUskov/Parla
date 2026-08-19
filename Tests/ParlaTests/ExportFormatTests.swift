@@ -34,14 +34,17 @@ final class ExportFormatTests: ParlaLogicTestCase {
 
     // MARK: History — export
 
+    /// The header is asserted against `Brand.name` rather than a literal: the property is "an exported history
+    /// is branded", and a literal would only pin today's name — going red on a rename and inviting a string
+    /// update that keeps the wording and loses the check.
     func testExportText() {
         let items = [makeItem(name: "a.ogg", text: "первый"), makeItem(name: "b.ogg", text: "второй")]
         let out = exportText(items)
-        XCTAssertTrue(out.hasPrefix("# Parla"))
+        XCTAssertTrue(out.hasPrefix("# \(Brand.name)"), "the export header must name the app: \(out.prefix(30))")
         XCTAssertTrue(out.contains("## a.ogg"))
         XCTAssertTrue(out.contains("первый"))
         XCTAssertTrue(out.contains("второй"))
-        XCTAssertEqual(exportText([]).hasPrefix("# Parla"), true)
+        XCTAssertTrue(exportText([]).hasPrefix("# \(Brand.name)"), "…even when there is nothing to export")
     }
 
 
