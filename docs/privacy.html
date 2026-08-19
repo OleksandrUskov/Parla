@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Parla</title>
+<style>
+  :root { color-scheme: dark; --bg:#0e0f12; --fg:#e8e8ea; --dim:#9a9aa2; --accent:#7fd4c1; --rule:#26272d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 44rem; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+  h1 { font-size: 1.9rem; line-height:1.2; margin:0 0 .35rem; letter-spacing:-.02em; }
+  h2 { font-size: 1.05rem; margin: 2.25rem 0 .5rem; color: var(--accent); letter-spacing:.01em; }
+  p, li { color: var(--fg); }
+  .lede { color: var(--dim); margin: 0 0 2rem; }
+  .summary { border:1px solid var(--rule); border-radius:12px; padding:1rem 1.25rem; margin:0 0 2rem; background:#131419; }
+  .summary p { margin:0; font-size:1.05rem; }
+  a { color: var(--accent); }
+  footer { margin-top:3.5rem; padding-top:1.25rem; border-top:1px solid var(--rule); color:var(--dim); font-size:.9rem; }
+  code { background:#1a1b21; padding:.1rem .35rem; border-radius:4px; font-size:.9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="lede">Parla — last updated 19 August 2026</p>
+
+  <div class="summary">
+    <p><strong>Parla collects nothing.</strong> There is no account, no server we operate, no analytics and no
+    advertising. Everything you record, import or write stays on your device.</p>
+  </div>
+
+  <h2>Data we collect</h2>
+  <p>None. Parla does not collect, transmit, sell or share any personal data. There is no telemetry, no crash
+  reporting service, no advertising identifier and no third-party SDK that receives anything about you.</p>
+
+  <h2>On-device processing</h2>
+  <p>Transcription, dictation and text analysis all run entirely on your device, using Apple's on-device
+  machine-learning frameworks. Your audio and your transcripts are never uploaded. There is no upload path in
+  the app at all.</p>
+
+  <h2>Network use</h2>
+  <p>Parla uses the network only to <em>download</em>, never to send:</p>
+  <ul>
+    <li>the speech-recognition model, once, on first run — after which transcription works fully offline;</li>
+    <li>the optional generative and text-embedding models, only if you choose to enable those features.</li>
+  </ul>
+  <p>These requests fetch public model files and contain no personal information about you. Purchases are
+  handled by Apple's StoreKit, which communicates with Apple — not with us; we never see your payment details
+  and receive no personal data from a purchase.</p>
+
+  <h2>Microphone</h2>
+  <p>Microphone access is used only while you are actively dictating, to turn your speech into text on your
+  device. The recording is not sent anywhere. Whether an audio copy is kept on your device is your choice in
+  Settings, and you can delete it at any time.</p>
+
+  <h2>Files you open</h2>
+  <p>When you drop in or share an audio or video file, Parla reads it to transcribe it. It is not copied
+  anywhere outside your device, and Parla asks the system for access to nothing beyond the files you hand it
+  and any folder you explicitly choose to watch.</p>
+
+  <h2>Your data, and deleting it</h2>
+  <p>Your transcripts live in Parla's own storage on your device. Deleting a note removes its text and its
+  audio copy; deleting the app removes everything. Since nothing was ever sent anywhere, there is nothing for
+  us to delete on your behalf.</p>
+
+  <h2>Children</h2>
+  <p>Parla collects no data from anyone, including children.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the date at the top of this page changes with it.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about privacy, or anything else: open an issue at
+  <a href="https://github.com/OleksandrUskov/Parla/issues">github.com/OleksandrUskov/Parla/issues</a>.</p>
+
+  <footer>
+    <a href="./">Parla</a> · <a href="./support.html">Support</a> ·
+    <a href="https://github.com/OleksandrUskov/Parla">Source code</a>
+  </footer>
+</main>
+</body>
+</html>
