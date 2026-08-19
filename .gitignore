@@ -10,6 +10,8 @@ apps/ios/*.xcodeproj
 apps/ios/*.entitlements
 apps/mac/*.xcodeproj
 apps/mac/build/
+# Derived data from the screenshot tooling (docs/_dev/screenshots.sh).
+apps/ios/.shots/
 apps/mac/*.entitlements
 
 # iOS test fixtures — real Telegram voice notes; voice NEVER in git. Local-only; the decode test XCTSkips without them.
