@@ -27,7 +27,7 @@ class ShareViewController: UIViewController {
         // dismissed with its normal confirmation and the note simply never appeared, which reads to the user as
         // "I forgot to open Parla". Report it instead; the host app then shows a real failure.
         guard let inbox = inboxURL() else {
-            return fail("Parla could not reach its shared storage.")
+            return fail(NSLocalizedString("share.error.storage", comment: ""))
         }
 
         let landed = Counter()
@@ -65,7 +65,7 @@ class ShareViewController: UIViewController {
         // reported as done.
         group.notify(queue: .main) { [weak self] in
             guard let self else { return }
-            landed.value > 0 ? self.complete() : self.fail("Parla could not read the shared file.")
+            landed.value > 0 ? self.complete() : self.fail(NSLocalizedString("share.error.read", comment: ""))
         }
     }
 

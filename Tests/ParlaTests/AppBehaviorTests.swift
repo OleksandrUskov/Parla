@@ -362,6 +362,44 @@ final class AppBehaviorTests: ParlaLogicTestCase {
         XCTAssertEqual(en, uk, "uk differs from en: \(en.symmetricDifference(uk).sorted())")
     }
 
+    /// 🔴 Every key the EXTENSIONS ask for must exist in all three catalogues.
+    ///
+    /// The extensions cannot link ParlaCore — the share sheet and the widget run under their own memory
+    /// budgets — so they carry a copy of the catalogues and resolve through `NSLocalizedString` against the
+    /// SYSTEM language. That has no fallback worth the name: a key that is not there is rendered to the user
+    /// AS THE KEY, so a typo ships as "share.error.storage" in a share sheet. The app's own `L()` is at least
+    /// exercised by dozens of tests; these two surfaces are exercised by none.
+    ///
+    /// Comments are stripped before matching, and the number of keys found is asserted — a scan that silently
+    /// matches nothing is the failure this project has been caught by before.
+    func testEveryKeyTheExtensionsAskForExists() throws {
+        let root = repoRoot.appendingPathComponent("apps/ios/Extensions")
+        let files = (FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
+            .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }) ?? []
+        XCTAssertGreaterThan(files.count, 1, "found no extension sources to scan — the tree moved")
+
+        var used: Set<String> = []
+        for file in files {
+            let code = (try String(contentsOf: file, encoding: .utf8))
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+            var rest = Substring(code)
+            while let call = rest.range(of: "NSLocalizedString(\"") {
+                rest = rest[call.upperBound...]
+                if let close = rest.firstIndex(of: "\"") { used.insert(String(rest[..<close])) }
+            }
+        }
+        XCTAssertFalse(used.isEmpty, "no NSLocalizedString keys found — the scan matched nothing, so it proves nothing")
+
+        for lang in ["en", "ru", "uk"] {
+            let url = repoRoot.appendingPathComponent("Localization/\(lang).lproj/Localizable.strings")
+            let have = Set((NSDictionary(contentsOf: url) as? [String: String] ?? [:]).keys)
+            XCTAssertTrue(used.isSubset(of: have),
+                          "\(lang) is missing extension keys: \(used.subtracting(have).sorted())")
+        }
+    }
+
     /// Switching the language at runtime really changes the output of localized functions.
     func testLocalizationLanguageSwitch() {
         activateLocalization("en")

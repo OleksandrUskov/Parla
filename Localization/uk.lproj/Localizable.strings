@@ -369,3 +369,11 @@
 "toast.url.nofiles"            = "Нема чого розшифровувати: за цим шляхом немає читабельного аудіо.";
 "toast.url.sandboxed"          = "Ця збірка не відкриває файли за шляхом. Перетягни файл у Parla.";
 "toast.dictation.paste.unavailable" = "Скопійовано в буфер — ця збірка не вставляє в інші застосунки.";
+
+/* Extensions (Share sheet, widget gallery). These run OUTSIDE the app and cannot link ParlaCore, so they
+   resolve through NSLocalizedString against the SYSTEM language rather than the in-app language picker —
+   which is the right behaviour anyway: both surfaces are system UI. */
+"widget.gallery.name"        = "Parla — останні";
+"widget.gallery.description" = "Останні розшифровки під рукою.";
+"share.error.storage"        = "Parla не змогла дістатися до свого спільного сховища.";
+"share.error.read"           = "Parla не змогла прочитати цей файл.";

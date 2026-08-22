@@ -108,6 +108,18 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: Extensions/Share
+      # These run outside the app and cannot link ParlaCore, so they carry their own copy of the
+      # catalogues and resolve through NSLocalizedString against the SYSTEM language. Both surfaces they
+      # render into — the share sheet and the widget gallery — are system UI, so that is the right language.
+      - path: ../../Localization/en.lproj
+        type: folder
+        buildPhase: resources
+      - path: ../../Localization/ru.lproj
+        type: folder
+        buildPhase: resources
+      - path: ../../Localization/uk.lproj
+        type: folder
+        buildPhase: resources
     entitlements:
       path: ParlaShareExtension.entitlements
       properties:
@@ -132,6 +144,18 @@ targets:
     sources:
       - path: Extensions/Widgets
       - path: Shared
+      # These run outside the app and cannot link ParlaCore, so they carry their own copy of the
+      # catalogues and resolve through NSLocalizedString against the SYSTEM language. Both surfaces they
+      # render into — the share sheet and the widget gallery — are system UI, so that is the right language.
+      - path: ../../Localization/en.lproj
+        type: folder
+        buildPhase: resources
+      - path: ../../Localization/ru.lproj
+        type: folder
+        buildPhase: resources
+      - path: ../../Localization/uk.lproj
+        type: folder
+        buildPhase: resources
     entitlements:
       path: ParlaWidgets.entitlements
       properties:

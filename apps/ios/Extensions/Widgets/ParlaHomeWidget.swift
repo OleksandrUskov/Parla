@@ -10,8 +10,8 @@ struct ParlaHomeWidget: Widget {
             RecentNotesView(entry: entry)
                 .containerBackground(for: .widget) { WidgetBrand.background }
         }
-        .configurationDisplayName("Parla — Recent")
-        .description("Your latest transcripts at a glance.")
+        .configurationDisplayName(NSLocalizedString("widget.gallery.name", comment: ""))
+        .description(NSLocalizedString("widget.gallery.description", comment: ""))
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

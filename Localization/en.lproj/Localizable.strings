@@ -369,3 +369,11 @@
 "toast.url.nofiles"            = "Nothing to transcribe: no readable audio at that path.";
 "toast.url.sandboxed"          = "This build can't open files by path. Drag the file onto Parla instead.";
 "toast.dictation.paste.unavailable" = "Copied to the clipboard — this build can't paste into other apps.";
+
+/* Extensions (Share sheet, widget gallery). These run OUTSIDE the app and cannot link ParlaCore, so they
+   resolve through NSLocalizedString against the SYSTEM language rather than the in-app language picker —
+   which is the right behaviour anyway: both surfaces are system UI. */
+"widget.gallery.name"        = "Parla — Recent";
+"widget.gallery.description" = "Your latest transcripts at a glance.";
+"share.error.storage"        = "Parla could not reach its shared storage.";
+"share.error.read"           = "Parla could not read the shared file.";
