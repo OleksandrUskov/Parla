@@ -281,8 +281,15 @@ extension AppModel {
             // Reduce over the MERGED set: reducing over `built` alone produced an overall summary that silently
             // omitted the surviving chapters while presenting itself as whole-recording coverage.
             let joined = merged.map(\.summary).joined(separator: "\n")
-            overall = try? await ai.insights(forTranscript: joined, language: item.language)   // title + keywords
+            // The detailed summary is computed FIRST because the title and keywords are derived from it.
             richSummary = await hierarchicalSummary(of: merged.map(\.summary), language: item.language)  // detailed summary, ANY length
+            // 🔴 `insights` truncates its input at `maxInputChars` (8000). The joined chapter summaries of a
+            // long recording overflow that, so the title and keywords used to describe only its OPENING while
+            // the summary beside them covered the whole thing — the asymmetry was visible on exactly the
+            // long-audio feature Pro is sold for. The hierarchical summary already covers everything and is
+            // one model output long, so it fits the cap comfortably and is the better input. The raw join
+            // stays as the fallback for when the reduce produced nothing.
+            overall = try? await ai.insights(forTranscript: richSummary ?? joined, language: item.language)
         }
         // TOCTOU (mirror enrichInsights): re-find after the awaits; an edit re-buckets chapters → drop the stale result.
         guard let idx = history.firstIndex(where: { $0.id == id }), history[idx].text == item.text else { return }

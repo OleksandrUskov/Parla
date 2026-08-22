@@ -250,6 +250,32 @@ final class AIInsightsTests: ParlaLogicTestCase {
         }
     }
 
+    /// 🔴 On a long recording the TITLE and KEYWORDS used to describe only its opening.
+    ///
+    /// `insights` truncates its input at 8000 characters. The whole-recording pass fed it the chapter
+    /// summaries JOINED — which on a long enough recording overflows that cap — while the summary shown right
+    /// beside them was built by the hierarchical reduce and covered everything. So the two disagreed, on
+    /// exactly the long-audio feature Pro is sold for. The hierarchical summary already covers the recording
+    /// and is one model output long, so it is what the title and keywords are derived from now.
+    @MainActor func testALongRecordingsTitleIsDerivedFromTheWholeRecordingNotItsOpening() async {
+        await withTemporaryHistoryStoreAsync {
+            let spy = InsightsInputSpy(summaryText: "WHOLE-RECORDING SUMMARY")
+            let m = AppModel(engine: FakeEngine(), ai: spy, embedder: FakeEmbedder())
+            var it = self.makeItem(text: "длинная запись", segments: [
+                Segment(start: 0, end: 5, text: "первая глава тут"),
+                Segment(start: 130, end: 135, text: "вторая глава тут"),
+                Segment(start: 260, end: 265, text: "третья глава тут"),
+            ], lang: "ru")
+            it.durationSec = 900
+            m.history = [it]
+            await m.generateChapterSummaries(for: it.id)
+
+            guard let whole = spy.insightsInputs.last else { return XCTFail("insights was never asked") }
+            XCTAssertEqual(whole, "WHOLE-RECORDING SUMMARY",
+                           "the title must come from the reduce that covers everything, not the raw join")
+        }
+    }
+
     /// THE call-site guard for the merge. «Regenerate all summaries» used to assign the freshly-built array
     /// wholesale, so a chapter that had a summary and failed THIS run lost it — and per-chapter failure is
     /// ordinary (a truncated JSON the parser rejects, a guardrail refusal). regenerateChapterSummary already

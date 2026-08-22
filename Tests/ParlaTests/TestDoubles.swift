@@ -109,8 +109,15 @@ struct PerChapterAIService: LocalLLMService {
 /// while each per-CHAPTER input is a single space-joined line → distinguish by the newline to return distinct results.
 struct ReduceAIService: LocalLLMService {
     func availability(forLanguage language: String) -> AIAvailability { .ready }
+    /// The whole-recording digest. It is what the overall `insights` call is now handed, which is also how
+    /// this double tells the two kinds of call apart.
+    func summarize(_ text: String, language: String) async throws -> String { "OVERALL" }
     func insights(forTranscript text: String, language: String) async throws -> AIInsights {
-        text.contains("\n")
+        // Re-pointed when the title and keywords moved onto the hierarchical summary. This used to branch on
+        // "does the input contain a newline", which distinguished the joined chapter summaries from a single
+        // chapter's text — a heuristic that stopped meaning anything once the overall call receives a reduce
+        // OUTPUT rather than a join. The discriminator is now the digest itself.
+        text == "OVERALL"
             ? AIInsights(title: "OverallТ", summary: "OVERALL", actions: [], keywords: ["ovk"])
             : AIInsights(title: "chT", summary: "chS", actions: [], keywords: [])
     }
@@ -124,6 +131,21 @@ struct DetailedSummaryAIService: LocalLLMService {
         AIInsights(title: "T", summary: "BRIEF", actions: [], keywords: ["k"])
     }
     func summarize(_ text: String, language: String) async throws -> String { "DETAILED whole-recording summary" }
+}
+
+/// Records the text handed to `insights`, so a test can assert WHICH text the title and keywords were derived
+/// from — the thing that separates "the title describes the whole recording" from "the title describes its
+/// first eight thousand characters". Single-flight in tests → unchecked Sendable, same as the others here.
+final class InsightsInputSpy: LocalLLMService, @unchecked Sendable {
+    private(set) var insightsInputs: [String] = []
+    let summaryText: String
+    init(summaryText: String = "WHOLE-RECORDING SUMMARY") { self.summaryText = summaryText }
+    func availability(forLanguage language: String) -> AIAvailability { .ready }
+    func insights(forTranscript text: String, language: String) async throws -> AIInsights {
+        insightsInputs.append(text)
+        return AIInsights(title: "T", summary: "BRIEF", actions: [], keywords: ["k"])
+    }
+    func summarize(_ text: String, language: String) async throws -> String { summaryText }
 }
 
 /// Counts `summarize` calls — to prove the hierarchical reduce BATCHES + RECURSES on over-budget input (many calls)
