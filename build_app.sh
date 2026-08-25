@@ -16,7 +16,7 @@ SCHEME="Parla"
 BUNDLE_ID="com.parla.app"
 # Overridable so a release build can stamp a real version/build without editing the script:
 #   PARLA_VERSION=1.1.0 PARLA_BUILD=42 ./build_app.sh
-VERSION="${PARLA_VERSION:-1.0.0}"
+VERSION="${PARLA_VERSION:-1.1.0}"
 COPYRIGHT="${PARLA_COPYRIGHT:-Copyright © 2026 Oleksandr Uskov. All rights reserved.}"
 BUILD_NUMBER="${PARLA_BUILD:-1}"
 

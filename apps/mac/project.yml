@@ -91,7 +91,7 @@ targets:
         INFOPLIST_FILE: Parla-macOS-Info.plist
         PRODUCT_NAME: Parla
         PRODUCT_BUNDLE_IDENTIFIER: com.parla.app
-        MARKETING_VERSION: "1.0.0"
+        MARKETING_VERSION: "1.1.0"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "6.0"

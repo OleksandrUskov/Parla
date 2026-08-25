@@ -210,4 +210,45 @@ final class SubmissionReadinessTests: ParlaLogicTestCase {
         XCTAssertLessThanOrEqual(actual - claimed, 60,
                                  "README claims \(claimed) but the suite has \(actual): the number has gone stale again")
     }
+
+    /// LICENSE draws its line at a VERSION: 1.0.0 and earlier are MIT, 1.1.0 and later are PolyForm. That makes
+    /// the version string a LICENSING fact rather than a cosmetic one — a build that reports 1.0.0 out of the
+    /// PolyForm tree announces a grant it was never released under. Nothing pinned it: the number lived in five
+    /// places (`build_app.sh`'s default plus four `MARKETING_VERSION`s), no check that they agreed, and both
+    /// LICENSE and README promised a 1.1.0 that no build configuration actually produced.
+    func testEveryBuildReportsOneVersionAtOrAboveTheLicenceBoundary() throws {
+        func semver(_ s: String) -> [Int] { s.split(separator: ".").compactMap { Int($0) } }
+
+        let licence = try code(of: "LICENSE")
+        guard let m = licence.range(of: #"Version \d+\.\d+\.\d+ and later"#, options: .regularExpression),
+              let boundary = licence[m].split(separator: " ").dropFirst().first.map(String.init) else {
+            return XCTFail("LICENSE no longer states a version boundary — this test cannot check what it claims")
+        }
+
+        var found: [String: String] = [:]
+        let script = try code(of: "build_app.sh")
+        if let r = script.range(of: #"PARLA_VERSION:-\d+\.\d+\.\d+"#, options: .regularExpression) {
+            found["build_app.sh"] = String(script[r].dropFirst("PARLA_VERSION:-".count))
+        }
+        for path in ["apps/mac/project.yml", "apps/ios/project.yml"] {
+            let yml = try code(of: path)
+            var cursor = yml.startIndex, n = 0
+            while let r = yml.range(of: #"MARKETING_VERSION: "[0-9.]+""#,
+                                    options: .regularExpression, range: cursor..<yml.endIndex) {
+                n += 1
+                found["\(path)#\(n)"] = String(yml[r].split(separator: "\"")[1])
+                cursor = r.upperBound
+            }
+        }
+        XCTAssertGreaterThanOrEqual(found.count, 5,
+                                    "expected build_app.sh plus every MARKETING_VERSION; found \(found)")
+
+        XCTAssertEqual(Set(found.values).count, 1, "the build paths disagree about the app's version: \(found)")
+
+        for (site, v) in found {
+            XCTAssertFalse(semver(v).lexicographicallyPrecedes(semver(boundary)),
+                           "\(site) ships \(v), below LICENSE's PolyForm boundary of \(boundary) — that build "
+                           + "would report a version number which was released under MIT")
+        }
+    }
 }

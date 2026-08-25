@@ -97,7 +97,7 @@ targets:
         # and the coming NSSupportsLiveActivities / NSUserActivityTypes that aren't scalar INFOPLIST_KEY_*.
         INFOPLIST_FILE: Parla-iOS-Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon     # matches Assets.xcassets/AppIcon.appiconset
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.1.0"
         CURRENT_PROJECT_VERSION: "1"
   # Share Extension — copy-only: shows Parla in the share sheet for audio/video, copies the file
   # into the App Group inbox, completes. LEAN: no ParlaCore/opus/ogg link (extension memory budget), only UIKit.
@@ -131,7 +131,7 @@ targets:
         SWIFT_VERSION: "6.0"
         INFOPLIST_FILE: Extensions/Share/Info.plist
         TARGETED_DEVICE_FAMILY: "1,2"
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.1.0"
         CURRENT_PROJECT_VERSION: "1"
   # Widget Extension — the transcription Live Activity / Dynamic Island now; the Home widget +
   # iOS-18 Control land later. LEAN: NO ParlaCore/opus/ogg link (extension memory budget), only WidgetKit +
@@ -167,7 +167,7 @@ targets:
         SWIFT_VERSION: "6.0"
         INFOPLIST_FILE: Extensions/Widgets/Info.plist
         TARGETED_DEVICE_FAMILY: "1,2"
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.1.0"
         CURRENT_PROJECT_VERSION: "1"
   # Runtime proof: a unit-test target (hosted by Parla-iOS) that decodes a real Ogg/Opus fixture on the
   # simulator to prove the Opusfile path works at runtime. `@testable import Parla_iOS` reuses OpusAudioDecoder.
