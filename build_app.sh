@@ -217,42 +217,6 @@ else
   echo "• Store-flag guard: no ParlaStoreBuild key → the FULL ungated build, as intended"
 fi
 
-# Ad-hoc signature so the app runs locally without the "unidentified developer" gate.
-# It is enough for UNUserNotificationCenter when launching the assembled .app; notifications are NOT delivered
-# when running outside a bundle (`swift run`) or from quarantine/translocation — which is why they are
-# best-effort in the app and the in-window chip/progress is the primary completion signal.
-# (Audio decode is fully in-process now — libopus + AVAssetReader, no bundled ffmpeg subprocess. Phase 2c.)
-#
-# THIS STEP IS FATAL ON FAILURE. On Apple Silicon an unsigned binary does not execute at all, so signing
-# decides whether the .app launches. It used to be `codesign … >/dev/null 2>&1 || true` followed by an
-# unconditional "✅ Done" — the one step that can break a downloaded app was the one step that could not
-# fail the build. Its output is no longer swallowed either.
-# NOTE: ad-hoc, no hardened runtime — fine for local/dev runs and doesn't block exec'ing the helper.
-# At the notarization milestone, sign the outer app with a Developer ID + `--options runtime` (and prefer
-# explicit per-binary signing over `--deep`, which is unreliable for nested code).
-codesign --force --deep --sign - "$APPDIR" || { echo "❌ codesign failed — the .app will not launch"; exit 1; }
-codesign --verify --deep --strict "$APPDIR" || { echo "❌ signature fails verification — refusing to ship the .app"; exit 1; }
-
-# LAUNCH GUARD: every @rpath dependency must resolve INSIDE the bundle. This is the exact failure we
-# shipped once (`1607bd3`): the build succeeded, the .app died at launch with dyld "Library not loaded:
-# @rpath/opus.framework" because the frameworks were never embedded. A build-time invariant now.
-EXEC="$APPDIR/Contents/MacOS/$APP"
-RPATHS="$(otool -l "$EXEC" | awk '/LC_RPATH/{f=1} f && / path /{print $2; f=0}')"
-MISSING=0
-while read -r dep; do
-  [ -n "$dep" ] || continue
-  rel="${dep#@rpath/}"
-  found=0
-  for rp in $RPATHS; do
-    cand="${rp/@executable_path/$APPDIR/Contents/MacOS}"
-    cand="${cand/@loader_path/$APPDIR/Contents/MacOS}"
-    if [ -e "$cand/$rel" ]; then found=1; break; fi
-  done
-  if [ "$found" -eq 0 ]; then echo "❌ dependency does not resolve inside the bundle: $dep"; MISSING=1; fi
-done <<< "$(otool -L "$EXEC" | awk '/@rpath\//{print $1}')"
-[ "$MISSING" -eq 0 ] || { echo "❌ the .app will not launch (dyld cannot find its libraries) — refusing to ship"; exit 1; }
-echo "• Launch guard: every @rpath dependency resolves inside the bundle"
-
 # App Intents metadata — the ONE thing this hand-assembled bundle was missing that Xcode does for free.
 #
 # A SwiftPM build never runs `appintentsmetadataprocessor`, so this app shipped for months with no
@@ -292,6 +256,48 @@ rm -rf "$AI_TMP"
 [ -s "$APPDIR/Contents/Resources/Metadata.appintents/extract.actionsdata" ] \
   || { echo "❌ Metadata.appintents is empty — the three App Intents would not exist"; exit 1; }
 echo "• App Intents: Shortcuts / Spotlight / Siri metadata embedded"
+
+# ⚠️ ORDERING IS LOAD-BEARING: EVERY step that writes into the bundle must run ABOVE this line.
+# The signature seals `Contents/Resources`, so a file added afterwards breaks the seal — and the
+# `--verify` below would still pass, because it ran before the mutation. That is exactly what happened:
+# the App Intents step was appended at the BOTTOM of this script and the shipped .app failed both
+# `codesign --verify --deep --strict` and `spctl -a -t exec` with "a sealed resource is missing or
+# invalid" — while the build printed a green ✅. A test now pins this order (SubmissionReadinessTests).
+# Ad-hoc signature so the app runs locally without the "unidentified developer" gate.
+# It is enough for UNUserNotificationCenter when launching the assembled .app; notifications are NOT delivered
+# when running outside a bundle (`swift run`) or from quarantine/translocation — which is why they are
+# best-effort in the app and the in-window chip/progress is the primary completion signal.
+# (Audio decode is fully in-process now — libopus + AVAssetReader, no bundled ffmpeg subprocess. Phase 2c.)
+#
+# THIS STEP IS FATAL ON FAILURE. On Apple Silicon an unsigned binary does not execute at all, so signing
+# decides whether the .app launches. It used to be `codesign … >/dev/null 2>&1 || true` followed by an
+# unconditional "✅ Done" — the one step that can break a downloaded app was the one step that could not
+# fail the build. Its output is no longer swallowed either.
+# NOTE: ad-hoc, no hardened runtime — fine for local/dev runs and doesn't block exec'ing the helper.
+# At the notarization milestone, sign the outer app with a Developer ID + `--options runtime` (and prefer
+# explicit per-binary signing over `--deep`, which is unreliable for nested code).
+codesign --force --deep --sign - "$APPDIR" || { echo "❌ codesign failed — the .app will not launch"; exit 1; }
+codesign --verify --deep --strict "$APPDIR" || { echo "❌ signature fails verification — refusing to ship the .app"; exit 1; }
+
+# LAUNCH GUARD: every @rpath dependency must resolve INSIDE the bundle. This is the exact failure we
+# shipped once (`1607bd3`): the build succeeded, the .app died at launch with dyld "Library not loaded:
+# @rpath/opus.framework" because the frameworks were never embedded. A build-time invariant now.
+EXEC="$APPDIR/Contents/MacOS/$APP"
+RPATHS="$(otool -l "$EXEC" | awk '/LC_RPATH/{f=1} f && / path /{print $2; f=0}')"
+MISSING=0
+while read -r dep; do
+  [ -n "$dep" ] || continue
+  rel="${dep#@rpath/}"
+  found=0
+  for rp in $RPATHS; do
+    cand="${rp/@executable_path/$APPDIR/Contents/MacOS}"
+    cand="${cand/@loader_path/$APPDIR/Contents/MacOS}"
+    if [ -e "$cand/$rel" ]; then found=1; break; fi
+  done
+  if [ "$found" -eq 0 ]; then echo "❌ dependency does not resolve inside the bundle: $dep"; MISSING=1; fi
+done <<< "$(otool -L "$EXEC" | awk '/@rpath\//{print $1}')"
+[ "$MISSING" -eq 0 ] || { echo "❌ the .app will not launch (dyld cannot find its libraries) — refusing to ship"; exit 1; }
+echo "• Launch guard: every @rpath dependency resolves inside the bundle"
 
 
 echo "✅ Done: $(pwd)/$APPDIR  (v$VERSION build $BUILD_NUMBER)"

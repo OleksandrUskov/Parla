@@ -148,4 +148,40 @@ final class SubmissionReadinessTests: ParlaLogicTestCase {
         XCTAssertTrue(script.contains("Refusing to ship a bundle whose advertised automation is absent"),
                       "a missing metadata step must abort the build, not warn")
     }
+
+    /// The signature seals `Contents/Resources`, so ANY step that writes into the bundle AFTER `codesign`
+    /// breaks that seal — and the `--verify` sitting right beside it still passes, because it ran before the
+    /// mutation. Not hypothetical: the App Intents step was appended to the BOTTOM of the script, and the
+    /// resulting .app failed both `codesign --verify --deep --strict` and `spctl -a -t exec` with "a sealed
+    /// resource is missing or invalid" while the build printed a green ✅. Pinned as an ORDER rather than a
+    /// line number, so the next step appended at the end goes red here instead of shipping a broken seal.
+    func testNothingWritesIntoTheBundleAfterItIsSigned() throws {
+        let script = try code(of: "build_app.sh")
+        guard let signing = script.range(of: "codesign --force") else {
+            return XCTFail("build_app.sh no longer signs the bundle — this test cannot check what it claims")
+        }
+        // Verbs that CREATE or REWRITE bundle content. Read-only inspection (`otool`, `codesign --verify`) and
+        // the final `open` are deliberately absent — they cannot invalidate a signature.
+        let mutations = ["appintentsmetadataprocessor", "cp ", "mv ", "rm ", "mkdir", "ditto", "touch ",
+                         "plutil", "install_name_tool", "sed -i", "defaults write", "cat >"]
+        // Continuations first: `xcrun appintentsmetadataprocessor \` carries no `$APPDIR` on its own line —
+        // the `--output "$APPDIR/…"` is one line below it. Scanning raw lines let exactly this bug through.
+        let afterSigning = script[signing.upperBound...]
+            .replacingOccurrences(of: "\\\n", with: " ")
+        for var line in afterSigning.split(separator: "\n").map(String.init) {
+            // An `|| { rm -rf "$tmp"; … }` error branch cleans up scratch space; it never builds the bundle,
+            // and flagging it would make this guard cry wolf next to the real cause on the same line.
+            if let bail = line.range(of: "||") { line = String(line[..<bail.lowerBound]) }
+            guard line.contains("$APPDIR") else { continue }
+            for verb in mutations where line.contains(verb) {
+                XCTFail("`\(verb.trimmingCharacters(in: .whitespaces))` writes into the bundle after it is "
+                        + "signed, breaking the seal that `codesign --verify` above has already checked: \(line)")
+            }
+        }
+        guard let intents = script.range(of: "appintentsmetadataprocessor") else {
+            return XCTFail("the App Intents step is gone — its own test covers that, this one builds on it")
+        }
+        XCTAssertTrue(intents.lowerBound < signing.lowerBound,
+                      "App Intents metadata lands in Contents/Resources after the bundle is sealed")
+    }
 }
