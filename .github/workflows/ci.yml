@@ -24,7 +24,7 @@ jobs:
 
   # ThreadSanitizer over the same suite. The project builds every target in Swift 6 language mode (COMPLETE
   # strict concurrency), which is a COMPILE-time claim; TSan is the RUNTIME evidence for it. Cheap to keep honest:
-  # verified locally at 347 tests / 0 failures / 0 race reports before this job was added.
+  # verified locally at 0 failures / 0 race reports before this job was added.
   macos-tsan:
     name: macOS 26 · swift test (ThreadSanitizer)
     runs-on: macos-26
@@ -173,7 +173,7 @@ jobs:
       # `test`, not `build`. This job used to only COMPILE, so `Parla-iOSTests` — the share-handoff data-loss
       # guards, the App-Group drain, the in-process Opus/Lane-2 decode proofs — ran in CI NOWHERE. Testing needs a
       # concrete simulator (not `generic/platform=iOS Simulator`), so resolve one from the runner image instead of
-      # hardcoding a device name that drifts with the image. Verified locally: 18 tests pass unsigned on the sim.
+      # hardcoding a device name that drifts with the image. Verified locally: the iOS suite passes unsigned on the sim.
       # -skipMacroValidation trusts the dependency Swift macros (swift-transformers) non-interactively;
       # CODE_SIGNING_ALLOWED=NO because CI has no provisioning profile (same as the local recipe).
       - name: Test (app + extensions, simulator)

@@ -184,4 +184,30 @@ final class SubmissionReadinessTests: ParlaLogicTestCase {
         XCTAssertTrue(intents.lowerBound < signing.lowerBound,
                       "App Intents metadata lands in Contents/Resources after the bundle is sealed")
     }
+    /// The README's test count had gone stale by TWO HUNDRED — it advertised "360+" against a real 560, in two
+    /// places, alongside two more stale counts in CI comments. Nobody is harmed by an understated number, but it
+    /// is the first figure a pedant checks, and four disagreeing copies of it say something about doc discipline
+    /// that the code does not deserve. So the claim is pinned in both directions: the README may never OVERSTATE
+    /// (that would be a false claim), and it may not fall more than a release's worth of tests behind either.
+    func testTheReadmeTestCountMatchesTheSuite() throws {
+        let testsDir = repoRoot.appendingPathComponent("Tests/ParlaTests")
+        let files = try FileManager.default.subpathsOfDirectory(atPath: testsDir.path)
+            .filter { $0.hasSuffix(".swift") }
+        var actual = 0
+        for f in files {
+            let src = try String(contentsOf: testsDir.appendingPathComponent(f), encoding: .utf8)
+            actual += src.components(separatedBy: "func test").count - 1
+        }
+        XCTAssertGreaterThan(actual, 100, "counting the suite failed — the guard below would be meaningless")
+
+        let readme = try code(of: "README.md")
+        guard let range = readme.range(of: #"(\d+)\+? pure-logic unit tests"#, options: .regularExpression),
+              let claimed = Int(readme[range].prefix(while: \.isNumber)) else {
+            return XCTFail("README no longer states a pure-logic test count — this test cannot check what it claims")
+        }
+        XCTAssertLessThanOrEqual(claimed, actual,
+                                 "README claims \(claimed) pure-logic tests but the suite has \(actual) — never overstate")
+        XCTAssertLessThanOrEqual(actual - claimed, 60,
+                                 "README claims \(claimed) but the suite has \(actual): the number has gone stale again")
+    }
 }

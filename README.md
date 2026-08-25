@@ -174,7 +174,7 @@ graph TD
 - **Two decode lanes, one decoder.** Both platforms decode **in-process** — Telegram Ogg/Opus via a bundled `libopus` xcframework (no subprocess) and video/`.flac` via `AVAssetReader`. Both lanes stream into the same 16 kHz mono sink and the same chunker.
 - **Lean app extensions.** The Share Extension and the Widgets extension **do not link ParlaCore or WhisperKit** — they stay inside the tight extension memory budget and talk to the app through an **App Group** container.
 - **Best-effort AI.** The on-device AI layer never touches the transcript: if a summary/embedding fails, the text is unaffected. Vectors are mean-centered before cosine and compared only within a script (Cyrillic vs Latin).
-- **Tested logic.** 360+ pure-logic unit tests (macOS `swift test`) plus an iOS test target that CI actually runs; a legacy-JSON decode test pins the "every new field is Optional" persistence invariant, and a committed synthetic Ogg/Opus fixture proves the real in-process decoder on every push.
+- **Tested logic.** 560+ pure-logic unit tests (macOS `swift test`) plus an iOS test target that CI actually runs; a legacy-JSON decode test pins the "every new field is Optional" persistence invariant, and a committed synthetic Ogg/Opus fixture proves the real in-process decoder on every push.
 
 ## How it works
 
@@ -220,9 +220,10 @@ open Parla.app          # or double-click; drag into /Applications to keep
 
 In the app, pick a model — it **downloads once** (~600 MB CoreML weights from Hugging Face), compiles for the Neural Engine (one-time), then runs fully offline. Drag a Telegram `.ogg` (or any audio/video) onto the drop zone → text.
 
-> **Run it as the built `.app`, not from an IDE.** Parla's Mac app is a Swift Package, not an Xcode project —
-> pressing Build & Run launches the bare executable, and a windowed SwiftUI app needs a real `.app` bundle to
-> show its window. Always run via `./build_app.sh && open Parla.app`.
+> **Run it as the built `.app`, not from an IDE.** The direct-download Mac app is built from the Swift Package
+> by `build_app.sh`, so pressing Build & Run on the package launches the bare executable — and a windowed
+> SwiftUI app needs a real `.app` bundle to show its window. Always run via `./build_app.sh && open Parla.app`.
+> (There is also an XcodeGen target under `apps/mac/` for the Mac App Store build; CI builds both.)
 
 ### iOS · iPadOS
 
@@ -246,7 +247,7 @@ Before a **device** build: in Xcode set your own **Development Team** on each ta
 ### Tests
 
 ```bash
-swift test                   # macOS — the pure-logic unit suite (360+)
+swift test                   # macOS — the pure-logic unit suite (560+)
 ```
 
 The iOS test target runs from Xcode (⌘U) and in CI (`xcodebuild test` on a simulator). The decode proofs run everywhere: they use a committed 6.7 KB synthetic Ogg/Opus tone. Pointing `PARLA_OGG_FIXTURE` at a real voice note additionally runs them against real bytes (voice itself never goes in git).
@@ -304,7 +305,11 @@ Swift 6 toolchain (**Swift 6 language mode**, strict concurrency) · SwiftUI · 
 ```
 Sources/ParlaCore/     cross-platform library — engine, view-model, AI layer, decode seams
 Sources/Parla/         macOS app (thin SwiftUI shell + menu-bar + macOS-only integrations)
+Sources/ParlaStreamEval/  dev-only WER harness — the tool the quality A/B calls were measured with (not shipped)
+Sources/ParlaSmoke/    dev-only headless engine smoke runner (not shipped)
 apps/ios/              iOS · iPadOS app (XcodeGen project) + Share & Widgets extensions
+apps/mac/              XcodeGen target for the Mac App Store build of the same Core
+Tests/ParlaTests/      the pure-logic suite CI runs on every push
 Localization/          en / ru / uk .lproj (shared by both apps)
 build_app.sh           macOS build → Parla.app
 ```
