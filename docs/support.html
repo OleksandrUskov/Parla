@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Support — Parla</title>
+<title>Parla Support</title>
 <style>
   :root { color-scheme: dark; --bg:#0e0f12; --fg:#e8e8ea; --dim:#9a9aa2; --accent:#7fd4c1; --rule:#26272d; }
   * { box-sizing: border-box; }
@@ -23,7 +23,7 @@
 <body>
 <main>
   <h1>Support</h1>
-  <p class="lede">Parla — voice messages to text, entirely on your device.</p>
+  <p class="lede">Parla turns voice messages into text, entirely on your device.</p>
 
   <div class="cta">
     <p><strong>Something broken, or an idea?</strong> Open an issue at
@@ -38,10 +38,11 @@
     pick a smaller, faster model instead of the recommended one, or skip the download and do it later.</dd>
 
     <dt>The first transcription took much longer than the ones after it.</dt>
-    <dd>That is expected once, per device: the system compiles the model for the Neural Engine the first time
-    it is used. Later runs reuse the compiled version and are dramatically faster.</dd>
+    <dd>That is expected the first time each model is used on a device: the system compiles it for the Neural
+    Engine, which takes several minutes for the recommended model. Later runs reuse the compiled version and start in
+    seconds.</dd>
 
-    <dt>Does my audio leave the device?</dt>
+    <dt>Does Parla upload my audio?</dt>
     <dd>No. There is no upload path in the app. See the <a href="./privacy.html">privacy policy</a>.</dd>
 
     <dt>Which languages does it handle?</dt>
@@ -51,22 +52,24 @@
 
     <dt>Which files can it read?</dt>
     <dd>Telegram voice messages (.ogg, .oga, .opus), plus .m4a, .mp3, .wav, .aac, .flac, .amr, .aiff, .aif,
-    .caf, and the video containers .mp4, .mov, .m4v and .3gp — the audio track is used. WebM and Matroska are
-    not supported. A shared file with no extension is sniffed, so Telegram's unnamed voice notes still work.</dd>
+    .caf, and the video containers .mp4, .mov, .m4v and .3gp (the audio track is used). WebM and Matroska are
+    not supported. A shared file with no extension is recognized by its content, so Telegram voice messages saved without an
+    extension still work.</dd>
 
-    <dt>I bought Pro and it is not showing.</dt>
-    <dd>Use <strong>Restore Purchases</strong> — on the upgrade screen, and in Settings. A purchase is tied to
+    <dt>I bought Pro in the App Store version and it is not showing up.</dt>
+    <dd>Use <strong>Restore purchase</strong> on the upgrade screen or in Settings. A purchase is tied to
     your Apple Account, so make sure you are signed in with the one you bought it with.</dd>
 
-    <dt>What is free and what is paid?</dt>
-    <dd>Free covers unlimited notes up to five minutes each, dictation of any length, automatic titles,
+    <dt>What is free and what is paid in the App Store version?</dt>
+    <dd>Free covers unlimited notes up to five minutes each, dictation, automatic titles,
     keywords and summaries, and TXT/Markdown export. Pro is a one-time purchase that removes the length limit
-    and adds chapters for long recordings, on-device generative summaries, batch and folder processing, and
-    SRT/VTT/JSON export.</dd>
+    and adds chapters for long recordings, on-device generative summaries, batch processing (plus folder drops and
+    folder watching on the Mac), and SRT/VTT/JSON export.</dd>
 
     <dt>Where are my transcripts stored?</dt>
     <dd>In the app's own storage on your device, as plain files. Deleting a note removes its text and its
-    audio copy; deleting the app removes everything.</dd>
+    audio copy. Deleting the app removes everything on iPhone and iPad; on a Mac, see the
+    <a href="./privacy.html">privacy policy</a>.</dd>
   </dl>
 
   <footer>

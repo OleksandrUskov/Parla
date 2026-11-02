@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy Policy — Parla</title>
+<title>Parla Privacy Policy</title>
 <style>
   :root { color-scheme: dark; --bg:#0e0f12; --fg:#e8e8ea; --dim:#9a9aa2; --accent:#7fd4c1; --rule:#26272d; }
   * { box-sizing: border-box; }
@@ -23,46 +23,56 @@
 <body>
 <main>
   <h1>Privacy Policy</h1>
-  <p class="lede">Parla — last updated 19 August 2026</p>
+  <p class="lede">Last updated: 2 November 2026</p>
 
   <div class="summary">
     <p><strong>Parla collects nothing.</strong> There is no account, no server we operate, no analytics and no
-    advertising. Everything you record, import or write stays on your device.</p>
+    advertising. Nothing you record, import or write is uploaded by Parla.</p>
   </div>
 
   <h2>Data we collect</h2>
-  <p>None. Parla does not collect, transmit, sell or share any personal data. There is no telemetry, no crash
-  reporting service, no advertising identifier and no third-party SDK that receives anything about you.</p>
+  <p>None. Parla does not collect, sell or share any personal data, and it never uploads your recordings,
+  transcripts or notes. There is no telemetry, no crash
+  reporting service, no advertising identifier and no SDK that collects data about you. Speech and optional AI models come from
+  Hugging Face, which sees your IP address as any website does. If you have signed in to Hugging Face with its own tools
+  on your Mac, the download library sends your saved access token with model requests.</p>
 
   <h2>On-device processing</h2>
   <p>Transcription, dictation and text analysis all run entirely on your device, using Apple's on-device
-  machine-learning frameworks. Your audio and your transcripts are never uploaded. There is no upload path in
+  machine-learning frameworks. Parla never uploads your audio or your transcripts. There is no upload path in
   the app at all.</p>
 
   <h2>Network use</h2>
-  <p>Parla uses the network only to <em>download</em>, never to send:</p>
+  <p>Parla uses the network to <em>download</em>, and it never uploads your content:</p>
   <ul>
-    <li>the speech-recognition model, once, on first run — after which transcription works fully offline;</li>
+    <li>the list of available speech models, each time the app starts;</li>
+    <li>the speech-recognition model you pick, once per model, after which transcription works fully offline;</li>
+    <li>Apple's language assets for on-device text analysis, which the system downloads from Apple once if your
+    device does not have them yet;</li>
     <li>the optional generative and text-embedding models, only if you choose to enable those features.</li>
   </ul>
-  <p>These requests fetch public model files and contain no personal information about you. Purchases are
-  handled by Apple's StoreKit, which communicates with Apple — not with us; we never see your payment details
+  <p>These requests fetch public model files and include nothing from your recordings or notes. Purchases are
+  handled by Apple's StoreKit, which communicates with Apple and not with us; we never see your payment details
   and receive no personal data from a purchase.</p>
 
   <h2>Microphone</h2>
   <p>Microphone access is used only while you are actively dictating, to turn your speech into text on your
-  device. The recording is not sent anywhere. Whether an audio copy is kept on your device is your choice in
+  device. Parla does not send the recording anywhere. Whether an audio copy is kept on your device is your choice in
   Settings, and you can delete it at any time.</p>
 
   <h2>Files you open</h2>
-  <p>When you drop in or share an audio or video file, Parla reads it to transcribe it. It is not copied
-  anywhere outside your device, and Parla asks the system for access to nothing beyond the files you hand it
-  and any folder you explicitly choose to watch.</p>
+  <p>When you drop in or share an audio or video file, Parla reads it to transcribe it. Parla does not copy
+  it anywhere outside your device. Parla does not browse your files: it reads the ones you give it and any folder you
+  choose to watch.</p>
 
   <h2>Your data, and deleting it</h2>
   <p>Your transcripts live in Parla's own storage on your device. Deleting a note removes its text and its
-  audio copy; deleting the app removes everything. Since nothing was ever sent anywhere, there is nothing for
-  us to delete on your behalf.</p>
+  audio copy. On iPhone and iPad, deleting the app removes everything it stored. On a Mac, moving Parla to the
+  Trash leaves its data behind. To remove everything, also delete ~/Library/Application Support/com.parla.app
+  (~/Library/Application Support/Parla for v1.0.0), ~/Library/Containers/com.parla.app, ~/Library/Caches/com.parla.app,
+  ~/Library/HTTPStorages/com.parla.app and ~/Library/Preferences/com.parla.app.plist, and the argmaxinc and
+  openai folders in ~/Documents/huggingface/models if no other app keeps its models there. Since Parla never
+  sent your data to us, there is nothing for us to delete on your behalf.</p>
 
   <h2>Children</h2>
   <p>Parla collects no data from anyone, including children.</p>

@@ -1,326 +1,161 @@
+<div align="center">
+
+  <img src="assets/icon/parla-icon-512.png" width="112" alt="Parla app icon" />
+
+  <h1>Parla</h1>
+
+  <p><b>On-device transcription for Mac, iPhone and iPad.</b><br/>
+  Turns Telegram voice messages, audio and video into text with Whisper. No account, no uploads.</p>
+
+  <p>
+    <a href="https://github.com/OleksandrUskov/Parla/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/OleksandrUskov/Parla/actions/workflows/ci.yml/badge.svg" /></a>
+    <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" />
+    <img alt="iOS and iPadOS 17+" src="https://img.shields.io/badge/iOS%20%2F%20iPadOS-17%2B-black?logo=apple" />
+    <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-orange?logo=swift" />
+    <img alt="License: PolyForm Noncommercial" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue" />
+  </p>
+
+  <p>
+    <a href="#highlights">Highlights</a> |
+    <a href="#screenshots">Screenshots</a> |
+    <a href="#architecture">Architecture</a> |
+    <a href="#build-and-run">Build and run</a> |
+    <a href="#author">Author</a>
+  </p>
+
+</div>
+
+Parla is my solo project, started in June 2026. The code is one shared Swift library, ParlaCore, with two SwiftUI apps on top: one for the Mac and one for iPhone and iPad. ParlaCore holds more than 60 percent of the production code, including the Whisper engine, audio decoding, long-audio processing, the on-device AI layer and the view model.
+
+**Status, November 2026:** in active development, with an App Store release in preparation. The code in this repository is a public snapshot from 25 August 2026.
+
 <p align="center">
-  <img src="assets/icon/parla-icon-512.png" width="128" alt="Parla app icon">
+  <img src="assets/screenshots/long-audio.png" width="88%" alt="Parla on the Mac: a 92-minute recording with a player, keywords, a generated summary and two-minute chapters" /><br/>
+  <sub>On the Mac: a 92-minute keynote split into two-minute chapters, with a generated summary and keywords.</sub>
 </p>
 
-<h1 align="center">Parla</h1>
+## Highlights
 
-<p align="center">
-  <strong>Transcribe voice messages to text — 100% on-device.</strong><br>
-  A native SwiftUI app for macOS, iPhone &amp; iPad. Drop a Telegram voice note (or any audio/video),
-  get clean, copy-ready text in seconds. Nothing ever leaves your device.
-</p>
+- **Telegram audio without ffmpeg.** The v1.0.0 release decoded Ogg/Opus by running a bundled 2.8 MB ffmpeg binary. The main branch decodes in process instead: Ogg/Opus through libopusfile, video and other containers through AVAssetReader, in one decoder that both apps share. That removed the app's only subprocess, and the Mac App Store target builds with the App Sandbox enabled. Telegram often saves voice messages without an extension, so a file with no extension is recognized by its Ogg header.
+- **Long recordings that survive interruptions.** Files longer than about ten minutes are cut into two-minute chunks. Each finished chunk is saved, a chunk that fails leaves a marked gap instead of failing the whole file, and a second run of the same file with the same settings skips the chunks already done. On iPhone and iPad, when you leave the app mid-job, it asks iOS for a short grace period so the chunk in flight can finish and be saved.
+- **Swift 6 on every target.** The library, both apps and both iOS extensions compile in Swift 6 language mode, and CI runs the macOS test suite a second time under ThreadSanitizer. Swift 6 also checks isolation at run time: a microphone tap closure written inside a `@MainActor` class would trap when AVFAudio calls it on the audio thread, so the tap is installed from a nonisolated function. The transcription engine is an actor that owns the loaded Whisper model and reuses it across files. It joins a load of the same model that is already running and makes a load of another model wait, so two loads never overlap.
+- **Lean iOS extensions.** The Share Extension and the widget extension do not link ParlaCore or WhisperKit, so neither of them loads the speech model. The Share Extension copies a shared file into the App Group container under a temporary name and renames it when the copy is complete, so the app never picks up half a file.
+- **A check for the wrong language.** On a Russian test file, pinning Ukrainian raised the word error rate from 5.57% to 49.85%. When a language is pinned, the app also runs Whisper's language detection and offers to switch if it hears another language with at least 85% confidence.
+- **StoreKit 2, tested.** The store version has a one-time Pro upgrade. Only verified, unrevoked transactions unlock it, and StoreKitTest tests cover a purchase that arrives through `Transaction.updates`, a restore on a fresh install and a refund that removes Pro. The free tier's five-minute cap and Pro-only export formats live in a small type with no StoreKit or UI code. A plain `./build_app.sh` build has none of the free-tier limits.
+- **Tested in CI.** The workflow runs 560+ pure-logic unit tests with `swift test`, and the iOS test target runs on a simulator. A committed 6.7 KB synthetic Ogg/Opus file exercises the real decoder in every run. There are six jobs: the tests on macOS 26, the same tests under ThreadSanitizer, a build on the macOS 15 runner, the iOS tests, and two jobs that build the store versions of the Mac app and inspect the bundles.
 
-<p align="center">
-  <a href="https://github.com/OleksandrUskov/Parla/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/OleksandrUskov/Parla/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple">
-  <img alt="iOS/iPadOS 17+" src="https://img.shields.io/badge/iOS%20%2F%20iPadOS-17%2B-black?logo=apple">
-  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-orange?logo=swift">
-  <img alt="100% on-device" src="https://img.shields.io/badge/privacy-100%25%20on--device-brightgreen">
-  <img alt="PolyForm Noncommercial license" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue">
-</p>
+Start reading here:
 
-<p align="center">
-  Powered by <a href="https://github.com/argmaxinc/WhisperKit">WhisperKit</a> running OpenAI Whisper on the
-  Apple Neural Engine — no account, no cloud, no telemetry.
-</p>
-
----
-
-<p align="center">
-  <img src="assets/screenshots/hero.gif" alt="Drag a Telegram voice message onto Parla and get clean, copy-ready text in seconds" width="88%">
-</p>
-
-<p align="center">
-  <a href="https://github.com/OleksandrUskov/Parla/releases/latest"><b>⬇︎ Download for macOS</b></a>
-  &nbsp;·&nbsp;
-  <a href="#download-macos">Install guide</a>
-  &nbsp;·&nbsp;
-  <a href="#build--run">Build from source</a>
-</p>
-
-Parla started as a tiny "drag a Telegram `.ogg`, get text" Mac utility and grew into a two-platform,
-single-codebase transcription app. One fat cross-platform Swift library (**ParlaCore**) holds all the
-logic — the actor-based Whisper engine, the audio-decode seams, the on-device AI layer, the whole
-view-model — and thin native apps sit on top of it: a SwiftUI Mac app and a SwiftUI iPhone/iPad app
-with a Share Extension, Live Activity, Home-screen widgets, and Handoff.
-
-## Platforms
-
-| | macOS | iOS · iPadOS |
-|---|---|---|
-| **Minimum** | macOS 14 (Sonoma) | iOS / iPadOS 17 |
-| **Get it** | [**Download the app**](https://github.com/OleksandrUskov/Parla/releases/latest) · or `./build_app.sh` | build from source |
-| **Audio decode** | **in-process libopus** + AVAssetReader — no subprocess | *(same — one shared decoder)* |
-| **OS integration** | Menu-bar companion · Services menu · `parla://` · Shortcuts/Spotlight/Siri · global hotkey · mic dictation | Share Extension (Telegram → Parla) · **Live Activity / Dynamic Island** · Home widgets · **Handoff** ↔ Mac · `parla://` · Shortcuts/Siri · mic dictation |
-| **iPad** | — | first-class: `NavigationSplitView`, drag & drop, ⌘I |
-
-The engine and features are shared, so both apps transcribe with the same accuracy and the same 100%
-on-device guarantee.
-
-## Features
-
-**Transcription core**
-- 🎙 **Drag & drop** any audio/video — `.ogg` (Telegram), `.m4a`, `.mp3`, `.wav`, `.mp4`, … (or pick a file / whole folder / share sheet on iOS)
-- 🧠 **On-device Whisper** via CoreML / Neural Engine — fast, free, private
-- 🌍 **~99 languages** with auto-detect — English and any other work out of the box; strong Russian / Ukrainian / surzhik
-- 🔁 **Translate to English** — speech in any language straight into English text (Whisper translate task)
-- 📖 **Long recordings** — files over ~10 min are chunked (bounded memory, per-chunk progress, resilient to a bad chunk) and shown as collapsible chapters
-
-**Working with transcripts**
-- ✏️ **Edit in place** — fix a misheard word; the correction is saved to history
-- ▶️ **Built-in player** — listen alongside the text and **click any timestamp to jump** there
-- 🔂 **Re-transcribe** an old entry with a different model — compare Tiny vs large-v3 turbo, no re-dragging
-- 🔎 **Searchable history** + 🔗 **semantic "Related"** — find past notes by meaning, on-device
-- 📤 **Export** each transcript to **SRT / VTT / JSON / TXT / Markdown**, or the whole history to one backup
-- 🧩 **Model manager** — pick / download / **delete** models with progress, on-disk size, and a recommended default
-
-**On-device AI layer** *(no cloud)*
-- 🏷 **Auto title · summary · keywords** — extractive, computed locally with `NLContextualEmbedding` (great on RU/UK)
-- 💬 **Generative summaries & per-chapter recaps** on macOS via Apple **FoundationModels** (English) / **MLX + Qwen** (RU/UK, opt-in download)
-
-**macOS extras**
-- ⌨️ **Quick-transcribe from the menu bar** — clipboard, repeat-last, popover drop, or an optional **rebindable** global hotkey (default ⌃⌥⌘T, no Accessibility permission)
-- 🎙️ **Live mic dictation** *(opt-in)* — hotkey → speak → hotkey; transcribed on-device and copied
-- 👁 **Folder watch** — point Parla at a folder; new audio is transcribed automatically
-- 🤖 **Automation** — `parla://` URL scheme, Finder **Services**, **Shortcuts / Spotlight / Siri**
-
-**iOS · iPadOS extras**
-- 📲 **Share Extension** — share a Telegram voice note (or any media) straight into Parla
-- 🏝 **Live Activity + Dynamic Island** — watch a transcription progress from the lock screen
-- 🔲 **Home-screen widgets** — your latest transcripts, one tap to open (deep-linked)
-- 🤝 **Handoff** — start reading a transcript on iPhone, continue on the Mac (and back)
-- 🗂 **First-class iPad** — two-column layout, Files drag & drop, ⌘I to import
-
-## Free & Pro
-
-Parla is free to use. A one-time **Pro** purchase (no subscription) unlocks the heavier features in the App Store
-build:
-
-| | Free | Pro |
-|---|---|---|
-| Notes you can transcribe | unlimited | unlimited |
-| Length per file | up to 5 minutes | **unlimited** |
-| Dictation (record and transcribe live) | ✅ any length | ✅ any length |
-| Files per drop | one | many, plus whole folders |
-| Export | TXT · Markdown | + **SRT · VTT · JSON** |
-| Automatic insights (title, keywords, summary) | ✅ included | ✅ included |
-| On-device generative AI + semantic search | — | ✅ (opt-in model download) |
-| Watch a folder and transcribe automatically (macOS) | — | ✅ |
-
-Everything stays **100% on device** in both tiers. There is no account, no server, no telemetry, and no ad SDK —
-the purchase is verified locally by StoreKit, and nothing about your audio or text ever leaves the machine.
-
-> **Building from this repository gives you the full, ungated app.** The freemium gate is switched on by a
-> runtime flag that only the official App Store build sets (`ParlaStoreBuild`), so `./build_app.sh` produces the
-> complete app with no limits. That is deliberate: paying is for people who want the convenience of the store
-> build, not a hoop for people who read the source. (`./build_app.sh --store` builds the gated variant if you
-> want to see the paywall.)
+- [`Package.swift`](Package.swift): the targets, and MLX limited to macOS.
+- [`OpusAudioDecoder.swift`](Sources/ParlaCore/OpusAudioDecoder.swift#L268-L392): the two in-process decoding lanes.
+- [`ChunkResume.swift`](Sources/ParlaCore/ChunkResume.swift#L36-L131): how a long job is recognized and resumed.
+- [`MicRecorder.swift`](Sources/ParlaCore/MicRecorder.swift#L224-L235): the nonisolated microphone tap that avoids a Swift 6 isolation trap on the audio thread.
+- [`BackgroundGrace.swift`](apps/ios/Sources/BackgroundGrace.swift): the SwiftUI modifier that asks iOS for a grace period while a job is running in the background.
 
 ## Screenshots
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="assets/screenshots/03-long-audio.png" alt="A 90-minute recording transcribed into chapters with an AI summary and a built-in player">
-<br><sub><b>Long recordings → chapters + AI.</b> A 90-minute talk, transcribed on-device and split into navigable chapters — with an auto-generated summary, action items, and keywords, plus a built-in player and tap-to-seek timestamps.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="assets/screenshots/02-voice-note.png" alt="A voice message transcribed with a player and on-device AI insights">
-<br><sub><b>A voice message → text in seconds.</b> Drop a Telegram voice note and read it back with the built-in player, a generative summary, and action items — all computed locally.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="assets/screenshots/04-model-manager.png" alt="The model manager listing the transcription model and the on-device AI stack">
-<br><sub><b>Fully offline — and you control it.</b> Pick, download, or delete the Whisper model and the on-device AI stack (generative insights + semantic search). Nothing leaves your Mac.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="assets/screenshots/01-empty.png" alt="Parla's drop zone on first launch">
-<br><sub><b>One window, one gesture.</b> Drag a Telegram voice note — or any audio/video — onto the drop zone to begin.</sub>
-</td>
-</tr>
-</table>
+<p align="center">
+  <img src="assets/screenshots/transcript.png" width="700" alt="A transcript in Parla: timestamped lines, with the line being played highlighted" /><br/>
+  <sub>A one-minute recording: the line being played is highlighted, and clicking a timestamp jumps to it. The iPhone and iPad app uses the same ParlaCore view.</sub>
+</p>
 
-> Screenshots are from the macOS app (dark theme). The iPhone/iPad app renders the same reading surfaces through the shared **ParlaCore** library.
+<p align="center">
+  <img src="assets/screenshots/models.png" width="340" alt="The Parla model manager with five Whisper models and two optional AI models, each with its size" /><br/>
+  <sub>The model manager: Whisper models from Tiny to Large v3 and the optional AI models, each with its size.</sub>
+</p>
+
+## What it does
+
+- Transcribes Telegram voice messages (.ogg, .oga and .opus, or no extension at all), common audio formats (.m4a, .mp3, .wav, .aac, .flac, .amr, .aiff and .caf) and the audio track of .mp4, .mov, .m4v and .3gp videos.
+- Detects the spoken language automatically, or uses the one you pick.
+- Shows long recordings as chapters with a built-in player. Clicking a timestamp jumps to that moment.
+- Lets you correct a transcript in place, re-transcribe it with another Whisper model and search the history.
+- Exports a transcript as SRT, VTT, JSON, TXT or Markdown.
+- Adds titles, keywords and summaries on the device, and ranks related notes by meaning. On the Mac, generative summaries use Apple Foundation Models on macOS 26, or an optional Qwen3-4B model on MLX for Russian and Ukrainian.
+- On the Mac: a menu bar item, a rebindable global hotkey that needs no Accessibility permission, dictation, folder watching, a Finder Services entry, a `parla://` URL scheme and three App Intents for Shortcuts, Spotlight and Siri.
+- On iPhone and iPad: dictation, a Share Extension, a Live Activity with transcription progress, a Home Screen widget and two App Intents for Shortcuts and Siri, plus a two-column layout with drag and drop on iPad.
+- The interface is in English, Russian and Ukrainian.
 
 ## Architecture
 
-A single **mono-repo**: one cross-platform library does the work, thin apps render it.
-
 ```mermaid
-graph TD
-    subgraph APPS["Thin native apps"]
-        MAC["macOS app<br/>SwiftUI · MenuBarExtra<br/>SwiftPM · build_app.sh"]
-        IOS["iOS · iPadOS app<br/>SwiftUI · XcodeGen<br/>+ Share Ext + Widgets"]
+flowchart TD
+    MAC["macOS app<br/>SwiftUI, menu bar, Services, folder watch"] --> VM
+    IOS["iPhone and iPad app<br/>SwiftUI"] --> VM
+    EXT["Share Extension and widget<br/>no ParlaCore, no WhisperKit"] <-. "App Group" .-> IOS
+    subgraph CORE["ParlaCore"]
+        VM["AppModel<br/>@MainActor @Observable"]
+        DEC["Decoder<br/>libopusfile and AVAssetReader"]
+        CHUNK["Long audio<br/>two-minute chunks, resume"]
+        ENG["TranscriptionEngine<br/>actor around WhisperKit on Core ML"]
+        AI["On-device AI<br/>NLContextualEmbedding, Foundation Models, MLX on the Mac"]
+        STORE[("History<br/>JSON in Application Support")]
     end
-    subgraph CORE["ParlaCore — one fat cross-platform library"]
-        VM["AppModel<br/>@MainActor @Observable<br/>(the single view-model)"]
-        ENG["TranscriptionEngine<br/>actor · wraps WhisperKit"]
-        AI["Local-AI layer<br/>NLContextualEmbedding · MLX"]
-        DEC["Audio-decode seam<br/>(protocol-injected)"]
-    end
-    MAC --> VM
-    IOS --> VM
-    VM --> ENG
+    VM --> DEC --> CHUNK --> ENG
     VM --> AI
-    ENG --> DEC
-    ENG --> WK["WhisperKit → CoreML / ANE"]
-    DEC -->|macOS + iOS| OP["in-process libopus + AVAssetReader"]
+    VM --> STORE
 ```
 
-**Engineering highlights**
-- **One library, two apps.** All logic lives in `ParlaCore` (`public` API); the apps are thin SwiftUI shells. Platform differences are handled behind **protocol seams** injected by `AppModel.mac()` / `AppModel.iOS()` factories, not `#if os` sprinkled through the UI.
-- **Actor-isolated engine.** `TranscriptionEngine` is an `actor` that owns the loaded Whisper model and reuses it across files. **Every** target compiles in **Swift 6 language mode** — the library, the macOS app, the iOS app and both of its extensions — so strict concurrency is data-race-checked everywhere, not just in the core. A ThreadSanitizer CI lane runs the same suite, because the language mode is a compile-time claim and TSan is the runtime evidence for it.
-- **Two decode lanes, one decoder.** Both platforms decode **in-process** — Telegram Ogg/Opus via a bundled `libopus` xcframework (no subprocess) and video/`.flac` via `AVAssetReader`. Both lanes stream into the same 16 kHz mono sink and the same chunker.
-- **Lean app extensions.** The Share Extension and the Widgets extension **do not link ParlaCore or WhisperKit** — they stay inside the tight extension memory budget and talk to the app through an **App Group** container.
-- **Best-effort AI.** The on-device AI layer never touches the transcript: if a summary/embedding fails, the text is unaffected. Vectors are mean-centered before cosine and compared only within a script (Cyrillic vs Latin).
-- **Tested logic.** 560+ pure-logic unit tests (macOS `swift test`) plus an iOS test target that CI actually runs; a legacy-JSON decode test pins the "every new field is Optional" persistence invariant, and a committed synthetic Ogg/Opus fixture proves the real in-process decoder on every push.
+- Platform-specific behavior is injected through two factories, `AppModel.mac()` and `AppModel.iOS()`. The two app layers contain four `#if os` lines between them, and each one wraps a whole platform-only file.
+- History is one JSON file. Every new field is optional, and a test decodes an old file to keep it that way. If the file is damaged, the app keeps every record it can still read and moves the original aside instead of overwriting it.
+- The AI layer never touches the transcript: if a summary or an embedding fails, the text stays as it was.
 
-## How it works
+## Build and run
 
-```
-m4a / mp3 / wav ───────────────────────────────▶ WhisperKit (CoreML / ANE) ──▶ text    (AVFoundation, no decode step)
-ogg / opus / video ──▶ decode → 16 kHz mono ────▶ WhisperKit ──────────────▶ text    (in-process: libopus + AVAssetReader)
-```
-
-- Formats AVFoundation can open go **straight to the engine**. Telegram Ogg/Opus (and video) are decoded first — with **zero setup** on either platform.
-- Long recordings (> ~10 min) are split into ~2-min chunks and stitched back into one timeline.
-- History is a plain JSON file in the app's Application Support container; the audio cache is auto-capped (macOS 500 MB, evicts oldest audio — the **transcript text is always kept**).
-
-## Download (macOS)
-
-The quickest way — no Xcode, no build:
-
-1. **[Download the latest `Parla-macOS.zip`](https://github.com/OleksandrUskov/Parla/releases/latest)** and unzip it.
-2. Drag **`Parla.app`** into your **Applications** folder.
-3. **First launch:** Control-click (right-click) `Parla.app` → **Open** → **Open**. If it doesn't open, go to **System Settings → Privacy & Security** and click **Open Anyway** — only needed the first time.
-
-In the app, pick a model — it **downloads once** (~600 MB) and then runs fully offline. Drag a Telegram voice note (or any audio/video) onto the drop zone and you get the text.
-
-> **macOS 14+ · Apple Silicon** (Intel: build from source — core transcription works; the opt-in MLX generative AI is Apple-Silicon-only).
-
-## Build & run
-
-### Prerequisites
-- **macOS 14 (Sonoma)+**, **Apple Silicon** recommended (the opt-in MLX generative AI is Apple-Silicon-only; core transcription runs on Intel too).
-- **Xcode 16+** (for the Swift 6 toolchain) and its Command Line Tools. **Xcode 26+** additionally compiles the Apple-Intelligence backend; on an older SDK that one file's `canImport(FoundationModels)` block simply compiles out and the app falls back to the extractive path.
-- **iOS build only:** [XcodeGen](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen`.
-- Internet for the first build (Swift Package dependencies) and the first transcription (one-time model download).
-
-> The **macOS** app needs **no Apple Developer account** — it's ad-hoc signed locally. Only an **iOS device** build needs signing (your own free or paid Apple ID).
-
-### macOS
+You need a Mac with Xcode 16.3 or later. The app runs on macOS 14 or later on Apple silicon. Xcode 26 also compiles the Apple Foundation Models backend; with an older SDK, its `#if canImport(FoundationModels)` blocks compile out.
 
 ```bash
 git clone https://github.com/OleksandrUskov/Parla.git
 cd Parla
-./build_app.sh          # builds Parla.app (first build compiles WhisperKit + deps — a few minutes)
-open Parla.app          # or double-click; drag into /Applications to keep
+./build_app.sh    # builds Parla.app; the first build compiles WhisperKit and its dependencies
+open Parla.app
 ```
 
-In the app, pick a model — it **downloads once** (~600 MB CoreML weights from Hugging Face), compiles for the Neural Engine (one-time), then runs fully offline. Drag a Telegram `.ogg` (or any audio/video) onto the drop zone → text.
+Open the built `Parla.app` rather than running the package from Xcode: the app needs its bundle, Info.plist and resources. In the app, pick a Whisper model. The recommended one is about 600 MB, downloads once from Hugging Face, and is compiled for the Neural Engine the first time it loads, which takes several minutes. `./build_app.sh --store` builds the store version with the free-tier limits.
 
-> **Run it as the built `.app`, not from an IDE.** The direct-download Mac app is built from the Swift Package
-> by `build_app.sh`, so pressing Build & Run on the package launches the bare executable — and a windowed
-> SwiftUI app needs a real `.app` bundle to show its window. Always run via `./build_app.sh && open Parla.app`.
-> (There is also an XcodeGen target under `apps/mac/` for the Mac App Store build; CI builds both.)
-
-### iOS · iPadOS
+For iPhone and iPad:
 
 ```bash
 cd apps/ios
-brew install xcodegen        # once
-xcodegen generate            # generates Parla-iOS.xcodeproj (a build artifact) from project.yml
-# Pin the dependency graph — the generated project resolves its own packages, and without this seed it
-# resolves fresh from open-ended version ranges, so you may not build what CI built.
+brew install xcodegen
+xcodegen generate
 mkdir -p Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
 cp Package.resolved Parla-iOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-open Parla-iOS.xcodeproj      # build & run on a real device
+open Parla-iOS.xcodeproj
 ```
 
-Before a **device** build: in Xcode set your own **Development Team** on each target (*Signing & Capabilities*), and in `apps/ios/project.yml` change the `com.parla.*` bundle IDs and the `group.com.parla.ios` App Group to identifiers you own (they're all centralized there), then re-run `xcodegen generate`.
-
-> Run on a **physical iPhone/iPad** — WhisperKit's CoreML text decoder needs the Neural Engine, which the
-> simulator lacks (the sim builds + runs the UI, but can't do inference). `project.yml` is the checked-in
-> source of truth; the `.xcodeproj` is regenerated by [XcodeGen](https://github.com/yonaskolb/XcodeGen).
-
-### Tests
+For a device build, add your `DEVELOPMENT_TEAM` and replace the `com.parla` bundle IDs and the `group.com.parla.ios` App Group in `apps/ios/project.yml`, then run `xcodegen generate` and copy `Package.resolved` again. The App Group ID is also set in `ShareInbox.swift`, `WidgetSnapshot.swift` and `ShareViewController.swift`. The iOS target builds as the store version; remove `ParlaStoreBuild` from `Parla-iOS-Info.plist` for the full app. Transcription needs a physical device, because WhisperKit's Core ML text decoder does not run in the iOS Simulator.
 
 ```bash
-swift test                   # macOS — the pure-logic unit suite (560+)
+swift test    # the macOS unit tests
 ```
 
-The iOS test target runs from Xcode (⌘U) and in CI (`xcodebuild test` on a simulator). The decode proofs run everywhere: they use a committed 6.7 KB synthetic Ogg/Opus tone. Pointing `PARLA_OGG_FIXTURE` at a real voice note additionally runs them against real bytes (voice itself never goes in git).
+## Privacy
 
-## Privacy & permissions
-
-Parla is **100% on-device** — audio is transcribed locally by WhisperKit. **Nothing you record, import or
-write ever leaves your machine**: there is no account, no telemetry, no analytics, and no upload path at all.
-The network is used only to *download*: the transcription model on first run, and — only if you ask for them —
-the optional generative and embedding models. Purchases go through StoreKit, which talks to Apple rather than
-to us. The iOS app ships an Apple **Privacy Manifest** declaring no tracking, no data collection, and the two
-required-reason APIs it uses: UserDefaults (your preferences) and file timestamps (managing the audio cache).
-
-Everything beyond plain transcription is **opt-in** and asks for the minimum permission:
-
-| Feature | Permission | Notes |
-|---|---|---|
-| Transcribe · edit · player · history · export | **none** | local files only |
-| Menu-bar / share-sheet quick actions | **none** | reads a file only when you pick or drop it |
-| Folder watch *(macOS)* | folder access (one prompt) | only **new** files that appear *after* you turn it on |
-| Global hotkey *(macOS, off by default)* | **none** | Carbon `RegisterEventHotKey` — no Accessibility, no keystroke logging |
-| Live mic dictation *(off by default)* | **Microphone** (+ Accessibility only for optional auto-paste on macOS) | records **only while you dictate**, transcribes on-device — audio never leaves your device |
-| Services · `parla://` · Shortcuts / Siri | **none** | transcribe **existing local files only**, read-only |
-
-The Mac app ships as a **direct download** (outside the Mac App Store), and the full source is available —
-so you can read exactly what it does.
-
-## Automation / integrations
-
-Parla is also a *verb* other tools can call — everything funnels into the same on-device pipeline.
-
-```bash
-open "parla://transcribe?path=/Users/me/voice.ogg"     # transcribe a file (repeat path= for several)
-open "parla://transcribe?dir=/Users/me/VoiceNotes"     # transcribe a whole folder
-open "parla://transcribe-last"                          # re-run the last file
-open "parla://clipboard"                                # transcribe the audio file on the clipboard
-open "parla://show"                                     # bring Parla forward
-```
-
-Only existing audio files/folders are accepted, read-only — a `parla://` link can never move, write, or
-delete anything. On macOS there's also a Finder **Services** entry and three **App Intents** (Shortcuts /
-Spotlight / Siri): *Transcribe File*, *Transcribe Last File*, and *Get Last Parla Transcript*.
-
-## Tech stack
-
-Swift 6 toolchain (**Swift 6 language mode**, strict concurrency) · SwiftUI · Swift Concurrency (actors) ·
-[WhisperKit](https://github.com/argmaxinc/WhisperKit) · CoreML · NaturalLanguage (`NLContextualEmbedding`) ·
-[MLX Swift](https://github.com/ml-explore/mlx-swift) · ActivityKit · WidgetKit · AppIntents ·
-[XcodeGen](https://github.com/yonaskolb/XcodeGen) ·
-[opus-binary-xcframework](https://github.com/sbooth/opus-binary-xcframework) (in-process Ogg/Opus) ·
-[KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) (MIT)
+Parla has no upload path: it never sends audio or transcripts to a server, and it has no account, analytics or telemetry. Apart from StoreKit in the store version, which talks to Apple to load products and handle purchases, the network is used only for downloads. From Hugging Face, the app fetches the list of available models when it starts, the Whisper model you choose, and the optional AI models if you turn them on. Apple's NaturalLanguage framework may download its on-device embedding assets from Apple the first time they are needed. The microphone is used only for dictation. The iOS app has a Privacy Manifest that declares no tracking, no data collection and two required-reason APIs: UserDefaults and file timestamps.
 
 ## Project layout
 
 ```
-Sources/ParlaCore/     cross-platform library — engine, view-model, AI layer, decode seams
-Sources/Parla/         macOS app (thin SwiftUI shell + menu-bar + macOS-only integrations)
-Sources/ParlaStreamEval/  dev-only WER harness — the tool the quality A/B calls were measured with (not shipped)
-Sources/ParlaSmoke/    dev-only headless engine smoke runner (not shipped)
-apps/ios/              iOS · iPadOS app (XcodeGen project) + Share & Widgets extensions
-apps/mac/              XcodeGen target for the Mac App Store build of the same Core
-Tests/ParlaTests/      the pure-logic suite CI runs on every push
-Localization/          en / ru / uk .lproj (shared by both apps)
-build_app.sh           macOS build → Parla.app
+Sources/ParlaCore/        shared library: engine, decoding, long audio, AI layer, view model
+Sources/Parla/            macOS app: SwiftUI, menu bar, Services, folder watch
+Sources/ParlaStreamEval/  development tool for word error rate measurements (not shipped)
+Sources/ParlaSmoke/       development tool: headless engine smoke run (not shipped)
+apps/ios/                 iPhone and iPad app (XcodeGen), Share Extension and widgets
+apps/mac/                 Mac App Store target built from the same core
+Tests/ParlaTests/         unit tests that CI runs
+Localization/             English, Russian and Ukrainian strings shared by both apps
+build_app.sh              builds Parla.app
 ```
 
-## Author & license
+## License
 
-Built by **Oleksandr Uskov**.
+The v1.0.0 release is under the MIT License. Later code, including the main branch, is under the [PolyForm Noncommercial License 1.0.0](LICENSE): free for noncommercial use, with commercial rights reserved. It is a source-available license, not an OSI-approved open-source license. Bundled third-party components keep their own licenses, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-- **v1.0.0 and earlier:** MIT License (perpetual and irrevocable for those releases — see the `v1.0.0` tag).
-- **v1.1.0 and later:** [**PolyForm Noncommercial License 1.0.0**](LICENSE) — source-available, free for any
-  noncommercial use; commercial use (including reselling or republishing) is not permitted, and commercial
-  rights are reserved by the author. This is a source-available license, not an OSI-approved open-source license.
+## Author
 
-Bundled third-party components keep their own licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+**Oleksandr Uskov**, iOS engineer in Warsaw, MSc Computer Science student
+
+- Email: oleksandruskov.it@gmail.com
+- Telegram: [@Alexus27](https://t.me/Alexus27)
+- LinkedIn: [oleksandr-uskov](https://www.linkedin.com/in/oleksandr-uskov/)
